@@ -46,3 +46,27 @@ RUN cmake --build . -j $(nproc)
 
 # run tests
 # RUN ./postfiatd --unittest
+
+RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd
+
+# Copy the built binary from builder stage
+COPY --from=builder /postfiat/.build/postfiatd /usr/local/bin/postfiatd
+
+# Copy configuration files without the -example suffix
+COPY --from=builder /postfiat/cfg/postfiatd-example.cfg /var/lib/postfiatd/postfiatd.cfg
+COPY --from=builder /postfiat/cfg/validators-example.txt /var/lib/postfiatd/validators.txt
+
+# Set working directory
+WORKDIR /var/lib/postfiatd
+# Declare volumes
+VOLUME ["/var/lib/postfiatd/db"]
+VOLUME ["/var/log/postfiatd"]
+
+# Expose ports (based on the config file)
+EXPOSE 5005 2559 6005 6006 50051
+
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/bin/postfiatd"]
+
+# Default command arguments
+CMD ["--conf", "/var/lib/postfiatd/postfiatd.cfg"]
