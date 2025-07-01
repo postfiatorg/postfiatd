@@ -53,14 +53,11 @@
 #          See: https://arxiv.org/pdf/1802.07242.pdf
 
 [validator_list_sites]
-https://vl.ripple.com
-https://unl.xrplf.org
+https://unl.testnet.postfiat.org
 
 [validator_list_keys]
-#vl.ripple.com
+#unl.testnet.postfiat.org
 ED2677ABFFD1B33AC6FBC3062B71F1E8397C1505E1C42C64D11AD1B28FF73F4734
-#unl.xrplf.org
-ED42AEC58B701EEBB77356FFFEC26F83C1F0407263530F068C7C73D392C7E06FD1
 
 # To use the test network (see https://xrpl.org/connect-your-rippled-to-the-xrp-test-net.html),
 # use the following configuration instead:

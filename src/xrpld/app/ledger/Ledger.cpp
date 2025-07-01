@@ -180,9 +180,7 @@ Ledger::Ledger(
     info_.drops = INITIAL_XRP;
     info_.closeTimeResolution = ledgerGenesisTimeResolution;
 
-    static auto const id = calcAccountID(
-        generateKeyPair(KeyType::secp256k1, generateSeed("masterpassphrase"))
-            .first);
+    static auto const id = *parseBase58<AccountID>("rDg2p2hUR2pv7yXvadPkGhiWymyVAGhFJa");
     {
         auto const sle = std::make_shared<SLE>(keylet::account(id));
         sle->setFieldU32(sfSequence, 1);
