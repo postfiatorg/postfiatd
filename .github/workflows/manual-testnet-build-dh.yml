@@ -26,6 +26,7 @@ jobs:
       with:
         context: .
         file: ./Dockerfile
+        target: builder
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:testnet-latest
         platforms: linux/amd64
