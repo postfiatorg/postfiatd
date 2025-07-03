@@ -47,26 +47,15 @@ RUN cmake --build . -j $(nproc)
 # run tests
 # RUN ./postfiatd --unittest
 
-# Runtime stage
-FROM ubuntu:24.04 AS runtime
-
-# Install runtime dependencies only
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    libssl3 \
-    libprotobuf32 \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
 # Create directories
 RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 
 # Copy the built binary from builder stage
-COPY --from=builder /postfiat/.build/postfiatd /usr/local/bin/postfiatd
+COPY /postfiat/.build/postfiatd /usr/local/bin/postfiatd
 
 # Copy configuration files without the -example suffix
-COPY --from=builder /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
-COPY --from=builder /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
+COPY /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
+COPY /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
 
 # Set working directory
 WORKDIR /var/lib/postfiatd
