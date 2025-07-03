@@ -51,11 +51,11 @@ RUN cmake --build . -j $(nproc)
 RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 
 # Copy the built binary from builder stage
-COPY /postfiat/.build/postfiatd /usr/local/bin/postfiatd
+RUN cp /postfiat/.build/postfiatd /usr/local/bin/postfiatd
 
 # Copy configuration files without the -example suffix
-COPY /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
-COPY /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
+RUN cp /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
+RUN cp /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
 
 # Set working directory
 WORKDIR /var/lib/postfiatd
