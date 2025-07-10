@@ -67,7 +67,7 @@ systemCurrencyCode()
 }
 
 /** The XRP ledger network's earliest allowed sequence */
-static constexpr std::uint32_t XRP_LEDGER_EARLIEST_SEQ{32570u};
+static constexpr std::uint32_t XRP_LEDGER_EARLIEST_SEQ{1u};
 
 /** The XRP Ledger mainnet's earliest ledger with a FeeSettings object. Only
  * used in asserts and tests. */
