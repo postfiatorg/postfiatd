@@ -47,6 +47,17 @@ RUN cmake --build . -j $(nproc)
 # run tests
 # RUN ./postfiatd --unittest
 
+# CLEANUP SECTION - Remove build artifacts and unnecessary files
+RUN rm -rf /postfiat/.build/build \
+    && rm -rf /postfiat/.build/CMakeFiles \
+    && rm -rf /postfiat/.build/CMakeCache.txt \
+    && rm -rf /postfiat/.build/*.cmake \
+    && rm -rf /postfiat/.build/Makefile \
+    && rm -rf /postfiat/.build/compile_commands.json \
+    && rm -rf /postfiat/.build/conan* \
+    && rm -rf /root/.conan \
+    && rm -rf /root/.local/share/conan
+
 # Create directories
 RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 
