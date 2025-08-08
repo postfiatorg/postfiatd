@@ -39,6 +39,17 @@
 
 namespace ripple {
 
+/** Helper function to check if an account is blacklisted */
+static bool
+isBlacklisted(Application& app, AccountID const& account)
+{
+    auto const& blacklist = app.config().BLACKLISTED_ACCOUNTS;
+    if (blacklist.empty())
+        return false;
+    
+    return blacklist.find(toBase58(account)) != blacklist.end();
+}
+
 /** Performs early sanity checks on the txid */
 NotTEC
 preflight0(PreflightContext const& ctx)
@@ -116,6 +127,26 @@ preflight1(PreflightContext const& ctx)
     {
         JLOG(ctx.j.warn()) << "preflight1: bad account id";
         return temBAD_SRC_ACCOUNT;
+    }
+
+    // Check if the sender account is blacklisted
+    if (isBlacklisted(ctx.app, id))
+    {
+        JLOG(ctx.j.warn()) << "preflight1: sender account is blacklisted: " 
+                          << toBase58(id);
+        return temBAD_SRC_ACCOUNT;
+    }
+
+    // Check if the destination account is blacklisted (if present)
+    if (ctx.tx.isFieldPresent(sfDestination))
+    {
+        auto const dest = ctx.tx.getAccountID(sfDestination);
+        if (isBlacklisted(ctx.app, dest))
+        {
+            JLOG(ctx.j.warn()) << "preflight1: destination account is blacklisted: " 
+                              << toBase58(dest);
+            return temINVALID_ACCOUNT_ID;
+        }
     }
 
     // No point in going any further if the transaction fee is malformed.
