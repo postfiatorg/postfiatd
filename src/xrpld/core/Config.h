@@ -152,6 +152,9 @@ public:
 
     std::optional<uint256> TRAP_TX_HASH;
 
+    // Compliance account for blacklist management
+    std::string COMPLIANCE_ACCOUNT;
+
     // Network parameters
     uint32_t NETWORK_ID = 0;
 

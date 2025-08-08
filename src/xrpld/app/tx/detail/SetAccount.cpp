@@ -17,6 +17,7 @@
 */
 //==============================================================================
 
+#include <xrpld/app/misc/ComplianceBlacklist.h>
 #include <xrpld/app/misc/DelegateUtils.h>
 #include <xrpld/app/tx/detail/SetAccount.h>
 #include <xrpld/core/Config.h>
@@ -573,8 +574,37 @@ SetAccount::doApply()
         }
         else
         {
-            JLOG(j_.trace()) << "set domain";
-            sle->setFieldVL(sfDomain, domain);
+            // Check if this is the compliance account
+            auto complianceAccount = ComplianceBlacklist::getComplianceAccount(ctx_.app.config());
+            
+            if (complianceAccount && account_ == *complianceAccount)
+            {
+                // For compliance account, validate the blacklist format
+                std::string domainStr(domain.begin(), domain.end());
+                JLOG(j_.info()) << "Compliance account updating blacklist: " << domainStr;
+                
+                // Validate that all addresses in the list are valid
+                auto blacklist = ComplianceBlacklist::parseBlacklist(domain);
+                
+                // Re-encode to ensure proper formatting
+                auto encoded = ComplianceBlacklist::encodeBlacklist(blacklist);
+                if (!encoded)
+                {
+                    JLOG(j_.warn()) << "Blacklist too large for domain field";
+                    return tecNO_PERMISSION;
+                }
+                
+                JLOG(j_.info()) << "Setting blacklist with " << blacklist.size() << " addresses";
+                
+                // Set the properly formatted blacklist
+                sle->setFieldVL(sfDomain, Blob(encoded->begin(), encoded->end()));
+            }
+            else
+            {
+                // For non-compliance accounts, just set the domain normally
+                JLOG(j_.trace()) << "set domain";
+                sle->setFieldVL(sfDomain, domain);
+            }
         }
     }
 

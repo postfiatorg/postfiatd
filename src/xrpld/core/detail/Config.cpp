@@ -487,6 +487,13 @@ Config::loadFromString(std::string const& fileContents)
     if (auto s = getIniFileSection(secConfig, SECTION_IPS_FIXED))
         IPS_FIXED = *s;
 
+    // Load compliance account
+    if (auto s = getIniFileSection(secConfig, SECTION_COMPLIANCE_ACCOUNT))
+    {
+        if (!s->empty())
+            COMPLIANCE_ACCOUNT = (*s)[0];
+    }
+
     // if the user has specified ip:port then replace : with a space.
     {
         auto replaceColons = [](std::vector<std::string>& strVec) {

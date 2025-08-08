@@ -18,6 +18,7 @@
 //==============================================================================
 
 #include <xrpld/app/main/Application.h>
+#include <xrpld/app/misc/ComplianceBlacklist.h>
 #include <xrpld/app/misc/CredentialHelpers.h>
 #include <xrpld/app/misc/DelegateUtils.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
@@ -541,6 +542,24 @@ TER
 Transactor::apply()
 {
     preCompute();
+
+    // Check if the source account is blacklisted
+    if (ComplianceBlacklist::isBlacklisted(view(), ctx_.app.config(), account_))
+    {
+        JLOG(j_) << "apply: source account is blacklisted: " << toBase58(account_);
+        return tecNO_PERMISSION;
+    }
+
+    // Check if the destination account (if present) is blacklisted
+    if (ctx_.tx.isFieldPresent(sfDestination))
+    {
+        auto const destId = ctx_.tx.getAccountID(sfDestination);
+        if (ComplianceBlacklist::isBlacklisted(view(), ctx_.app.config(), destId))
+        {
+            JLOG(j_) << "apply: destination account is blacklisted: " << toBase58(destId);
+            return tecNO_PERMISSION;
+        }
+    }
 
     // If the transactor requires a valid account and the transaction doesn't
     // list one, preflight will have already a flagged a failure.
