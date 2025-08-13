@@ -62,7 +62,7 @@ RUN rm -rf /postfiat/.build/build \
 # Create directories
 RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 
-# Copy the built binary from builder stage
+# Copy the built binaries from builder stage
 RUN cp /postfiat/.build/postfiatd /usr/local/bin/postfiatd
 RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-keys
 
