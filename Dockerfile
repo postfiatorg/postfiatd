@@ -41,8 +41,9 @@ COPY . .
 WORKDIR /postfiat/.build
 
 RUN conan install .. --output-folder . --build missing --settings build_type=Debug
-RUN cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -Dxrpld=ON -Dtests=ON ..
+RUN cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -Dxrpld=ON -Dtests=ON -Dvalidator_keys=ON ..
 RUN cmake --build . -j $(nproc)
+RUN cmake --build . --target validator-keys -j $(nproc)
 
 # run tests
 # RUN ./postfiatd --unittest
@@ -63,6 +64,7 @@ RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 
 # Copy the built binary from builder stage
 RUN cp /postfiat/.build/postfiatd /usr/local/bin/postfiatd
+RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-keys
 
 # Copy configuration files without the -example suffix
 RUN cp /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
