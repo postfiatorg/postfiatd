@@ -84,8 +84,12 @@ The container will run a postfiatd node that connects to the Post Fiat testnet b
 
 ### Validator Setup Requirements
 
-1. **Install the Ripple Validator Keys Tool**:
-   - Repository: [https://github.com/ripple/validator-keys-tool](https://github.com/ripple/validator-keys-tool)
+1. **Validator Keys Tool**:
+   - Validator keys tool is present in the postfiatd docker image. To use it run bash shell inside postfiatd running Docker container:
+   ```bash
+   docker exec -it postfiatd bash
+   validator-keys --help
+   ```
    - Follow the comprehensive guide: [Validator Keys Tool Guide](https://github.com/ripple/validator-keys-tool/blob/master/doc/validator-keys-tool-guide.md)
 
 2. **Key Management**:
