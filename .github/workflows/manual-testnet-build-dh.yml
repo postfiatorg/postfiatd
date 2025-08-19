@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/postfiatd
+  IMAGE_NAME: agtipft/postfiatd
 jobs:
   build-testnet:
     runs-on: ubuntu-latest
