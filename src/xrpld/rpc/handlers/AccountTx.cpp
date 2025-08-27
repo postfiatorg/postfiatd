@@ -230,7 +230,7 @@ doAccountTxHelp(RPC::Context& context, AccountTxArgs const& args)
 
     RelationalDatabase::AccountTxPageOptions options = {
         args.account,
-        result.ledgerRange.min,
+        /*result.ledgerRange.min*/ 1,
         result.ledgerRange.max,
         result.marker,
         args.limit,
