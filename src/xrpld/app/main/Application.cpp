@@ -1281,6 +1281,19 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     {
         JLOG(m_journal.info()) << "Loading specified Ledger";
 
+        //Load all ledgers that are present in the db
+        if (startUp == Config::LOAD || config_->START_LEDGER.empty()) {
+            auto lastLedger = getLastFullLedger();
+            if (lastLedger) {
+                for (uint32_t i = 1; i < lastLedger->info().seq; i++) {
+                    auto ledger_info = getRelationalDatabase().getLedgerInfoByIndex(i);
+                    if (ledger_info)
+                        m_ledgerMaster->setLedgerRangePresent(
+                            i, i);
+                }
+            }
+        }
+
         if (!loadOldLedger(
                 config_->START_LEDGER,
                 startUp == Config::REPLAY,
