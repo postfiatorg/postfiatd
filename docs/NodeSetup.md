@@ -96,6 +96,13 @@ The container will run a postfiatd node that connects to the Post Fiat testnet b
    - Keys generated in `validator-keys.json` should be stored safely and separately from the validator token
    - Only the validator token should be used in the validator configuration file
    - **Never expose your private keys** - keep them secure and backed up
+  
+3. **Validator status**
+   - Once a validator is running successfully it should appear in the validator list in the explorer: https://explorer.testnet.postfiat.org/network/validators
+   - Server status of the node can be checked locally by running server_info rpc:
+     ```
+     curl -k -X POST https://localhost:5005/ -H "Content-Type: application/json" -d '{"method": "server_info","params": [{}]}'
+     ```
 
 ### Security Best Practices
 
