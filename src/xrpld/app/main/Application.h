@@ -50,6 +50,7 @@ class PerfLog;
 
 // VFALCO TODO Fix forward declares required for header dependency loops
 class AmendmentTable;
+class ValidatorVoteTracker;
 
 template <
     class Key,
@@ -179,6 +180,8 @@ public:
     cachedSLEs() = 0;
     virtual AmendmentTable&
     getAmendmentTable() = 0;
+    virtual ValidatorVoteTracker&
+    getValidatorVoteTracker() = 0;
     virtual HashRouter&
     getHashRouter() = 0;
     virtual LoadFeeTrack&

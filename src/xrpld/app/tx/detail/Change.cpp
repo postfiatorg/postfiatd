@@ -18,16 +18,20 @@
 //==============================================================================
 
 #include <xrpld/app/ledger/Ledger.h>
+#include <xrpld/app/ledger/LedgerMaster.h>
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/AmendmentTable.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/tx/detail/Change.h>
+#include <xrpld/ledger/ApplyView.h>
 #include <xrpld/ledger/Sandbox.h>
 
 #include <xrpl/basics/Log.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/TxFlags.h>
+#include <xrpl/protocol/PublicKey.h>
+#include <xrpld/app/misc/TxQ.h>
 
 #include <string_view>
 
@@ -38,7 +42,11 @@ Change::preflight(PreflightContext const& ctx)
 {
     auto const ret = preflight0(ctx);
     if (!isTesSuccess(ret))
+    {
+        if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE)
+            JLOG(ctx.j.warn()) << "ValidatorVote: preflight0 failed with " << transToken(ret);
         return ret;
+    }
 
     auto account = ctx.tx.getAccountID(sfAccount);
     if (account != beast::zero)
@@ -73,6 +81,13 @@ Change::preflight(PreflightContext const& ctx)
         !ctx.rules.enabled(featureNegativeUNL))
     {
         JLOG(ctx.j.warn()) << "Change: NegativeUNL not enabled";
+        return temDISABLED;
+    }
+
+    if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE &&
+        !ctx.rules.enabled(featureValidatorVoteTracking))
+    {
+        JLOG(ctx.j.warn()) << "Change: ValidatorVoteTracking not enabled (but continuing for testing)";
         return temDISABLED;
     }
 
@@ -134,6 +149,10 @@ Change::preclaim(PreclaimContext const& ctx)
         case ttAMENDMENT:
         case ttUNL_MODIFY:
             return tesSUCCESS;
+        case ttVALIDATOR_VOTE:
+            JLOG(ctx.j.info()) << "ValidatorVote: Preclaim passed for tx " 
+                               << ctx.tx.getTransactionID();
+            return tesSUCCESS;
         default:
             return temUNKNOWN;
     }
@@ -150,6 +169,13 @@ Change::doApply()
             return applyFee();
         case ttUNL_MODIFY:
             return applyUNLModify();
+        case ttVALIDATOR_VOTE:
+        {
+            JLOG(j_.info()) << "ValidatorVote: Calling applyValidatorVote";
+            TER result = applyValidatorVote();
+            JLOG(j_.info()) << "ValidatorVote: applyValidatorVote returned " << transToken(result);
+            return result;
+        }
         default:
             UNREACHABLE("ripple::Change::doApply : invalid transaction type");
             return tefFAILURE;
@@ -508,6 +534,73 @@ Change::applyUNLModify()
     }
 
     view().update(negUnlObject);
+    return tesSUCCESS;
+}
+
+TER
+Change::applyValidatorVote()
+{
+    // Check if ValidatorVoteTracking amendment is enabled
+    if (!view().rules().enabled(featureValidatorVoteTracking))
+    {
+        return temDISABLED;
+    }
+
+    // Get validator public key from transaction
+    auto const validatorPubKey = ctx_.tx.getFieldVL(sfValidatorPublicKey);
+    
+    // Create an account ID from the validator public key
+    // This is used as the key for the ValidatorVoteStats ledger object
+    PublicKey pubKey(makeSlice(validatorPubKey));
+    AccountID validatorAccount = calcAccountID(pubKey);
+    
+    // Get or create the ValidatorVoteStats object for this validator
+    auto const k = keylet::validatorVoteStats(validatorAccount);
+    SLE::pointer voteStats = view().peek(k);
+    
+    if (!voteStats)
+    {
+        JLOG(j_.info()) << "ValidatorVote: Creating new ValidatorVoteStats object";
+        // Create new ValidatorVoteStats object
+        voteStats = std::make_shared<SLE>(ltVALIDATOR_VOTE_STATS, k.key);
+        voteStats->setAccountID(sfAccount, validatorAccount);
+        voteStats->setFieldU32(sfVoteCount, 1);
+        
+        // Add to owner directory
+        JLOG(j_.info()) << "ValidatorVote: Adding to owner directory";
+        auto const page = view().dirInsert(
+            keylet::ownerDir(validatorAccount),
+            k.key,
+            describeOwnerDir(validatorAccount));
+            
+        if (!page)
+        {
+            JLOG(j_.warn()) << "ValidatorVote: Failed to add to directory - tecDIR_FULL";
+            return tecDIR_FULL;
+        }
+            
+        JLOG(j_.info()) << "ValidatorVote: Setting fields on new ValidatorVoteStats object";
+        voteStats->setFieldU64(sfOwnerNode, *page);
+        voteStats->setFieldH256(sfPreviousTxnID, ctx_.tx.getTransactionID());
+        voteStats->setFieldU32(sfPreviousTxnLgrSeq, ctx_.app.getLedgerMaster().getCurrentLedgerIndex());
+        
+        JLOG(j_.info()) << "ValidatorVote: Inserting new ValidatorVoteStats into view";
+        view().insert(voteStats);
+    }
+    else
+    {
+        // Update existing ValidatorVoteStats object
+        uint32_t currentVotes = voteStats->getFieldU32(sfVoteCount);
+        voteStats->setFieldU32(sfVoteCount, currentVotes + 1);
+        voteStats->setFieldH256(sfPreviousTxnID, ctx_.tx.getTransactionID());
+        voteStats->setFieldU32(sfPreviousTxnLgrSeq, ctx_.app.getLedgerMaster().getCurrentLedgerIndex());
+        
+        view().update(voteStats);
+    }
+    
+    JLOG(j_.trace()) << "ValidatorVote: Successfully recorded vote for validator " 
+                    << toBase58(validatorAccount);
+    
     return tesSUCCESS;
 }
 

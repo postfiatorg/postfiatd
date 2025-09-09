@@ -212,6 +212,10 @@ unchecked(uint256 const& key) noexcept;
 Keylet
 ownerDir(AccountID const& id) noexcept;
 
+/** A validator's vote statistics */
+Keylet
+validatorVoteStats(AccountID const& validator) noexcept;
+
 /** A page in a directory */
 /** @{ */
 Keylet

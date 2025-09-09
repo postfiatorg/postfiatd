@@ -188,6 +188,7 @@ Handler const handlerArray[]{
      Role::ADMIN,
      NO_CONDITION},
     {"validator_info", byRef(&doValidatorInfo), Role::ADMIN, NO_CONDITION},
+    {"validator_votes", byRef(&doValidatorVotes), Role::USER, NO_CONDITION},
     {"vault_info", byRef(&doVaultInfo), Role::USER, NO_CONDITION},
     {"wallet_propose", byRef(&doWalletPropose), Role::ADMIN, NO_CONDITION},
     // Evented methods

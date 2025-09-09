@@ -36,6 +36,7 @@
 #include <xrpld/app/main/NodeIdentity.h>
 #include <xrpld/app/main/NodeStoreScheduler.h>
 #include <xrpld/app/misc/AmendmentTable.h>
+#include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
@@ -207,6 +208,7 @@ public:
     std::unique_ptr<ValidatorSite> validatorSites_;
     std::unique_ptr<ServerHandler> serverHandler_;
     std::unique_ptr<AmendmentTable> m_amendmentTable;
+    std::unique_ptr<ValidatorVoteTracker> m_validatorVoteTracker;
     std::unique_ptr<LoadFeeTrack> mFeeTrack;
     std::unique_ptr<HashRouter> hashRouter_;
     RCLValidations mValidations;
@@ -713,6 +715,12 @@ public:
     getAmendmentTable() override
     {
         return *m_amendmentTable;
+    }
+
+    ValidatorVoteTracker&
+    getValidatorVoteTracker() override
+    {
+        return *m_validatorVoteTracker;
     }
 
     LoadFeeTrack&
@@ -1264,6 +1272,11 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
             downVoted,
             logs_->journal("Amendments"));
     }
+
+    // Initialize ValidatorVoteTracker
+    m_validatorVoteTracker = std::make_unique<ValidatorVoteTracker>(
+        *this,
+        logs_->journal("ValidatorVoteTracker"));
 
     Pathfinder::initPathTable();
 

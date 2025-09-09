@@ -62,11 +62,15 @@ private:
 
     TER
     applyUNLModify();
+    
+    TER
+    applyValidatorVote();
 };
 
 using EnableAmendment = Change;
 using SetFee = Change;
 using UNLModify = Change;
+using ValidatorVote = Change;
 
 }  // namespace ripple
 

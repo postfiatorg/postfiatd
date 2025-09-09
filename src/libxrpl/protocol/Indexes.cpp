@@ -377,6 +377,12 @@ ownerDir(AccountID const& id) noexcept
 }
 
 Keylet
+validatorVoteStats(AccountID const& validator) noexcept
+{
+    return {ltVALIDATOR_VOTE_STATS, indexHash(LedgerNameSpace::ACCOUNT, validator, std::uint16_t(0))};
+}
+
+Keylet
 page(uint256 const& key, std::uint64_t index) noexcept
 {
     if (index == 0)

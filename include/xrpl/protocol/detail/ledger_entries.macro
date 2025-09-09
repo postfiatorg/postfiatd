@@ -504,6 +504,21 @@ LEDGER_ENTRY(ltVAULT, 0x0084, Vault, vault, ({
     // no PermissionedDomainID ever (use MPTIssuance.sfDomainID)
 }))
 
+/** A ledger object which tracks validator voting statistics.
+   
+    Each validator account has an associated ValidatorVoteStats object
+    that tracks their total vote count.
+    
+    \sa keylet::validatorVoteStats
+ */
+LEDGER_ENTRY(ltVALIDATOR_VOTE_STATS, 0x0085, ValidatorVoteStats, validator_vote_stats, ({
+    {sfAccount,              soeREQUIRED},
+    {sfVoteCount,            soeREQUIRED},
+    {sfOwnerNode,            soeREQUIRED},
+    {sfPreviousTxnID,        soeREQUIRED},
+    {sfPreviousTxnLgrSeq,    soeREQUIRED},
+}))
+
 #undef EXPAND
 #undef LEDGER_ENTRY_DUPLICATE
 

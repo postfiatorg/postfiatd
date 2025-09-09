@@ -23,6 +23,7 @@
 #include <xrpld/app/ledger/LedgerMaster.h>
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/ValidatorList.h>
+#include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/core/JobQueue.h>
 #include <xrpld/core/TimeKeeper.h>
 #include <xrpld/perflog/PerfLog.h>
@@ -193,6 +194,15 @@ handleNewValidation(
     {
         if (val->isTrusted())
         {
+            // Record the vote for ValidatorVoteTracking amendment
+            // Use the validation's signing hash as proof of the vote
+            app.getValidatorVoteTracker().recordVote(
+                signingKey,
+                hash,
+                seq,
+                val->getSigningHash(),  // Validation signing hash as proof
+                app.timeKeeper().closeTime());
+            
             if (bypassAccept == BypassAccept::yes)
             {
                 XRPL_ASSERT(

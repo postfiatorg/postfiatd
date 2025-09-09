@@ -34,6 +34,7 @@
 #include <xrpld/app/misc/TxQ.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
 #include <xrpld/app/misc/ValidatorList.h>
+#include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/consensus/LedgerTiming.h>
 #include <xrpld/overlay/Overlay.h>
 #include <xrpld/overlay/predicates.h>
@@ -351,6 +352,14 @@ RCLConsensus::Adaptor::onClose(
     // Add pseudo-transactions to the set
     if (app_.config().standalone() || (proposing && !wrongLCL))
     {
+        // Call ValidatorVoteTracker for every ledger
+        app_.getValidatorVoteTracker().doVoting(
+            prevLedger, 
+            app_.getValidations().getTrustedForLedger(
+                prevLedger->info().parentHash, prevLedger->seq() - 1),
+            initialSet, 
+            j_);
+
         if (prevLedger->isFlagLedger())
         {
             // previous ledger was flag ledger, add fee and amendment
