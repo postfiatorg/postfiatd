@@ -582,7 +582,7 @@ Change::applyValidatorVote()
         JLOG(j_.info()) << "ValidatorVote: Setting fields on new ValidatorVoteStats object";
         voteStats->setFieldU64(sfOwnerNode, *page);
         voteStats->setFieldH256(sfPreviousTxnID, ctx_.tx.getTransactionID());
-        voteStats->setFieldU32(sfPreviousTxnLgrSeq, ctx_.app.getLedgerMaster().getCurrentLedgerIndex());
+        voteStats->setFieldU32(sfPreviousTxnLgrSeq, view().seq());
         
         JLOG(j_.info()) << "ValidatorVote: Inserting new ValidatorVoteStats into view";
         view().insert(voteStats);
@@ -593,7 +593,7 @@ Change::applyValidatorVote()
         uint32_t currentVotes = voteStats->getFieldU32(sfVoteCount);
         voteStats->setFieldU32(sfVoteCount, currentVotes + 1);
         voteStats->setFieldH256(sfPreviousTxnID, ctx_.tx.getTransactionID());
-        voteStats->setFieldU32(sfPreviousTxnLgrSeq, ctx_.app.getLedgerMaster().getCurrentLedgerIndex());
+        voteStats->setFieldU32(sfPreviousTxnLgrSeq, view().seq());
         
         view().update(voteStats);
     }
