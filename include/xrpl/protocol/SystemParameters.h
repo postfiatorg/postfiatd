@@ -80,7 +80,7 @@ static constexpr std::uint32_t XRP_LEDGER_EARLIEST_FEES{562177u};
 */
 constexpr std::ratio<204, 256> preFixAmendmentMajorityCalcThreshold;
 
-constexpr std::ratio<80, 100> postFixAmendmentMajorityCalcThreshold;
+constexpr std::ratio<67, 100> postFixAmendmentMajorityCalcThreshold;
 
 /** The minimum amount of time an amendment must hold a majority */
 constexpr std::chrono::seconds const defaultAmendmentMajorityTime = std::chrono::hours{2};

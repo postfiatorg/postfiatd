@@ -76,7 +76,7 @@ struct ConsensusParms
     // millisecond resolution.
 
     //! The percentage threshold above which we can declare consensus.
-    std::size_t const minCONSENSUS_PCT = 80;
+    std::size_t const minCONSENSUS_PCT = 67;
 
     //! The duration a ledger may remain idle before closing
     std::chrono::milliseconds const ledgerIDLE_INTERVAL =
