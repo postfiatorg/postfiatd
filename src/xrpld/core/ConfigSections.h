@@ -45,7 +45,6 @@ struct ConfigSection
 #define SECTION_AMENDMENTS "amendments"
 #define SECTION_AMENDMENT_MAJORITY_TIME "amendment_majority_time"
 #define SECTION_BETA_RPC_API "beta_rpc_api"
-#define SECTION_BLACKLIST_ACCOUNTS "blacklist_accounts"
 #define SECTION_CLUSTER_NODES "cluster_nodes"
 #define SECTION_COMPRESSION "compression"
 #define SECTION_DEBUG_LOGFILE "debug_logfile"

@@ -487,14 +487,6 @@ Config::loadFromString(std::string const& fileContents)
     if (auto s = getIniFileSection(secConfig, SECTION_IPS_FIXED))
         IPS_FIXED = *s;
 
-    if (auto s = getIniFileSection(secConfig, SECTION_BLACKLIST_ACCOUNTS))
-    {
-        for (auto const& account : *s)
-        {
-            BLACKLISTED_ACCOUNTS.insert(account);
-        }
-    }
-
     // if the user has specified ip:port then replace : with a space.
     {
         auto replaceColons = [](std::vector<std::string>& strVec) {

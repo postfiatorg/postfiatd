@@ -17,7 +17,9 @@
 */
 //==============================================================================
 
+#include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/DelegateUtils.h>
+#include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/tx/detail/SetAccount.h>
 #include <xrpld/core/Config.h>
 #include <xrpld/ledger/View.h>
@@ -25,7 +27,9 @@
 #include <xrpl/basics/Log.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
+#include <xrpl/protocol/Keylet.h>
 #include <xrpl/protocol/PublicKey.h>
+#include <xrpl/protocol/Protocol.h>
 #include <xrpl/protocol/Quality.h>
 #include <xrpl/protocol/st.h>
 
@@ -186,6 +190,35 @@ SetAccount::preflight(PreflightContext const& ctx)
             return temMALFORMED;
     }
 
+    // Account Exclusion Amendment validation
+    if (ctx.rules.enabled(featureAccountExclusion))
+    {
+        bool const hasExclusionAdd = tx.isFieldPresent(sfExclusionAdd);
+        bool const hasExclusionRemove = tx.isFieldPresent(sfExclusionRemove);
+
+        // If exclusion fields are present, this feature is restricted to validators
+        if (hasExclusionAdd || hasExclusionRemove)
+        {
+            // Cannot specify both add and remove in the same transaction
+            if (hasExclusionAdd && hasExclusionRemove)
+            {
+                JLOG(j.trace()) << "Cannot both add and remove exclusion in same transaction";
+                return temMALFORMED;
+            }
+
+            // Cannot exclude yourself
+            if (hasExclusionAdd)
+            {
+                auto const exclusionAddr = tx.getAccountID(sfExclusionAdd);
+                if (exclusionAddr == tx.getAccountID(sfAccount))
+                {
+                    JLOG(j.trace()) << "Cannot add self to exclusion list";
+                    return temMALFORMED;
+                }
+            }
+        }
+    }
+
     return preflight2(ctx);
 }
 
@@ -256,6 +289,29 @@ SetAccount::preclaim(PreclaimContext const& ctx)
         return terNO_ACCOUNT;
 
     std::uint32_t const uFlagsIn = sle->getFieldU32(sfFlags);
+
+    // Account Exclusion: Check if account is a UNL validator when using exclusion fields
+    if (ctx.view.rules().enabled(featureAccountExclusion))
+    {
+        bool const hasExclusionAdd = ctx.tx.isFieldPresent(sfExclusionAdd);
+        bool const hasExclusionRemove = ctx.tx.isFieldPresent(sfExclusionRemove);
+
+        if (hasExclusionAdd || hasExclusionRemove)
+        {
+            // Check if the account is in the UNL
+            // We need to get the validator list from the app to check this
+            // For now, we'll check if they have ValidatorVoteStats as a proxy
+            // TODO: Add proper UNL check through app context
+            auto const validatorStatsKey = keylet::validatorVoteStats(id);
+            auto const validatorStats = ctx.view.read(validatorStatsKey);
+
+            if (!validatorStats)
+            {
+                JLOG(ctx.j.trace()) << "Account is not a recognized validator - cannot modify exclusion list";
+                return tecNO_PERMISSION;
+            }
+        }
+    }
 
     std::uint32_t const uSetFlag = ctx.tx.getFieldU32(sfSetFlag);
 
@@ -665,6 +721,116 @@ SetAccount::doApply()
     {
         JLOG(j_.trace()) << "set allow clawback";
         uFlagsOut |= lsfAllowTrustLineClawback;
+    }
+
+    // Handle Account Exclusion List modifications
+    if (ctx_.view().rules().enabled(featureAccountExclusion))
+    {
+        if (tx.isFieldPresent(sfExclusionAdd))
+        {
+            auto const addressToAdd = tx.getAccountID(sfExclusionAdd);
+            STArray exclusionList;
+
+            // Get existing exclusion list if it exists
+            if (sle->isFieldPresent(sfExclusionList))
+            {
+                exclusionList = sle->getFieldArray(sfExclusionList);
+
+                // Check if we've reached the maximum list size
+                if (exclusionList.size() >= maxExclusionListSize)
+                {
+                    JLOG(j_.trace()) << "Exclusion list at maximum capacity";
+                    return tecDIR_FULL;
+                }
+
+                // Check if address is already in the list
+                for (auto const& entry : exclusionList)
+                {
+                    if (entry.isFieldPresent(sfAccount) &&
+                        entry.getAccountID(sfAccount) == addressToAdd)
+                    {
+                        JLOG(j_.trace()) << "Address already in exclusion list";
+                        return tecDUPLICATE;
+                    }
+                }
+            }
+
+            // Add the new address to the exclusion list
+            STObject newEntry(sfExclusionList);
+            newEntry.setAccountID(sfAccount, addressToAdd);
+            exclusionList.push_back(newEntry);
+
+            sle->setFieldArray(sfExclusionList, exclusionList);
+            JLOG(j_.trace()) << "Added address to exclusion list";
+        }
+        else if (tx.isFieldPresent(sfExclusionRemove))
+        {
+            auto const addressToRemove = tx.getAccountID(sfExclusionRemove);
+
+            if (!sle->isFieldPresent(sfExclusionList))
+            {
+                JLOG(j_.trace()) << "No exclusion list to remove from";
+                return tecNO_ENTRY;
+            }
+
+            STArray exclusionList = sle->getFieldArray(sfExclusionList);
+            STArray newList;
+            bool found = false;
+
+            for (auto const& entry : exclusionList)
+            {
+                if (entry.isFieldPresent(sfAccount))
+                {
+                    auto const addr = entry.getAccountID(sfAccount);
+                    if (addr == addressToRemove)
+                    {
+                        found = true;
+                        // Skip this entry (effectively removing it)
+                    }
+                    else
+                    {
+                        newList.push_back(entry);
+                    }
+                }
+            }
+
+            if (!found)
+            {
+                JLOG(j_.trace()) << "Address not found in exclusion list";
+                return tecNO_ENTRY;
+            }
+
+            if (newList.empty())
+            {
+                // Remove the field if the list is now empty
+                sle->makeFieldAbsent(sfExclusionList);
+            }
+            else
+            {
+                sle->setFieldArray(sfExclusionList, newList);
+            }
+
+            JLOG(j_.trace()) << "Removed address from exclusion list";
+        }
+
+        // Update the ExclusionManager cache with the new exclusion list
+        // Build the current exclusion list for this validator
+        std::unordered_set<AccountID> currentExclusions;
+        if (sle->isFieldPresent(sfExclusionList))
+        {
+            auto const exclusionList = sle->getFieldArray(sfExclusionList);
+            for (auto const& entry : exclusionList)
+            {
+                if (entry.isFieldPresent(sfAccount))
+                {
+                    currentExclusions.insert(entry.getAccountID(sfAccount));
+                }
+            }
+        }
+
+        // Notify the ExclusionManager of the update
+        ctx_.app.getExclusionManager().updateValidatorExclusions(
+            account_, currentExclusions);
     }
 
     if (uFlagsIn != uFlagsOut)

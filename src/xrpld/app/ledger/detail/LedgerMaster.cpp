@@ -26,6 +26,7 @@
 #include <xrpld/app/ledger/PendingSaves.h>
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/AmendmentTable.h>
+#include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/misc/SHAMapStore.h>
@@ -284,6 +285,14 @@ LedgerMaster::setValidLedger(std::shared_ptr<Ledger const> const& l)
     app_.getSHAMapStore().onLedgerClosed(getValidatedLedger());
     mLedgerHistory.validatedLedger(l, consensusHash);
     app_.getAmendmentTable().doValidatedLedger(l);
+
+    // Initialize ExclusionManager cache on first validated ledger
+    auto& exclusionManager = app_.getExclusionManager();
+    if (!exclusionManager.isInitialized())
+    {
+        JLOG(m_journal.info()) << "First validated ledger - initializing ExclusionManager cache";
+        exclusionManager.rebuildCache(*l);
+    }
     if (!app_.getOPs().isBlocked())
     {
         if (app_.getAmendmentTable().hasUnsupportedEnabled())

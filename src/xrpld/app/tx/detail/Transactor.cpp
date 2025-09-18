@@ -20,6 +20,7 @@
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/CredentialHelpers.h>
 #include <xrpld/app/misc/DelegateUtils.h>
+#include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/tx/apply.h>
 #include <xrpld/app/tx/detail/NFTokenUtils.h>
@@ -38,17 +39,6 @@
 #include <xrpl/protocol/UintTypes.h>
 
 namespace ripple {
-
-/** Helper function to check if an account is blacklisted */
-static bool
-isBlacklisted(Application& app, AccountID const& account)
-{
-    auto const& blacklist = app.config().BLACKLISTED_ACCOUNTS;
-    if (blacklist.empty())
-        return false;
-    
-    return blacklist.find(toBase58(account)) != blacklist.end();
-}
 
 /** Performs early sanity checks on the txid */
 NotTEC
@@ -129,21 +119,21 @@ preflight1(PreflightContext const& ctx)
         return temBAD_SRC_ACCOUNT;
     }
 
-    // Check if the sender account is blacklisted
-    if (isBlacklisted(ctx.app, id))
+    // Check if the sender account is excluded by consensus
+    if (ctx.app.getExclusionManager().isExcluded(id))
     {
-        JLOG(ctx.j.warn()) << "preflight1: sender account is blacklisted: " 
+        JLOG(ctx.j.warn()) << "preflight1: sender account is excluded by consensus: "
                           << toBase58(id);
         return temBAD_SRC_ACCOUNT;
     }
 
-    // Check if the destination account is blacklisted (if present)
+    // Check if the destination account is excluded (if present)
     if (ctx.tx.isFieldPresent(sfDestination))
     {
         auto const dest = ctx.tx.getAccountID(sfDestination);
-        if (isBlacklisted(ctx.app, dest))
+        if (ctx.app.getExclusionManager().isExcluded(dest))
         {
-            JLOG(ctx.j.warn()) << "preflight1: destination account is blacklisted: " 
+            JLOG(ctx.j.warn()) << "preflight1: destination account is excluded by consensus: "
                               << toBase58(dest);
             return temINVALID_ACCOUNT_ID;
         }

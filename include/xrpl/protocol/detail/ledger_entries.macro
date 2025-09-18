@@ -165,6 +165,7 @@ LEDGER_ENTRY(ltACCOUNT_ROOT, 0x0061, AccountRoot, account, ({
     {sfMintedNFTokens,       soeDEFAULT},
     {sfBurnedNFTokens,       soeDEFAULT},
     {sfFirstNFTokenSequence, soeOPTIONAL},
+    {sfExclusionList,        soeOPTIONAL},
     {sfAMMID,                soeOPTIONAL}, // pseudo-account designator
     {sfVaultID,              soeOPTIONAL}, // pseudo-account designator
 }))

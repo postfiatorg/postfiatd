@@ -302,6 +302,8 @@ TYPED_SFIELD(sfAttestationRewardAccount, ACCOUNT,   21)
 TYPED_SFIELD(sfLockingChainDoor,         ACCOUNT,   22)
 TYPED_SFIELD(sfIssuingChainDoor,         ACCOUNT,   23)
 TYPED_SFIELD(sfSubject,                  ACCOUNT,   24)
+TYPED_SFIELD(sfExclusionAdd,             ACCOUNT,   25)
+TYPED_SFIELD(sfExclusionRemove,          ACCOUNT,   26)
 
 // vector of 256-bit
 TYPED_SFIELD(sfIndexes,                  VECTOR256,  1, SField::sMD_Never)
@@ -399,3 +401,4 @@ UNTYPED_SFIELD(sfAcceptedCredentials,    ARRAY,     28)
 UNTYPED_SFIELD(sfPermissions,            ARRAY,     29)
 UNTYPED_SFIELD(sfRawTransactions,        ARRAY,     30)
 UNTYPED_SFIELD(sfBatchSigners,           ARRAY,     31, SField::sMD_Default, SField::notSigning)
+UNTYPED_SFIELD(sfExclusionList,          ARRAY,     32)

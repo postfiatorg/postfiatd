@@ -97,6 +97,9 @@ std::size_t constexpr maxDIDAttestationLength = 256;
 /** The maximum length of a domain */
 std::size_t constexpr maxDomainLength = 256;
 
+/** The maximum number of addresses in an account exclusion list */
+std::size_t constexpr maxExclusionListSize = 100;
+
 /** The maximum length of a URI inside a Credential */
 std::size_t constexpr maxCredentialURILength = 256;
 

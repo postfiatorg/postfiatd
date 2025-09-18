@@ -299,9 +299,6 @@ public:
 
     std::optional<std::size_t> VALIDATOR_LIST_THRESHOLD;
 
-    // Blacklisted account addresses
-    std::unordered_set<std::string> BLACKLISTED_ACCOUNTS;
-
 public:
     Config();
 
