@@ -23,12 +23,14 @@ ValidatorVoteTracker::recordVote(
     uint256 const& ledgerHash,
     LedgerIndex ledgerSeq,
     uint256 const& validationHash,
-    NetClock::time_point voteTime)
+    NetClock::time_point voteTime,
+    std::optional<AccountID> const& exclusionAdd,
+    std::optional<AccountID> const& exclusionRemove)
 {
     std::lock_guard lock(mutex_);
-    
-    // Record the vote with validation hash as proof
-    Vote vote{validatorKey, ledgerHash, ledgerSeq, validationHash, voteTime};
+
+    // Record the vote with validation hash as proof and exclusion data
+    Vote vote{validatorKey, ledgerHash, ledgerSeq, validationHash, voteTime, exclusionAdd, exclusionRemove};
     votesByLedger_[ledgerSeq].push_back(vote);
     
     JLOG(j_.debug()) << "ValidatorVoteTracker: Recorded vote from "
@@ -85,7 +87,7 @@ ValidatorVoteTracker::doVoting(
         // Create the ValidatorVote pseudo-transaction
         STTx voteTx(
             ttVALIDATOR_VOTE,
-            [this, &vote, seq = currentSeq + 1](auto& obj) {
+            [this, &vote, seq = currentSeq + 1, &journal](auto& obj) {
                 obj.setAccountID(sfAccount, AccountID());
                 obj.setFieldU32(sfNetworkID, app_.config().NETWORK_ID);
                 obj.setFieldU32(sfLedgerSequence, vote.ledgerSeq);
@@ -94,6 +96,14 @@ ValidatorVoteTracker::doVoting(
                 obj.setFieldH256(sfValidationHash, vote.validationHash);
                 if (vote.voteTime != NetClock::time_point{})
                     obj.setFieldU32(sfCloseTime, vote.voteTime.time_since_epoch().count());
+
+                // Add exclusion fields if present
+                if (vote.exclusionAdd) {
+                    obj.setAccountID(sfExclusionAdd, *vote.exclusionAdd);
+                }
+                if (vote.exclusionRemove) {
+                    obj.setAccountID(sfExclusionRemove, *vote.exclusionRemove);
+                }
             });
         
         Serializer s;

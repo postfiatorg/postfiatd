@@ -1235,6 +1235,7 @@ public:
             {"connect", &RPCParser::parseConnect, 1, 2},
             {"consensus_info", &RPCParser::parseAsIs, 0, 0},
             {"deposit_authorized", &RPCParser::parseDepositAuthorized, 2, 11},
+            {"exclusion_info", &RPCParser::parseAsIs, 0, 1},
             {"feature", &RPCParser::parseFeature, 0, 2},
             {"fetch_info", &RPCParser::parseFetchInfo, 0, 1},
             {"gateway_balances", &RPCParser::parseGatewayBalances, 1, -1},

@@ -24,6 +24,7 @@
 #include <xrpl/basics/base_uint.h>
 #include <xrpl/beast/net/IPEndpoint.h>
 #include <xrpl/beast/utility/Journal.h>
+#include <xrpl/protocol/AccountID.h>
 #include <xrpl/protocol/SystemParameters.h>  // VFALCO Breaks levelization
 
 #include <boost/filesystem.hpp>  // VFALCO FIX: This include should not be here
@@ -200,6 +201,9 @@ public:
     // Validation
     std::optional<std::size_t>
         VALIDATION_QUORUM;  // validations to consider ledger authoritative
+
+    // Validator exclusion list configuration
+    std::unordered_set<AccountID> VALIDATOR_EXCLUSIONS;
 
     FeeSetup FEES;
 

@@ -27,6 +27,7 @@
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/AmendmentTable.h>
 #include <xrpld/app/misc/ExclusionManager.h>
+#include <xrpld/app/misc/ValidatorExclusionManager.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/misc/SHAMapStore.h>
@@ -293,6 +294,14 @@ LedgerMaster::setValidLedger(std::shared_ptr<Ledger const> const& l)
         JLOG(m_journal.info()) << "First validated ledger - initializing ExclusionManager cache";
         exclusionManager.rebuildCache(*l);
     }
+
+    // Initialize ValidatorExclusionManager on first validated ledger (if we're a validator)
+    if (auto const valKey = app_.getValidationPublicKey())
+    {
+        auto& validatorExclusionManager = app_.getValidatorExclusionManager();
+        validatorExclusionManager.initialize(*valKey, *l);
+    }
+
     if (!app_.getOPs().isBlocked())
     {
         if (app_.getAmendmentTable().hasUnsupportedEnabled())

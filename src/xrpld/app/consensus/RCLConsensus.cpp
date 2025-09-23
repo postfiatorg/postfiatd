@@ -32,6 +32,7 @@
 #include <xrpld/app/misc/NegativeUNLVote.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/misc/TxQ.h>
+#include <xrpld/app/misc/ValidatorExclusionManager.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/misc/ValidatorVoteTracker.h>
@@ -881,6 +882,31 @@ RCLConsensus::Adaptor::validate(
                 auto const fee = std::max(ft.getLocalFee(), ft.getClusterFee());
                 if (fee > ft.getLoadBase())
                     v.setFieldU32(sfLoadFee, fee);
+            }
+
+            // AccountExclusion: Include any exclusion list changes in validation
+            if (ledger.ledger_->rules().enabled(featureAccountExclusion))
+            {
+                // Check if validator has pending exclusion changes
+                if (auto const changes = app_.getValidatorExclusionManager()
+                        .getExclusionChange(ledger.seq()))
+                {
+                    auto const& [exclusionAdd, exclusionRemove] = *changes;
+
+                    if (exclusionAdd)
+                    {
+                        v.setAccountID(sfExclusionAdd, *exclusionAdd);
+                        JLOG(j_.info()) << "Adding exclusion to validation: "
+                                       << toBase58(*exclusionAdd);
+                    }
+
+                    if (exclusionRemove)
+                    {
+                        v.setAccountID(sfExclusionRemove, *exclusionRemove);
+                        JLOG(j_.info()) << "Adding exclusion removal to validation: "
+                                       << toBase58(*exclusionRemove);
+                    }
+                }
             }
 
             // If the next ledger is a flag ledger, suggest fee changes and

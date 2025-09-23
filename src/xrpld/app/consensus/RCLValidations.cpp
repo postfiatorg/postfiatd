@@ -196,12 +196,31 @@ handleNewValidation(
         {
             // Record the vote for ValidatorVoteTracking amendment
             // Use the validation's signing hash as proof of the vote
+
+            // Check for exclusion list changes in the validation
+            std::optional<AccountID> exclusionAdd;
+            std::optional<AccountID> exclusionRemove;
+
+            if (val->isFieldPresent(sfExclusionAdd))
+                exclusionAdd = val->getAccountID(sfExclusionAdd);
+            if (val->isFieldPresent(sfExclusionRemove))
+                exclusionRemove = val->getAccountID(sfExclusionRemove);
+
+            auto const keyForVote = masterKey.value_or(signingKey);
+            JLOG(app.journal("Validations").info())
+                << "RCLValidations: Recording vote with "
+                << (masterKey ? "master key: " : "signing key: ")
+                << toBase58(TokenType::NodePublic, keyForVote)
+                << " -> Account: " << toBase58(calcAccountID(keyForVote));
+
             app.getValidatorVoteTracker().recordVote(
-                signingKey,
+                keyForVote,  // Use master key if available, otherwise signing key
                 hash,
                 seq,
                 val->getSigningHash(),  // Validation signing hash as proof
-                app.timeKeeper().closeTime());
+                app.timeKeeper().closeTime(),
+                exclusionAdd,
+                exclusionRemove);
             
             if (bypassAccept == BypassAccept::yes)
             {

@@ -571,4 +571,6 @@ TRANSACTION(ttVALIDATOR_VOTE, 1501, ValidatorVote, Delegation::notDelegatable, (
     {sfValidatorPublicKey, soeREQUIRED},
     {sfValidationHash, soeREQUIRED},
     {sfCloseTime, soeOPTIONAL},
+    {sfExclusionAdd, soeOPTIONAL},
+    {sfExclusionRemove, soeOPTIONAL},
 }))

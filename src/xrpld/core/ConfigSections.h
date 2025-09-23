@@ -94,6 +94,7 @@ struct ConfigSection
 #define SECTION_VALIDATOR_LIST_THRESHOLD "validator_list_threshold"
 #define SECTION_VALIDATORS "validators"
 #define SECTION_VALIDATOR_TOKEN "validator_token"
+#define SECTION_VALIDATOR_EXCLUSIONS "validator_exclusions"
 #define SECTION_VETO_AMENDMENTS "veto_amendments"
 #define SECTION_WORKERS "workers"
 

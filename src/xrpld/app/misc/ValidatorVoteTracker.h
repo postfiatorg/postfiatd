@@ -33,6 +33,8 @@ public:
         LedgerIndex ledgerSeq;
         uint256 validationHash;  // Hash of the validation message as proof
         NetClock::time_point voteTime;
+        std::optional<AccountID> exclusionAdd;
+        std::optional<AccountID> exclusionRemove;
     };
 
 private:
@@ -59,7 +61,9 @@ public:
         uint256 const& ledgerHash,
         LedgerIndex ledgerSeq,
         uint256 const& validationHash,
-        NetClock::time_point voteTime);
+        NetClock::time_point voteTime,
+        std::optional<AccountID> const& exclusionAdd = std::nullopt,
+        std::optional<AccountID> const& exclusionRemove = std::nullopt);
 
     /**
      * Generate ValidatorVote pseudo-transactions for inclusion in the next ledger

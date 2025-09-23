@@ -262,6 +262,9 @@ JSS(errored);
 JSS(error_code);              // out: error
 JSS(error_exception);         // out: Submit
 JSS(error_message);           // out: error
+JSS(exclusion_count);         // out: ExclusionInfo
+JSS(exclusion_list);          // out: ExclusionInfo
+JSS(excluded_accounts);       // out: ExclusionInfo
 JSS(expand);                  // in: handler/Ledger
 JSS(expected_date);           // out: any (warnings)
 JSS(expected_date_UTC);       // out: any (warnings)
@@ -615,6 +618,9 @@ JSS(total);                   // out: counters
 JSS(total_bytes_recv);        // out: Peers
 JSS(total_bytes_sent);        // out: Peers
 JSS(total_coins);             // out: LedgerToJson
+JSS(total_validators);        // out: ExclusionInfo
+JSS(consensus_threshold);     // out: ExclusionInfo
+JSS(consensus_percentage);    // out: ExclusionInfo
 JSS(trading_fee);             // out: amm_info
 JSS(transTreeHash);           // out: ledger/Ledger.cpp
 JSS(transaction);             // in: Tx
@@ -675,6 +681,7 @@ JSS(validated);               // out: NetworkOPs, RPCHelpers, AccountTx*
                               //      Tx
 JSS(validator_list_expires);  // out: NetworkOps, ValidatorList
 JSS(validator_list);          // out: NetworkOps, ValidatorList
+JSS(validator);               // in/out: ExclusionInfo
 JSS(validators);
 JSS(validated_hash);            // out: NetworkOPs
 JSS(validated_ledger);          // out: NetworkOPs

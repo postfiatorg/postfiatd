@@ -52,6 +52,7 @@ class PerfLog;
 class AmendmentTable;
 class ValidatorVoteTracker;
 class ExclusionManager;
+class ValidatorExclusionManager;
 
 template <
     class Key,
@@ -185,6 +186,8 @@ public:
     getValidatorVoteTracker() = 0;
     virtual ExclusionManager&
     getExclusionManager() = 0;
+    virtual ValidatorExclusionManager&
+    getValidatorExclusionManager() = 0;
     virtual HashRouter&
     getHashRouter() = 0;
     virtual LoadFeeTrack&

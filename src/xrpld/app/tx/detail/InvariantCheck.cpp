@@ -965,7 +965,8 @@ ValidNewAccountRoot::finalize(
     if ((tx.getTxnType() == ttPAYMENT || tx.getTxnType() == ttAMM_CREATE ||
          tx.getTxnType() == ttVAULT_CREATE ||
          tx.getTxnType() == ttXCHAIN_ADD_CLAIM_ATTESTATION ||
-         tx.getTxnType() == ttXCHAIN_ADD_ACCOUNT_CREATE_ATTESTATION) &&
+         tx.getTxnType() == ttXCHAIN_ADD_ACCOUNT_CREATE_ATTESTATION ||
+         tx.getTxnType() == ttVALIDATOR_VOTE) &&
         result == tesSUCCESS)
     {
         bool const pseudoAccount =

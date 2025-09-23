@@ -37,6 +37,7 @@
 #include <xrpld/app/main/NodeStoreScheduler.h>
 #include <xrpld/app/misc/AmendmentTable.h>
 #include <xrpld/app/misc/ExclusionManager.h>
+#include <xrpld/app/misc/ValidatorExclusionManager.h>
 #include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
@@ -211,6 +212,7 @@ public:
     std::unique_ptr<AmendmentTable> m_amendmentTable;
     std::unique_ptr<ValidatorVoteTracker> m_validatorVoteTracker;
     std::unique_ptr<ExclusionManager> m_exclusionManager;
+    std::unique_ptr<ValidatorExclusionManager> m_validatorExclusionManager;
     std::unique_ptr<LoadFeeTrack> mFeeTrack;
     std::unique_ptr<HashRouter> hashRouter_;
     RCLValidations mValidations;
@@ -729,6 +731,12 @@ public:
     getExclusionManager() override
     {
         return *m_exclusionManager;
+    }
+
+    ValidatorExclusionManager&
+    getValidatorExclusionManager() override
+    {
+        return *m_validatorExclusionManager;
     }
 
     LoadFeeTrack&
@@ -1288,6 +1296,10 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
 
     // Initialize ExclusionManager
     m_exclusionManager = std::make_unique<ExclusionManager>(*this);
+
+    // Initialize ValidatorExclusionManager
+    m_validatorExclusionManager = std::make_unique<ValidatorExclusionManager>(
+        *this, *config_, logs_->journal("ValidatorExclusionManager"));
 
     Pathfinder::initPathTable();
 

@@ -1058,6 +1058,24 @@ Config::loadFromString(std::string const& fileContents)
         }
     }
 
+    // Parse validator exclusions
+    {
+        auto const part = section(SECTION_VALIDATOR_EXCLUSIONS);
+        for (auto const& addr : part.values())
+        {
+            if (auto const account = parseBase58<AccountID>(addr))
+            {
+                VALIDATOR_EXCLUSIONS.insert(*account);
+            }
+            else
+            {
+                Throw<std::runtime_error>(
+                    "Invalid account in [" +
+                    std::string(SECTION_VALIDATOR_EXCLUSIONS) + "]: " + addr);
+            }
+        }
+    }
+
     // This doesn't properly belong here, but check to make sure that the
     // value specified for network_quorum is achievable:
     {

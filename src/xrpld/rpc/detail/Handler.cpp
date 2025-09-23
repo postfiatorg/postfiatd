@@ -105,6 +105,7 @@ Handler const handlerArray[]{
      byRef(&doDepositAuthorized),
      Role::USER,
      NO_CONDITION},
+    {"exclusion_info", byRef(&doExclusionInfo), Role::USER, NO_CONDITION},
     {"feature", byRef(&doFeature), Role::USER, NO_CONDITION},
     {"fee", byRef(&doFee), Role::USER, NEEDS_CURRENT_LEDGER},
     {"fetch_info", byRef(&doFetchInfo), Role::ADMIN, NO_CONDITION},

@@ -21,6 +21,7 @@
 #include <xrpld/app/ledger/LedgerMaster.h>
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/AmendmentTable.h>
+#include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/tx/detail/Change.h>
 #include <xrpld/ledger/ApplyView.h>
@@ -29,6 +30,7 @@
 #include <xrpl/basics/Log.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
+#include <xrpl/protocol/STArray.h>
 #include <xrpl/protocol/TxFlags.h>
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpld/app/misc/TxQ.h>
@@ -44,7 +46,9 @@ Change::preflight(PreflightContext const& ctx)
     if (!isTesSuccess(ret))
     {
         if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE)
+        {
             JLOG(ctx.j.warn()) << "ValidatorVote: preflight0 failed with " << transToken(ret);
+        }
         return ret;
     }
 
@@ -87,7 +91,7 @@ Change::preflight(PreflightContext const& ctx)
     if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE &&
         !ctx.rules.enabled(featureValidatorVoteTracking))
     {
-        JLOG(ctx.j.warn()) << "Change: ValidatorVoteTracking not enabled (but continuing for testing)";
+        JLOG(ctx.j.warn()) << "Change: ValidatorVoteTracking not enabled";
         return temDISABLED;
     }
 
@@ -547,12 +551,18 @@ Change::applyValidatorVote()
     }
 
     // Get validator public key from transaction
+    // Note: This should be the master key (when available), as set by ValidatorVoteTracker
     auto const validatorPubKey = ctx_.tx.getFieldVL(sfValidatorPublicKey);
-    
-    // Create an account ID from the validator public key
+
+    // Create an account ID from the validator public key (master key when available)
     // This is used as the key for the ValidatorVoteStats ledger object
     PublicKey pubKey(makeSlice(validatorPubKey));
     AccountID validatorAccount = calcAccountID(pubKey);
+
+    JLOG(j_.info()) << "ValidatorVote: Processing vote with pubKey: "
+                    << toBase58(TokenType::NodePublic, pubKey)
+                    << " -> Account: " << toBase58(validatorAccount)
+                    << " in ledger " << view().seq();
     
     // Get or create the ValidatorVoteStats object for this validator
     auto const k = keylet::validatorVoteStats(validatorAccount);
@@ -598,9 +608,133 @@ Change::applyValidatorVote()
         view().update(voteStats);
     }
     
-    JLOG(j_.trace()) << "ValidatorVote: Successfully recorded vote for validator " 
+    // Process exclusion list changes if AccountExclusion is enabled
+    if (view().rules().enabled(featureAccountExclusion))
+    {
+        bool hasExclusionAdd = ctx_.tx.isFieldPresent(sfExclusionAdd);
+        bool hasExclusionRemove = ctx_.tx.isFieldPresent(sfExclusionRemove);
+
+        if (hasExclusionAdd || hasExclusionRemove)
+        {
+            // Get or create the validator's account to update exclusion list
+            // Note: ValidatorVote transactions are only created for UNL validators
+            auto const validatorAccountKey = keylet::account(validatorAccount);
+            SLE::pointer validatorAccountSLE = view().peek(validatorAccountKey);
+
+            if (!validatorAccountSLE)
+            {
+                JLOG(j_.info()) << "ValidatorVote: Creating validator account for "
+                                << toBase58(validatorAccount)
+                                << " (from pubKey: " << toBase58(TokenType::NodePublic, pubKey) << ")";
+
+                // Create new account for the validator
+                validatorAccountSLE = std::make_shared<SLE>(validatorAccountKey);
+                validatorAccountSLE->setAccountID(sfAccount, validatorAccount);
+                validatorAccountSLE->setFieldAmount(sfBalance, STAmount{0});
+                validatorAccountSLE->setFieldU32(sfSequence, 1);
+                validatorAccountSLE->setFieldU32(sfOwnerCount, 0);
+
+                view().insert(validatorAccountSLE);
+                JLOG(j_.info()) << "ValidatorVote: Validator account inserted into ledger";
+            }
+            else
+            {
+                JLOG(j_.info()) << "ValidatorVote: Validator account already exists: "
+                                << toBase58(validatorAccount);
+            }
+
+            // Get existing exclusion list or create new one
+            STArray exclusionList;
+            if (validatorAccountSLE->isFieldPresent(sfExclusionList))
+            {
+                exclusionList = validatorAccountSLE->getFieldArray(sfExclusionList);
+            }
+
+            // Process exclusion removal
+            if (hasExclusionRemove)
+            {
+                auto const toRemove = ctx_.tx.getAccountID(sfExclusionRemove);
+
+                auto newEnd = std::remove_if(
+                    exclusionList.begin(),
+                    exclusionList.end(),
+                    [&toRemove](STObject const& obj) {
+                        return obj.isFieldPresent(sfAccount) &&
+                               obj.getAccountID(sfAccount) == toRemove;
+                    });
+
+                if (newEnd != exclusionList.end())
+                {
+                    exclusionList.erase(newEnd, exclusionList.end());
+                    JLOG(j_.info()) << "ValidatorVote: Removed " << toBase58(toRemove)
+                                   << " from validator's exclusion list";
+                }
+            }
+
+            // Process exclusion addition
+            if (hasExclusionAdd)
+            {
+                auto const toAdd = ctx_.tx.getAccountID(sfExclusionAdd);
+
+                // Check if already in list
+                bool alreadyExists = std::any_of(
+                    exclusionList.begin(),
+                    exclusionList.end(),
+                    [&toAdd](STObject const& obj) {
+                        return obj.isFieldPresent(sfAccount) &&
+                               obj.getAccountID(sfAccount) == toAdd;
+                    });
+
+                if (!alreadyExists)
+                {
+                    // Check max list size (100 addresses)
+                    if (exclusionList.size() < 100)
+                    {
+                        exclusionList.push_back(STObject::makeInnerObject(sfExclusionEntry));
+                        STObject& entry = exclusionList.back();
+                        entry.setAccountID(sfAccount, toAdd);
+
+                        JLOG(j_.info()) << "ValidatorVote: Added " << toBase58(toAdd)
+                                       << " to validator's exclusion list";
+                    }
+                    else
+                    {
+                        JLOG(j_.warn()) << "ValidatorVote: Exclusion list full, cannot add "
+                                       << toBase58(toAdd);
+                    }
+                }
+            }
+
+            // Update the account with the modified exclusion list
+            if (exclusionList.empty())
+            {
+                validatorAccountSLE->makeFieldAbsent(sfExclusionList);
+            }
+            else
+            {
+                validatorAccountSLE->setFieldArray(sfExclusionList, exclusionList);
+            }
+
+            view().update(validatorAccountSLE);
+
+            // Update the ExclusionManager cache
+            std::unordered_set<AccountID> exclusions;
+            for (auto const& entry : exclusionList)
+            {
+                if (entry.isFieldPresent(sfAccount))
+                {
+                    exclusions.insert(entry.getAccountID(sfAccount));
+                }
+            }
+
+            ctx_.app.getExclusionManager().updateValidatorExclusions(
+                validatorAccount, exclusions);
+        }
+    }
+
+    JLOG(j_.trace()) << "ValidatorVote: Successfully recorded vote for validator "
                     << toBase58(validatorAccount);
-    
+
     return tesSUCCESS;
 }
 
