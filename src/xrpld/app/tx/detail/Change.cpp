@@ -631,7 +631,11 @@ Change::applyValidatorVote()
                 validatorAccountSLE = std::make_shared<SLE>(validatorAccountKey);
                 validatorAccountSLE->setAccountID(sfAccount, validatorAccount);
                 validatorAccountSLE->setFieldAmount(sfBalance, STAmount{0});
-                validatorAccountSLE->setFieldU32(sfSequence, 1);
+
+                // Set the correct starting sequence based on DeletableAccounts feature
+                std::uint32_t const startingSeq =
+                    view().rules().enabled(featureDeletableAccounts) ? view().seq() : 1;
+                validatorAccountSLE->setFieldU32(sfSequence, startingSeq);
                 validatorAccountSLE->setFieldU32(sfOwnerCount, 0);
 
                 view().insert(validatorAccountSLE);
