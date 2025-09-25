@@ -95,6 +95,8 @@ struct ConfigSection
 #define SECTION_VALIDATORS "validators"
 #define SECTION_VALIDATOR_TOKEN "validator_token"
 #define SECTION_VALIDATOR_EXCLUSIONS "validator_exclusions"
+#define SECTION_VALIDATOR_EXCLUSIONS_SOURCES "validator_exclusions_sources"
+#define SECTION_VALIDATOR_EXCLUSIONS_INTERVAL "validator_exclusions_interval"
 #define SECTION_VETO_AMENDMENTS "veto_amendments"
 #define SECTION_WORKERS "workers"
 

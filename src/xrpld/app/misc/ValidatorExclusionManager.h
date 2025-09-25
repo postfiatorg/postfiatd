@@ -20,6 +20,7 @@
 #ifndef RIPPLE_APP_MISC_VALIDATOREXCLUSIONMANAGER_H_INCLUDED
 #define RIPPLE_APP_MISC_VALIDATOREXCLUSIONMANAGER_H_INCLUDED
 
+#include <xrpld/app/misc/RemoteExclusionListFetcher.h>
 #include <xrpl/protocol/AccountID.h>
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/Protocol.h>
@@ -75,6 +76,9 @@ private:
 
     // Configured exclusions from config file
     std::unordered_set<AccountID> configuredExclusions_;
+
+    // Remote exclusion list fetcher
+    std::unique_ptr<RemoteExclusionListFetcher> remoteFetcher_;
 
     // Pending operations queue
     std::queue<std::pair<bool, AccountID>> pendingChanges_; // true=add, false=remove

@@ -69,11 +69,6 @@ ExclusionManager::updateValidatorExclusions(
     {
         oldExclusions = std::move(oldExclusionsIt->second);
     }
-    else
-    {
-        // New validator being added
-        totalValidators_++;
-    }
 
     // Update to new exclusion list
     if (exclusions.empty())
@@ -84,6 +79,9 @@ ExclusionManager::updateValidatorExclusions(
     {
         validatorExclusions_[validator] = exclusions;
     }
+
+    // Update the total validator count to match the actual map size
+    totalValidators_ = validatorExclusions_.size();
 
     // Update exclusion counts
     // First, decrement counts for addresses that were in old list
@@ -143,7 +141,9 @@ ExclusionManager::removeValidator(AccountID const& validator)
     }
 
     validatorExclusions_.erase(it);
-    totalValidators_--;
+
+    // Update the total validator count to match the actual map size
+    totalValidators_ = validatorExclusions_.size();
 
     recalculateConsensusExclusions();
 
@@ -221,6 +221,9 @@ ExclusionManager::rebuildCache(ReadView const& view)
             }
         }
     }
+
+    // Update the total validator count to match the actual map size
+    totalValidators_ = validatorExclusions_.size();
 
     // Calculate which addresses meet consensus threshold
     recalculateConsensusExclusions();

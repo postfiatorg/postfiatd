@@ -56,6 +56,7 @@ private:
 
 //------------------------------------------------------------------------------
 
+inline
 WorkPlain::WorkPlain(
     std::string const& host,
     std::string const& path,
@@ -68,7 +69,7 @@ WorkPlain::WorkPlain(
 {
 }
 
-void
+inline void
 WorkPlain::onConnect(error_code const& ec)
 {
     if (ec)

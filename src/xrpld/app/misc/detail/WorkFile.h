@@ -64,6 +64,7 @@ private:
 
 //------------------------------------------------------------------------------
 
+inline
 WorkFile::WorkFile(
     std::string const& path,
     boost::asio::io_service& ios,
@@ -72,13 +73,14 @@ WorkFile::WorkFile(
 {
 }
 
+inline
 WorkFile::~WorkFile()
 {
     if (cb_)
         cb_(make_error_code(boost::system::errc::interrupted), {});
 }
 
-void
+inline void
 WorkFile::run()
 {
     if (!strand_.running_in_this_thread())
@@ -93,7 +95,7 @@ WorkFile::run()
     cb_ = nullptr;
 }
 
-void
+inline void
 WorkFile::cancel()
 {
     // Nothing to do. Either it finished in run, or it didn't start.

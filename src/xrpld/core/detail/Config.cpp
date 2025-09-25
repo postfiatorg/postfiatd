@@ -1076,6 +1076,77 @@ Config::loadFromString(std::string const& fileContents)
         }
     }
 
+    // Parse validator exclusion sources (URL and public key pairs)
+    {
+        auto const part = section(SECTION_VALIDATOR_EXCLUSIONS_SOURCES);
+        auto const& lines = part.lines();
+
+        for (auto const& line : lines)
+        {
+            // Format: url|pubkey
+            auto pos = line.find('|');
+            if (pos != std::string::npos && pos > 0 && pos < line.length() - 1)
+            {
+                ValidatorExclusionSource source;
+                source.url = line.substr(0, pos);
+                source.pubkey = line.substr(pos + 1);
+
+                // Basic validation
+                if (source.url.empty() || source.pubkey.empty())
+                {
+                    Throw<std::runtime_error>(
+                        "Invalid source format in [" +
+                        std::string(SECTION_VALIDATOR_EXCLUSIONS_SOURCES) +
+                        "]: " + line);
+                }
+
+                // Check URL starts with http:// or https://
+                if (source.url.find("http://") != 0 &&
+                    source.url.find("https://") != 0)
+                {
+                    Throw<std::runtime_error>(
+                        "URL must start with http:// or https:// in [" +
+                        std::string(SECTION_VALIDATOR_EXCLUSIONS_SOURCES) +
+                        "]: " + source.url);
+                }
+
+                VALIDATOR_EXCLUSIONS_SOURCES.push_back(std::move(source));
+            }
+            else
+            {
+                Throw<std::runtime_error>(
+                    "Invalid source format (expected url|pubkey) in [" +
+                    std::string(SECTION_VALIDATOR_EXCLUSIONS_SOURCES) +
+                    "]: " + line);
+            }
+        }
+    }
+
+    // Parse validator exclusions check interval
+    {
+        auto const part = section(SECTION_VALIDATOR_EXCLUSIONS_INTERVAL);
+        if (!part.values().empty())
+        {
+            try
+            {
+                auto interval = std::stoul(part.values().front());
+                if (interval < 60)
+                {
+                    Throw<std::runtime_error>(
+                        "Interval must be at least 60 seconds in [" +
+                        std::string(SECTION_VALIDATOR_EXCLUSIONS_INTERVAL) + "]");
+                }
+                VALIDATOR_EXCLUSIONS_INTERVAL = std::chrono::seconds(interval);
+            }
+            catch (std::exception const&)
+            {
+                Throw<std::runtime_error>(
+                    "Invalid interval in [" +
+                    std::string(SECTION_VALIDATOR_EXCLUSIONS_INTERVAL) + "]");
+            }
+        }
+    }
+
     // This doesn't properly belong here, but check to make sure that the
     // value specified for network_quorum is achievable:
     {

@@ -205,6 +205,14 @@ public:
     // Validator exclusion list configuration
     std::unordered_set<AccountID> VALIDATOR_EXCLUSIONS;
 
+    struct ValidatorExclusionSource
+    {
+        std::string url;
+        std::string pubkey;
+    };
+    std::vector<ValidatorExclusionSource> VALIDATOR_EXCLUSIONS_SOURCES;
+    std::chrono::seconds VALIDATOR_EXCLUSIONS_INTERVAL{300};  // Default 5 minutes
+
     FeeSetup FEES;
 
     // Node storage configuration
