@@ -117,7 +117,7 @@ Sample output:
   Validator keys stored in /home/ubuntu/.ripple/validator-keys.json
 ```
 
-Inside of validator-keys.json enter your domain. This is optional but recommended for validator identification.
+Inside of validator-keys.json enter your domain.
 
 Keep the key file in a secure but recoverable location, such as an encrypted
 USB flash drive. Do not modify its contents.
