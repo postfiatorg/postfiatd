@@ -82,29 +82,39 @@ def derive_public_key_ed25519(secret_key_hex: str) -> str:
     """
     Derive Ed25519 public key from secret key and return as base58 node public key
     """
+    # XRPL uses a custom base58 alphabet (Ripple alphabet)
+    RIPPLE_ALPHABET = b'rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz'
+
     # Convert hex secret key to bytes
     secret_key_bytes = bytes.fromhex(secret_key_hex)
 
     # Create signing key
     signing_key = nacl.signing.SigningKey(secret_key_bytes)
 
-    # Get public key
+    # Get public key (32 bytes for Ed25519)
     public_key_bytes = bytes(signing_key.verify_key)
 
-    # For XRPL node public keys, we need to add the prefix
-    # ED prefix is 0xED (237 in decimal) for Ed25519 keys
-    prefixed_key = b'\xed' + public_key_bytes
+    # For XRPL Ed25519 keys, we need to add the ED prefix (0xED) to the key data
+    # before encoding as base58
+    ed_public_key = b'\xed' + public_key_bytes  # 33 bytes total
+
+    # Now encode this as a NodePublic token using the XRPL base58 encoding
+    # TokenType::NodePublic = 28 (0x1C)
+    token_type = b'\x1c'
+
+    # Create the full message: type + data
+    message = token_type + ed_public_key
 
     # Calculate double SHA-256 checksum
-    hash1 = hashlib.sha256(prefixed_key).digest()
+    hash1 = hashlib.sha256(message).digest()
     hash2 = hashlib.sha256(hash1).digest()
     checksum = hash2[:4]
 
-    # Combine prefix + key + checksum
-    full_key = prefixed_key + checksum
+    # Combine type + data + checksum
+    full_key = message + checksum
 
-    # Convert to base58
-    return base58.b58encode(full_key).decode('ascii')
+    # Convert to base58 using Ripple alphabet
+    return base58.b58encode(full_key, alphabet=RIPPLE_ALPHABET).decode('ascii')
 
 def sign_exclusion_list(exclusion_data: Dict[str, Any], secret_key_hex: str, algorithm: str = "ed25519") -> Dict[str, Any]:
     """
