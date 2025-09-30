@@ -1,5 +1,6 @@
 #include <xrpld/app/misc/ValidatorExclusionManager.h>
 #include <xrpld/app/main/Application.h>
+#include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/core/Config.h>
 #include <xrpld/ledger/ReadView.h>
@@ -65,6 +66,21 @@ ValidatorExclusionManager::getExclusionChange(LedgerIndex ledgerSeq)
         if (remoteFetcher_->hasBeenModified(true))  // Reset flag after checking
         {
             JLOG(j_.info()) << "ValidatorExclusionManager: Remote exclusion list modified, updating pending changes";
+
+            // Update ExclusionManager with reason information from remote fetcher
+            auto reasons = remoteFetcher_->getExclusionReasons();
+            if (!reasons.empty())
+            {
+                std::unordered_map<AccountID, ExclusionManager::ExclusionInfo> exclusionInfoMap;
+                for (auto const& [account, reasonPair] : reasons)
+                {
+                    ExclusionManager::ExclusionInfo info;
+                    info.reason = reasonPair.first;
+                    info.dateAdded = reasonPair.second;
+                    exclusionInfoMap[account] = info;
+                }
+                app_.getExclusionManager().updateExclusionReasons(exclusionInfoMap);
+            }
 
             // Get current exclusions from ledger (we need to re-read them)
             // For now, we'll use the last known state
@@ -248,6 +264,32 @@ ValidatorExclusionManager::updatePendingChanges(
 
     JLOG(j_.info()) << "ValidatorExclusionManager: "
                    << pendingChanges_.size() << " pending changes queued";
+}
+
+void
+ValidatorExclusionManager::updateExclusionManagerReasons()
+{
+    // Only update if remote fetcher is configured
+    if (!remoteFetcher_)
+        return;
+
+    // Get reason information from remote fetcher
+    auto reasons = remoteFetcher_->getExclusionReasons();
+    if (!reasons.empty())
+    {
+        std::unordered_map<AccountID, ExclusionManager::ExclusionInfo> exclusionInfoMap;
+        for (auto const& [account, reasonPair] : reasons)
+        {
+            ExclusionManager::ExclusionInfo info;
+            info.reason = reasonPair.first;
+            info.dateAdded = reasonPair.second;
+            exclusionInfoMap[account] = info;
+        }
+        app_.getExclusionManager().updateExclusionReasons(exclusionInfoMap);
+
+        JLOG(j_.info()) << "ValidatorExclusionManager: Updated ExclusionManager with "
+                       << exclusionInfoMap.size() << " exclusion reasons";
+    }
 }
 
 } // namespace ripple

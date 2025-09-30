@@ -681,6 +681,27 @@ RemoteExclusionListFetcher::getCombinedExclusions() const
     return combinedExclusions_;
 }
 
+std::unordered_map<AccountID, std::pair<std::string, std::string>>
+RemoteExclusionListFetcher::getExclusionReasons() const
+{
+    std::lock_guard lock(mutex_);
+    std::unordered_map<AccountID, std::pair<std::string, std::string>> reasons;
+
+    for (auto const& [url, list] : cachedLists_)
+    {
+        if (list.verified)
+        {
+            for (auto const& entry : list.blacklist)
+            {
+                // Store reason and dateAdded as a pair
+                reasons[entry.address] = std::make_pair(entry.reason, entry.dateAdded);
+            }
+        }
+    }
+
+    return reasons;
+}
+
 bool
 RemoteExclusionListFetcher::isRunning() const
 {

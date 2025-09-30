@@ -68,6 +68,12 @@ public:
     std::optional<std::pair<std::optional<AccountID>, std::optional<AccountID>>>
     getExclusionChange(LedgerIndex ledgerSeq);
 
+    /**
+     * Update ExclusionManager with reason information from remote fetcher
+     * Called during initialization and when remote lists are updated
+     */
+    void updateExclusionManagerReasons();
+
 private:
     Application& app_;
     Config const& config_;

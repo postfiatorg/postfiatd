@@ -293,6 +293,10 @@ LedgerMaster::setValidLedger(std::shared_ptr<Ledger const> const& l)
     {
         JLOG(m_journal.info()) << "First validated ledger - initializing ExclusionManager cache";
         exclusionManager.rebuildCache(*l);
+
+        // Also populate reason data from ValidatorExclusionManager's RemoteExclusionListFetcher
+        auto& validatorExclusionManager = app_.getValidatorExclusionManager();
+        validatorExclusionManager.updateExclusionManagerReasons();
     }
 
     // Initialize ValidatorExclusionManager on first validated ledger (if we're a validator)

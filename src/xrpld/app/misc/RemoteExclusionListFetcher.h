@@ -56,6 +56,13 @@ public:
     std::unordered_set<AccountID>
     getCombinedExclusions() const;
 
+    /**
+     * Get exclusion reasons for all excluded addresses
+     * @return Map from AccountID to reason and metadata
+     */
+    std::unordered_map<AccountID, std::pair<std::string, std::string>>
+    getExclusionReasons() const;
+
     bool
     isRunning() const;
 

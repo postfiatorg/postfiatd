@@ -294,4 +294,49 @@ ExclusionManager::getStats() const
     return stats;
 }
 
+std::optional<ExclusionManager::ExclusionInfo>
+ExclusionManager::getExclusionInfo(AccountID const& account) const
+{
+    std::lock_guard lock(mutable_);
+
+    auto it = exclusionInfoMap_.find(account);
+    if (it != exclusionInfoMap_.end())
+    {
+        // Update vote count from current exclusion counts
+        ExclusionInfo info = it->second;
+        auto countIt = exclusionCounts_.find(account);
+        if (countIt != exclusionCounts_.end())
+        {
+            info.voteCount = countIt->second;
+        }
+        return info;
+    }
+
+    // If no info stored but account is in exclusion counts, return basic info
+    auto countIt = exclusionCounts_.find(account);
+    if (countIt != exclusionCounts_.end())
+    {
+        ExclusionInfo info;
+        info.voteCount = countIt->second;
+        return info;
+    }
+
+    return std::nullopt;
+}
+
+void
+ExclusionManager::updateExclusionReasons(
+    std::unordered_map<AccountID, ExclusionInfo> const& reasons)
+{
+    std::lock_guard lock(mutable_);
+
+    // Merge new reasons with existing map
+    for (auto const& [account, info] : reasons)
+    {
+        exclusionInfoMap_[account] = info;
+    }
+
+    JLOG(j_.debug()) << "Updated exclusion reasons for " << reasons.size() << " addresses";
+}
+
 } // namespace ripple

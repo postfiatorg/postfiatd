@@ -93,6 +93,29 @@ public:
     };
     Stats getStats() const;
 
+    /**
+     * Structure to store exclusion information including reason
+     */
+    struct ExclusionInfo
+    {
+        std::string reason;
+        std::string dateAdded;
+        std::size_t voteCount = 0;  // Number of validators excluding this address
+    };
+
+    /**
+     * Get exclusion reason and metadata for an address
+     * Returns nullopt if address is not excluded or no reason is available
+     */
+    std::optional<ExclusionInfo> getExclusionInfo(AccountID const& account) const;
+
+    /**
+     * Update exclusion reasons from remote fetcher
+     * Called when remote exclusion lists are fetched
+     */
+    void updateExclusionReasons(
+        std::unordered_map<AccountID, ExclusionInfo> const& reasons);
+
 private:
     Application& app_;
     beast::Journal j_;
@@ -107,6 +130,9 @@ private:
 
     // Pre-calculated set of accounts that meet the consensus threshold for exclusion
     std::unordered_set<AccountID> consensusExcluded_;
+
+    // Map from excluded account to exclusion info (reason, date, etc)
+    std::unordered_map<AccountID, ExclusionInfo> exclusionInfoMap_;
 
     // Total number of active validators
     std::size_t totalValidators_ = 0;

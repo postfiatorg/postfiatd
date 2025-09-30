@@ -92,7 +92,21 @@ doExclusionInfo(RPC::JsonContext& context)
             {
                 if (entry.isFieldPresent(sfAccount))
                 {
-                    exclusionList.append(toBase58(entry.getAccountID(sfAccount)));
+                    auto const excludedAccount = entry.getAccountID(sfAccount);
+                    Json::Value exclusionEntry;
+                    exclusionEntry["address"] = toBase58(excludedAccount);
+
+                    // Add reason information if available from ExclusionManager
+                    auto exclusionInfo = exclusionManager.getExclusionInfo(excludedAccount);
+                    if (exclusionInfo)
+                    {
+                        if (!exclusionInfo->reason.empty())
+                            exclusionEntry["reason"] = exclusionInfo->reason;
+                        if (!exclusionInfo->dateAdded.empty())
+                            exclusionEntry["date_added"] = exclusionInfo->dateAdded;
+                    }
+
+                    exclusionList.append(exclusionEntry);
                 }
             }
         }
@@ -172,6 +186,16 @@ doExclusionInfo(RPC::JsonContext& context)
             accountInfo["percentage"] =
                 static_cast<Json::UInt>((count * 100) / totalValidators);
             accountInfo["meets_threshold"] = (count >= threshold);
+
+            // Add reason information if available from ExclusionManager
+            auto exclusionInfo = exclusionManager.getExclusionInfo(account);
+            if (exclusionInfo)
+            {
+                if (!exclusionInfo->reason.empty())
+                    accountInfo["reason"] = exclusionInfo->reason;
+                if (!exclusionInfo->dateAdded.empty())
+                    accountInfo["date_added"] = exclusionInfo->dateAdded;
+            }
         }
 
         // Get stats from ExclusionManager
