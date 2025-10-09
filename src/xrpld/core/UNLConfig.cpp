@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 /*
     This file is part of rippled: https://github.com/ripple/rippled
-    Copyright (c) 2012, 2013 Ripple Labs Inc.
+    Copyright (c) 2024 Ripple Labs Inc.
 
     Permission to use, copy, modify, and/or distribute this software for any
     purpose  with  or without fee is hereby granted, provided that the above
@@ -17,64 +17,31 @@
 */
 //==============================================================================
 
-#ifndef RIPPLE_TX_CHANGE_H_INCLUDED
-#define RIPPLE_TX_CHANGE_H_INCLUDED
-
-#include <xrpld/app/tx/detail/Transactor.h>
+#include <xrpld/core/UNLConfig.h>
+#include <xrpld/app/misc/AmendmentTable.h>
+#include <xrpl/protocol/Feature.h>
 
 namespace ripple {
 
-class Change : public Transactor
+namespace UNLConfig {
+
+std::vector<std::string>
+getActiveUNL(AmendmentTable const& amendmentTable)
 {
-public:
-    static constexpr ConsequencesFactoryType ConsequencesFactory{Normal};
+    // Check for UNL update amendments in reverse chronological order
+    // Always add newest amendments first to this check
 
-    explicit Change(ApplyContext& ctx) : Transactor(ctx)
-    {
-    }
+    // Future UNL updates would be checked here first:
+    // if (amendmentTable.isEnabled(featureUNLUpdate2))
+    //     return unlUpdate2List;
 
-    static NotTEC
-    preflight(PreflightContext const& ctx);
+    if (amendmentTable.isEnabled(featureUNLUpdate1))
+        return unlUpdate1List;
 
-    TER
-    doApply() override;
-    void
-    preCompute() override;
+    // Default to initial UNL
+    return initialValidatorsList;
+}
 
-    static XRPAmount
-    calculateBaseFee(ReadView const& view, STTx const& tx)
-    {
-        return XRPAmount{0};
-    }
-
-    static TER
-    preclaim(PreclaimContext const& ctx);
-
-private:
-    void
-    activateTrustLinesToSelfFix();
-
-    void
-    reloadUNL();
-
-    TER
-    applyAmendment();
-
-    TER
-    applyFee();
-
-    TER
-    applyUNLModify();
-
-    TER
-    applyValidatorVote();
-};
-
-using EnableAmendment = Change;
-using SetFee = Change;
-using UNLModify = Change;
-using ValidatorVote = Change;
+}  // namespace UNLConfig
 
 }  // namespace ripple
-
-#endif

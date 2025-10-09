@@ -51,6 +51,7 @@
 #include <xrpld/app/rdb/Wallet.h>
 #include <xrpld/app/tx/apply.h>
 #include <xrpld/core/DatabaseCon.h>
+#include <xrpld/core/UNLConfig.h>
 #include <xrpld/nodestore/DummyScheduler.h>
 #include <xrpld/overlay/Cluster.h>
 #include <xrpld/overlay/PeerReservationTable.h>
@@ -1407,20 +1408,17 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
             localSigningKey = validatorKeys_.keys->publicKey;
 
         // Setup trusted validators
+        // Get the active UNL based on enabled amendments
+        std::vector<std::string> activeValidatorList =
+            UNLConfig::getActiveUNL(*m_amendmentTable);
 
-        // Initial validator list
-        std::vector<std::string> initialValidatorsList = {
-            "nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ",
-            "nHUHS6rzWd2toxnaCLLcAD6nTLUBKxBsRanjywxLeyZ2q19AmZxe",
-            "nHUkbNkhJcPDnSjCuZwqcAiHJUxYvirLJt8Qy38Wyvk6Tri1cq1A",
-            "nHUedN7diUp6o3p6H7f6JFSoHfwC3TFjt5YEmrMcwh6p2PYggbpv",
-            "nHBiHzPq3iiJ7MxZkZ3LoBBJneRtcZAoXm5Crb985neVN6ygQ3b7"
-        };
+        JLOG(m_journal.info()) << "Using UNL with "
+                               << activeValidatorList.size() << " validators";
 
         // Use unique validator list instead of config file
         if (!validators_->load(
                 localSigningKey,
-                initialValidatorsList,  // Use initial list instead of config
+                activeValidatorList,  // Use active list based on amendments
                 {},
                 {}))
         {

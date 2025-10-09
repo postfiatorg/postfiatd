@@ -23,7 +23,9 @@
 #include <xrpld/app/misc/AmendmentTable.h>
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/NetworkOPs.h>
+#include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/tx/detail/Change.h>
+#include <xrpld/core/UNLConfig.h>
 #include <xrpld/ledger/ApplyView.h>
 #include <xrpld/ledger/Sandbox.h>
 
@@ -194,6 +196,41 @@ Change::preCompute()
 }
 
 void
+Change::reloadUNL()
+{
+    JLOG(j_.warn()) << "UNL Update amendment activated - reloading validator list";
+
+    // Get the active UNL based on enabled amendments (single source of truth)
+    std::vector<std::string> activeValidatorList =
+        UNLConfig::getActiveUNL(ctx_.app.getAmendmentTable());
+
+    JLOG(j_.warn()) << "Reloading UNL with "
+                    << activeValidatorList.size() << " validators";
+
+    // Get the local signing key if available
+    std::optional<PublicKey> localSigningKey;
+    if (ctx_.app.getValidationPublicKey())
+        localSigningKey = *ctx_.app.getValidationPublicKey();
+
+    // Reload the validator list
+    if (!ctx_.app.validators().load(
+            localSigningKey,
+            activeValidatorList,
+            {},
+            {}))
+    {
+        JLOG(j_.error()) << "Failed to reload validator list after UNL update amendment";
+        return;
+    }
+
+    JLOG(j_.warn()) << "UNL successfully reloaded with " << activeValidatorList.size() << " validators";
+
+    // Notify the amendment table of the new trusted validators
+    ctx_.app.getAmendmentTable().trustChanged(
+        ctx_.app.validators().getQuorumKeys().second);
+}
+
+void
 Change::activateTrustLinesToSelfFix()
 {
     JLOG(j_.warn()) << "fixTrustLinesToSelf amendment activation code starting";
@@ -353,6 +390,10 @@ Change::applyAmendment()
 
         if (amendment == fixTrustLinesToSelf)
             activateTrustLinesToSelfFix();
+
+        // Check if this is a UNL update amendment and reload the validator list
+        if (amendment == featureUNLUpdate1)
+            reloadUNL();
 
         ctx_.app.getAmendmentTable().enable(amendment);
 
