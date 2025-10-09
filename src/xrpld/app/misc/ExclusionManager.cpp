@@ -20,6 +20,7 @@
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/ValidatorList.h>
+#include <xrpld/app/misc/RemoteExclusionListFetcher.h>
 #include <xrpld/ledger/ReadView.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
@@ -299,6 +300,30 @@ ExclusionManager::getExclusionInfo(AccountID const& account) const
 {
     std::lock_guard lock(mutable_);
 
+    // Check if remote fetcher has updates and apply them
+    if (remoteFetcher_ && remoteFetcher_->hasBeenModified(false))
+    {
+        // Get updated reasons from remote fetcher
+        auto reasons = remoteFetcher_->getExclusionReasons();
+        if (!reasons.empty())
+        {
+            // Update the exclusion info map
+            // Note: We need to cast away const here since we're updating cache
+            // This is safe because the method is logically const (query operation)
+            auto* mutableThis = const_cast<ExclusionManager*>(this);
+            for (auto const& [acct, reasonPair] : reasons)
+            {
+                ExclusionInfo info;
+                info.reason = reasonPair.first;
+                info.dateAdded = reasonPair.second;
+                mutableThis->exclusionInfoMap_[acct] = info;
+            }
+
+            JLOG(j_.debug()) << "ExclusionManager: Updated reasons from remote fetcher for "
+                            << reasons.size() << " addresses";
+        }
+    }
+
     auto it = exclusionInfoMap_.find(account);
     if (it != exclusionInfoMap_.end())
     {
@@ -337,6 +362,15 @@ ExclusionManager::updateExclusionReasons(
     }
 
     JLOG(j_.debug()) << "Updated exclusion reasons for " << reasons.size() << " addresses";
+}
+
+void
+ExclusionManager::setRemoteFetcher(RemoteExclusionListFetcher* fetcher)
+{
+    std::lock_guard lock(mutable_);
+    remoteFetcher_ = fetcher;
+
+    JLOG(j_.debug()) << "Remote fetcher " << (fetcher ? "connected" : "disconnected");
 }
 
 } // namespace ripple

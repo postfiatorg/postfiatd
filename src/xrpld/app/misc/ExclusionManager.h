@@ -32,6 +32,7 @@ namespace ripple {
 
 class ReadView;
 class Application;
+class RemoteExclusionListFetcher;
 
 /**
  * ExclusionManager maintains an in-memory cache of validator exclusion lists
@@ -116,6 +117,12 @@ public:
     void updateExclusionReasons(
         std::unordered_map<AccountID, ExclusionInfo> const& reasons);
 
+    /**
+     * Set the remote exclusion list fetcher
+     * Called during initialization to enable automatic updates
+     */
+    void setRemoteFetcher(RemoteExclusionListFetcher* fetcher);
+
 private:
     Application& app_;
     beast::Journal j_;
@@ -133,6 +140,9 @@ private:
 
     // Map from excluded account to exclusion info (reason, date, etc)
     std::unordered_map<AccountID, ExclusionInfo> exclusionInfoMap_;
+
+    // Pointer to remote fetcher for checking updates
+    RemoteExclusionListFetcher* remoteFetcher_ = nullptr;
 
     // Total number of active validators
     std::size_t totalValidators_ = 0;

@@ -2,6 +2,7 @@
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/ValidatorList.h>
+#include <xrpld/app/ledger/LedgerMaster.h>
 #include <xrpld/core/Config.h>
 #include <xrpld/ledger/ReadView.h>
 #include <xrpl/protocol/Feature.h>
@@ -25,6 +26,9 @@ ValidatorExclusionManager::ValidatorExclusionManager(
         remoteFetcher_ = std::make_unique<RemoteExclusionListFetcher>(
             app, config, journal);
         remoteFetcher_->start();
+
+        // Connect remote fetcher to ExclusionManager for automatic updates
+        app_.getExclusionManager().setRemoteFetcher(remoteFetcher_.get());
     }
 
     JLOG(j_.info()) << "ValidatorExclusionManager: Initialized with "
@@ -82,11 +86,8 @@ ValidatorExclusionManager::getExclusionChange(LedgerIndex ledgerSeq)
                 app_.getExclusionManager().updateExclusionReasons(exclusionInfoMap);
             }
 
-            // Get current exclusions from ledger (we need to re-read them)
-            // For now, we'll use the last known state
-            // In production, you might want to re-read from the latest ledger
-            std::unordered_set<AccountID> currentExclusions;
-            // TODO: Re-read current exclusions from ledger if needed
+            // Read current exclusions from the ledger
+            auto currentExclusions = getCurrentExclusionsFromLedger();
 
             updatePendingChanges(currentExclusions);
         }
@@ -165,6 +166,9 @@ ValidatorExclusionManager::initialize(
     JLOG(j_.info()) << "ValidatorExclusionManager: Using "
                     << (masterKey ? "master key" : "signing key")
                     << " to derive account: " << toBase58(validatorAccount);
+
+    // Store validator account for future use
+    validatorAccount_ = validatorAccount;
 
     // Get validator's current exclusion list from ledger
     std::unordered_set<AccountID> currentExclusions;
@@ -290,6 +294,53 @@ ValidatorExclusionManager::updateExclusionManagerReasons()
         JLOG(j_.info()) << "ValidatorExclusionManager: Updated ExclusionManager with "
                        << exclusionInfoMap.size() << " exclusion reasons";
     }
+}
+
+std::unordered_set<AccountID>
+ValidatorExclusionManager::getCurrentExclusionsFromLedger() const
+{
+    std::unordered_set<AccountID> exclusions;
+
+    // Check if we have a validator account
+    if (!validatorAccount_)
+    {
+        JLOG(j_.warn()) << "ValidatorExclusionManager: No validator account set, cannot read from ledger";
+        return exclusions;
+    }
+
+    // Get the current ledger
+    auto ledger = app_.getLedgerMaster().getClosedLedger();
+    if (!ledger)
+    {
+        JLOG(j_.warn()) << "ValidatorExclusionManager: No closed ledger available";
+        return exclusions;
+    }
+
+    // Read the validator's account from ledger
+    auto const accountSLE = ledger->read(keylet::account(*validatorAccount_));
+    if (!accountSLE)
+    {
+        JLOG(j_.debug()) << "ValidatorExclusionManager: Validator account not found in ledger";
+        return exclusions;
+    }
+
+    // Read exclusion list if present
+    if (accountSLE->isFieldPresent(sfExclusionList))
+    {
+        auto const& exclusionList = accountSLE->getFieldArray(sfExclusionList);
+        for (auto const& entry : exclusionList)
+        {
+            if (entry.isFieldPresent(sfAccount))
+            {
+                exclusions.insert(entry.getAccountID(sfAccount));
+            }
+        }
+    }
+
+    JLOG(j_.debug()) << "ValidatorExclusionManager: Read " << exclusions.size()
+                    << " exclusions from ledger";
+
+    return exclusions;
 }
 
 } // namespace ripple

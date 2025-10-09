@@ -98,11 +98,20 @@ private:
     // Flag to track if we've been initialized
     bool initialized_ = false;
 
+    // Store the validator's account ID after initialization
+    std::optional<AccountID> validatorAccount_;
+
     /**
      * Compare configured vs actual exclusions and queue changes
      */
     void updatePendingChanges(
         std::unordered_set<AccountID> const& currentExclusions);
+
+    /**
+     * Read current exclusions from the ledger for the validator
+     * Returns empty set if validator account not found or not initialized
+     */
+    std::unordered_set<AccountID> getCurrentExclusionsFromLedger() const;
 };
 
 } // namespace ripple
