@@ -7,9 +7,6 @@ on:
     # build/test jobs (nix, macos, windows)
     branches:
       # Always build the package branches
-      - develop
-      - release
-      - master
       # Branches that opt-in to running
       - "ci/**"
 concurrency:
