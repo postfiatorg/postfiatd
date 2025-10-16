@@ -134,32 +134,33 @@ $(function() {
 <div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span> </div>
 <div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">//------------------------------------------------------------------------------</span></div>
 <div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span> </div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno"><a class="line" href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">   59</a></span><a class="code hl_function" href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">WorkPlain::WorkPlain</a>(</div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; host,</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; path,</div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; port,</div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    boost::asio::io_service&amp; ios,</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    endpoint_type <span class="keyword">const</span>&amp; lastEndpoint,</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    <span class="keywordtype">bool</span> lastStatus,</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    callback_type cb)</div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>    : <a class="code hl_class" href="classripple_1_1detail_1_1WorkBase.html">WorkBase</a>(host, path, port, ios, lastEndpoint, lastStatus, cb)</div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>{</div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>}</div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span> </div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="keywordtype">void</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno"><a class="line" href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">   72</a></span><a class="code hl_function" href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">WorkPlain::onConnect</a>(error_code <span class="keyword">const</span>&amp; ec)</div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>{</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>    <span class="keywordflow">if</span> (ec)</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>        <span class="keywordflow">return</span> <a class="code hl_function" href="classripple_1_1detail_1_1WorkBase.html#aea136a1e17ac0442a5f650104d1a8bc0">fail</a>(ec);</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span> </div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>    <a class="code hl_function" href="classripple_1_1detail_1_1WorkBase.html#aaeae0dce9809a37fc3ac02282a0c04ba">onStart</a>();</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>}</div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span> </div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>}  <span class="comment">// namespace detail</span></div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span> </div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>}  <span class="comment">// namespace ripple</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span> </div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="keyword">inline</span></div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno"><a class="line" href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">   60</a></span><a class="code hl_function" href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">WorkPlain::WorkPlain</a>(</div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; host,</div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; path,</div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    <a class="code hl_classRef" href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a> <span class="keyword">const</span>&amp; port,</div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    boost::asio::io_service&amp; ios,</div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    endpoint_type <span class="keyword">const</span>&amp; lastEndpoint,</div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    <span class="keywordtype">bool</span> lastStatus,</div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>    callback_type cb)</div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>    : <a class="code hl_class" href="classripple_1_1detail_1_1WorkBase.html">WorkBase</a>(host, path, port, ios, lastEndpoint, lastStatus, cb)</div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>{</div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>}</div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span> </div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="keyword">inline</span> <span class="keywordtype">void</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno"><a class="line" href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">   73</a></span><a class="code hl_function" href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">WorkPlain::onConnect</a>(error_code <span class="keyword">const</span>&amp; ec)</div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>{</div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>    <span class="keywordflow">if</span> (ec)</div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>        <span class="keywordflow">return</span> <a class="code hl_function" href="classripple_1_1detail_1_1WorkBase.html#aea136a1e17ac0442a5f650104d1a8bc0">fail</a>(ec);</div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span> </div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>    <a class="code hl_function" href="classripple_1_1detail_1_1WorkBase.html#aaeae0dce9809a37fc3ac02282a0c04ba">onStart</a>();</div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>}</div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span> </div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>}  <span class="comment">// namespace detail</span></div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span> </div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>}  <span class="comment">// namespace ripple</span></div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span> </div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="preprocessor">#endif</span></div>
 <div class="ttc" id="abasic_string_html"><div class="ttname"><a href="http://en.cppreference.com/w/cpp/string/basic_string.html">std::string</a></div></div>
 <div class="ttc" id="aclassripple_1_1detail_1_1WorkBase_html"><div class="ttname"><a href="classripple_1_1detail_1_1WorkBase.html">ripple::detail::WorkBase</a></div><div class="ttdef"><b>Definition:</b> <a href="WorkBase_8h_source.html#l00039">WorkBase.h:40</a></div></div>
 <div class="ttc" id="aclassripple_1_1detail_1_1WorkBase_html_a6bd2a88e6cf40c35b220d2171f662393"><div class="ttname"><a href="classripple_1_1detail_1_1WorkBase.html#a6bd2a88e6cf40c35b220d2171f662393">ripple::detail::WorkBase&lt; WorkPlain &gt;::socket_type</a></div><div class="ttdeci">boost::asio::ip::tcp::socket socket_type</div><div class="ttdef"><b>Definition:</b> <a href="WorkBase_8h_source.html#l00050">WorkBase.h:50</a></div></div>
@@ -172,8 +173,8 @@ $(function() {
 <div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html">ripple::detail::WorkPlain</a></div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00030">WorkPlain.h:32</a></div></div>
 <div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_a4163535f2fbadbabe4d49d53bf5433c8"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#a4163535f2fbadbabe4d49d53bf5433c8">ripple::detail::WorkPlain::stream</a></div><div class="ttdeci">socket_type &amp; stream()</div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00051">WorkPlain.h:51</a></div></div>
 <div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_a6e7d284433974163bf0f0d16212d452b"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#a6e7d284433974163bf0f0d16212d452b">ripple::detail::WorkPlain::~WorkPlain</a></div><div class="ttdeci">~WorkPlain()=default</div></div>
-<div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_ac1704c927b93bbaa41c510bbab185365"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">ripple::detail::WorkPlain::WorkPlain</a></div><div class="ttdeci">WorkPlain(std::string const &amp;host, std::string const &amp;path, std::string const &amp;port, boost::asio::io_service &amp;ios, endpoint_type const &amp;lastEndpoint, bool lastStatus, callback_type cb)</div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00059">WorkPlain.h:59</a></div></div>
-<div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_ac43a0bbf6dd983cae4b690940b50866f"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">ripple::detail::WorkPlain::onConnect</a></div><div class="ttdeci">void onConnect(error_code const &amp;ec)</div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00072">WorkPlain.h:72</a></div></div>
+<div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_ac1704c927b93bbaa41c510bbab185365"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#ac1704c927b93bbaa41c510bbab185365">ripple::detail::WorkPlain::WorkPlain</a></div><div class="ttdeci">WorkPlain(std::string const &amp;host, std::string const &amp;path, std::string const &amp;port, boost::asio::io_service &amp;ios, endpoint_type const &amp;lastEndpoint, bool lastStatus, callback_type cb)</div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00060">WorkPlain.h:60</a></div></div>
+<div class="ttc" id="aclassripple_1_1detail_1_1WorkPlain_html_ac43a0bbf6dd983cae4b690940b50866f"><div class="ttname"><a href="classripple_1_1detail_1_1WorkPlain.html#ac43a0bbf6dd983cae4b690940b50866f">ripple::detail::WorkPlain::onConnect</a></div><div class="ttdeci">void onConnect(error_code const &amp;ec)</div><div class="ttdef"><b>Definition:</b> <a href="WorkPlain_8h_source.html#l00073">WorkPlain.h:73</a></div></div>
 <div class="ttc" id="aenable_shared_from_this_html"><div class="ttname"><a href="http://en.cppreference.com/w/cpp/memory/enable_shared_from_this.html">std::enable_shared_from_this</a></div></div>
 <div class="ttc" id="anamespaceripple_html"><div class="ttname"><a href="namespaceripple.html">ripple</a></div><div class="ttdoc">Use hash_* containers for keys that do not need a cryptographically secure hashing algorithm.</div><div class="ttdef"><b>Definition:</b> <a href="algorithm_8h_source.html#l00026">algorithm.h:26</a></div></div>
 </div><!-- fragment --></div><!-- contents -->

@@ -163,6 +163,12 @@ Public Member Functions</h2></td></tr>
 <tr class="separator:a049ff9918f5093ff235bc7e3baa20457"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:acd25b3785b5938e005419b973d34d757"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1AmendmentTable.html">AmendmentTable</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#acd25b3785b5938e005419b973d34d757">getAmendmentTable</a> ()=0</td></tr>
 <tr class="separator:acd25b3785b5938e005419b973d34d757"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7504790b292ecdc2d38156f0962f8b45"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1ValidatorVoteTracker.html">ValidatorVoteTracker</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#a7504790b292ecdc2d38156f0962f8b45">getValidatorVoteTracker</a> ()=0</td></tr>
+<tr class="separator:a7504790b292ecdc2d38156f0962f8b45"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3a74d20c1b0902d8f1b29ebdf574bd52"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1ExclusionManager.html">ExclusionManager</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#a3a74d20c1b0902d8f1b29ebdf574bd52">getExclusionManager</a> ()=0</td></tr>
+<tr class="separator:a3a74d20c1b0902d8f1b29ebdf574bd52"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa4720d4d858b2a539cf4c9f9a62fbb34"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1ValidatorExclusionManager.html">ValidatorExclusionManager</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#aa4720d4d858b2a539cf4c9f9a62fbb34">getValidatorExclusionManager</a> ()=0</td></tr>
+<tr class="separator:aa4720d4d858b2a539cf4c9f9a62fbb34"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad60542d0ed6bf805110c4c85ddf63c3c"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1HashRouter.html">HashRouter</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#ad60542d0ed6bf805110c4c85ddf63c3c">getHashRouter</a> ()=0</td></tr>
 <tr class="separator:ad60542d0ed6bf805110c4c85ddf63c3c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a143d2b9c53a24814fc28309244aa3631"><td class="memItemLeft" align="right" valign="top">virtual <a class="el" href="classripple_1_1LoadFeeTrack.html">LoadFeeTrack</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classripple_1_1Application.html#a143d2b9c53a24814fc28309244aa3631">getFeeTrack</a> ()=0</td></tr>
@@ -307,7 +313,7 @@ Private Attributes</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock">
-<p class="definition">Definition at line <a class="el" href="Application_8h_source.html#l00113">113</a> of file <a class="el" href="Application_8h_source.html">Application.h</a>.</p>
+<p class="definition">Definition at line <a class="el" href="Application_8h_source.html#l00116">116</a> of file <a class="el" href="Application_8h_source.html">Application.h</a>.</p>
 </div><h2 class="groupheader">Member Typedef Documentation</h2>
 <a id="af49bed1dd2fb49345992a96347c50f76" name="af49bed1dd2fb49345992a96347c50f76"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af49bed1dd2fb49345992a96347c50f76">&#9670;&#160;</a></span>MutexType</h2>
@@ -321,7 +327,7 @@ Private Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p class="definition">Definition at line <a class="el" href="Application_8h_source.html#l00127">127</a> of file <a class="el" href="Application_8h_source.html">Application.h</a>.</p>
+<p class="definition">Definition at line <a class="el" href="Application_8h_source.html#l00130">130</a> of file <a class="el" href="Application_8h_source.html">Application.h</a>.</p>
 
 </div>
 </div>
@@ -341,7 +347,7 @@ Private Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p class="definition">Definition at line <a class="el" href="Application_8cpp_source.html#l02182">2182</a> of file <a class="el" href="Application_8cpp_source.html">Application.cpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="Application_8cpp_source.html#l02254">2254</a> of file <a class="el" href="Application_8cpp_source.html">Application.cpp</a>.</p>
 
 </div>
 </div>
@@ -887,6 +893,87 @@ Private Attributes</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Implemented in <a class="el" href="classripple_1_1ApplicationImp.html#a2970d79545538b756f518b56fd2790bb">ripple::ApplicationImp</a>.</p>
+
+</div>
+</div>
+<a id="a7504790b292ecdc2d38156f0962f8b45" name="a7504790b292ecdc2d38156f0962f8b45"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7504790b292ecdc2d38156f0962f8b45">&#9670;&#160;</a></span>getValidatorVoteTracker()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="classripple_1_1ValidatorVoteTracker.html">ValidatorVoteTracker</a> &amp; ripple::Application::getValidatorVoteTracker </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implemented in <a class="el" href="classripple_1_1ApplicationImp.html#a9e93f4c7ba559e9fb6feca4251edcb34">ripple::ApplicationImp</a>.</p>
+
+</div>
+</div>
+<a id="a3a74d20c1b0902d8f1b29ebdf574bd52" name="a3a74d20c1b0902d8f1b29ebdf574bd52"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3a74d20c1b0902d8f1b29ebdf574bd52">&#9670;&#160;</a></span>getExclusionManager()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="classripple_1_1ExclusionManager.html">ExclusionManager</a> &amp; ripple::Application::getExclusionManager </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implemented in <a class="el" href="classripple_1_1ApplicationImp.html#a35c96372f16c7ecba77547299836415b">ripple::ApplicationImp</a>.</p>
+
+</div>
+</div>
+<a id="aa4720d4d858b2a539cf4c9f9a62fbb34" name="aa4720d4d858b2a539cf4c9f9a62fbb34"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa4720d4d858b2a539cf4c9f9a62fbb34">&#9670;&#160;</a></span>getValidatorExclusionManager()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual <a class="el" href="classripple_1_1ValidatorExclusionManager.html">ValidatorExclusionManager</a> &amp; ripple::Application::getValidatorExclusionManager </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">pure virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implemented in <a class="el" href="classripple_1_1ApplicationImp.html#a00b5f1778f2eb22ebb7259b054797a6e">ripple::ApplicationImp</a>.</p>
 
 </div>
 </div>
