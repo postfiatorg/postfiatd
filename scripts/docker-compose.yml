@@ -1,7 +1,7 @@
 version: '3.8'
 services:
   postfiatd:
-    image: agtipft/postfiatd:testnet-latest
+    image: agtipft/postfiatd:devnet-latest
     container_name: postfiatd
     # Port mappings
     ports:

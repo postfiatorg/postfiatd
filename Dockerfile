@@ -67,7 +67,7 @@ RUN cp /postfiat/.build/postfiatd /usr/local/bin/postfiatd
 RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-keys
 
 # Copy configuration files without the -example suffix
-RUN cp /postfiat/cfg/postfiatd-example.cfg /etc/postfiatd/postfiatd.cfg
+RUN cp /postfiat/cfg/postfiatd-devnet-full.cfg /etc/postfiatd/postfiatd.cfg
 RUN cp /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
 
 # Set working directory
