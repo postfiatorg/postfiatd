@@ -42,6 +42,7 @@
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
+#include <xrpld/app/misc/NetworkValidators.h>
 #include <xrpld/app/misc/SHAMapStore.h>
 #include <xrpld/app/misc/TxQ.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
@@ -1408,19 +1409,14 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
 
         // Setup trusted validators
 
-        // Initial validator list
-        std::vector<std::string> initialValidatorsList = {
-            "nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ",
-            "nHUHS6rzWd2toxnaCLLcAD6nTLUBKxBsRanjywxLeyZ2q19AmZxe",
-            "nHUkbNkhJcPDnSjCuZwqcAiHJUxYvirLJt8Qy38Wyvk6Tri1cq1A",
-            "nHUedN7diUp6o3p6H7f6JFSoHfwC3TFjt5YEmrMcwh6p2PYggbpv",
-            "nHBiHzPq3iiJ7MxZkZ3LoBBJneRtcZAoXm5Crb985neVN6ygQ3b7"
-        };
+        // Get network-specific validator list based on NETWORK_ID
+        std::vector<std::string> initialValidatorsList =
+            NetworkValidators::getValidators(config_->NETWORK_ID);
 
-        // Use unique validator list instead of config file
+        // Use network-specific validator list instead of config file
         if (!validators_->load(
                 localSigningKey,
-                initialValidatorsList,  // Use initial list instead of config
+                initialValidatorsList,  // Use network-specific list
                 {},
                 {}))
         {
