@@ -93,10 +93,15 @@ Installation Steps</h1>
 <div class="line">sudo apt install docker-compose</div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md253"></a>
 2. Set Up the Node Directory</h2>
-<p >Create the necessary directory structure and download the configuration:</p>
+<p >Create the necessary directory structure and download the configuration.</p>
+<p ><b>For Devnet:</b></p>
 <div class="fragment"><div class="line">mkdir -p /opt/postfiatd</div>
 <div class="line">cd /opt/postfiatd</div>
-<div class="line">wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose.yml</div>
+<div class="line">wget https://raw.githubusercontent.com/postfiatorg/postfiatd/develop/scripts/docker-compose-devnet.yml -O docker-compose.yml</div>
+</div><!-- fragment --><p ><b>For Testnet:</b></p>
+<div class="fragment"><div class="line">mkdir -p /opt/postfiatd</div>
+<div class="line">cd /opt/postfiatd</div>
+<div class="line">wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose-testnet.yml -O docker-compose.yml</div>
 </div><!-- fragment --><h2><a class="anchor" id="autotoc_md254"></a>
 3. Start the Node</h2>
 <p >Launch the Post Fiat node using Docker Compose:</p>
