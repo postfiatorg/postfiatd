@@ -30,3 +30,6 @@ jobs:
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devnet-latest
         platforms: linux/amd64
+        build-args: |
+          NETWORK=devnet
+          NODE_SIZE=full

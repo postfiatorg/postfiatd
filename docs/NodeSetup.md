@@ -117,8 +117,6 @@ Sample output:
   Validator keys stored in /home/ubuntu/.ripple/validator-keys.json
 ```
 
-Inside of validator-keys.json enter your domain.
-
 Keep the key file in a secure but recoverable location, such as an encrypted
 USB flash drive. Do not modify its contents.
 
@@ -126,10 +124,10 @@ USB flash drive. Do not modify its contents.
 
 After first creating the [validator keys](#validator-keys) or if the previous
 token has been compromised, use the `validator-keys` tool to create a new
-validator token:
+validator token with the domain of your validator:
 
 ```
-  $ validator-keys create_token
+  $ ./validator-keys set_domain [VALIDATOR_DOMAIN]
 ```
 
 Sample output:

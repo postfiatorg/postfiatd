@@ -1,5 +1,24 @@
 # Multi-stage Dockerfile for building PostFiat on Ubuntu 24.04
+#
+# Build arguments for configuration selection:
+#   NETWORK: mainnet, testnet, devnet (default: devnet)
+#   NODE_SIZE: full, light (default: full)
+#
+# Examples:
+#   Build with default (devnet-full):
+#     docker build -t postfiatd .
+#
+#   Build with mainnet-full:
+#     docker build --build-arg NETWORK=mainnet --build-arg NODE_SIZE=full -t postfiatd:mainnet-full .
+#
+#   Build with testnet-light:
+#     docker build --build-arg NETWORK=testnet --build-arg NODE_SIZE=light -t postfiatd:testnet-light .
+#
 FROM ubuntu:24.04 AS builder
+
+# Build arguments for configuration selection
+ARG NETWORK=devnet
+ARG NODE_SIZE=full
 
 # Avoid interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -66,8 +85,9 @@ RUN mkdir -p /var/lib/postfiatd/db /var/log/postfiatd /etc/postfiatd
 RUN cp /postfiat/.build/postfiatd /usr/local/bin/postfiatd
 RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-keys
 
-# Copy configuration files without the -example suffix
-RUN cp /postfiat/cfg/postfiatd-devnet-full.cfg /etc/postfiatd/postfiatd.cfg
+# Copy configuration files based on build arguments
+# Construct the config filename from NETWORK and NODE_SIZE
+RUN cp /postfiat/cfg/postfiatd-${NETWORK}-${NODE_SIZE}.cfg /etc/postfiatd/postfiatd.cfg
 RUN cp /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
 
 # Set working directory
