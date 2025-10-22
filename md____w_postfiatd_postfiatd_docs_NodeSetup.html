@@ -72,7 +72,7 @@ $(function() {
   <div class="headertitle"><div class="title">Post Fiat Node Setup Guide </div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><h1><a class="anchor" id="autotoc_md236"></a>
+<div class="textblock"><h1><a class="anchor" id="autotoc_md250"></a>
 Prerequisites</h1>
 <p >Before starting, ensure you have:</p>
 <ul>
@@ -84,37 +84,37 @@ Prerequisites</h1>
 </ul>
 </li>
 </ul>
-<h1><a class="anchor" id="autotoc_md237"></a>
+<h1><a class="anchor" id="autotoc_md251"></a>
 Installation Steps</h1>
-<h2><a class="anchor" id="autotoc_md238"></a>
+<h2><a class="anchor" id="autotoc_md252"></a>
 1. Install Docker Compose</h2>
 <p >Update your system and install Docker Compose:</p>
 <div class="fragment"><div class="line">sudo apt update</div>
 <div class="line">sudo apt install docker-compose</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md239"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md253"></a>
 2. Set Up the Node Directory</h2>
 <p >Create the necessary directory structure and download the configuration:</p>
 <div class="fragment"><div class="line">mkdir -p /opt/postfiatd</div>
 <div class="line">cd /opt/postfiatd</div>
 <div class="line">wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose.yml</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md240"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md254"></a>
 3. Start the Node</h2>
 <p >Launch the Post Fiat node using Docker Compose:</p>
 <div class="fragment"><div class="line">docker-compose up -d</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md241"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md255"></a>
 4. Verify Installation</h2>
 <p >Check that the Docker container is running properly:</p>
 <div class="fragment"><div class="line">docker-compose ps</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md242"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md256"></a>
 Node Management</h1>
-<h2><a class="anchor" id="autotoc_md243"></a>
+<h2><a class="anchor" id="autotoc_md257"></a>
 Viewing Logs</h2>
 <p >To monitor node activity:</p>
 <div class="fragment"><div class="line">docker-compose logs</div>
 </div><!-- fragment --><blockquote class="doxtable">
 <p >&zwj;<b>Note</b>: Full logs are also available in <code>/opt/postfiatd/logs</code> </p>
 </blockquote>
-<h2><a class="anchor" id="autotoc_md244"></a>
+<h2><a class="anchor" id="autotoc_md258"></a>
 Modifying Configuration</h2>
 <p >To update the node configuration:</p>
 <ol type="1">
@@ -125,10 +125,10 @@ Modifying Configuration</h2>
 <li><b>Restart the container</b>: <div class="fragment"><div class="line">docker-compose up -d</div>
 </div><!-- fragment --></li>
 </ol>
-<h1><a class="anchor" id="autotoc_md245"></a>
+<h1><a class="anchor" id="autotoc_md259"></a>
 Running as a Validator</h1>
 <p >The container will run a postfiatd node that connects to the Post Fiat testnet by default. To operate as a validator, you'll need to create a validator token using the validator keys tool.</p>
-<h2><a class="anchor" id="autotoc_md246"></a>
+<h2><a class="anchor" id="autotoc_md260"></a>
 Validator keys tool</h2>
 <ul>
 <li>Validator keys tool is present in the postfiatd docker image. To use it run bash shell inside postfiatd running Docker container: <div class="fragment"><div class="line">docker exec -it postfiatd bash</div>
@@ -139,17 +139,16 @@ Validator keys tool</h2>
 </ul>
 <p >Each new token invalidates all previous tokens for the validator public key. The current token needs to be present in the postfiatd config file.</p>
 <p >Servers that trust the validator will adapt automatically when the token changes.</p>
-<h1><a class="anchor" id="autotoc_md247"></a>
+<h1><a class="anchor" id="autotoc_md261"></a>
 Validator Keys</h1>
 <p >When first setting up a validator, use the <code>validator-keys</code> tool to generate its key pair:</p>
 <div class="fragment"><div class="line">$ validator-keys create_keys</div>
 </div><!-- fragment --><p >Sample output: </p><div class="fragment"><div class="line">Validator keys stored in /home/ubuntu/.ripple/validator-keys.json</div>
-</div><!-- fragment --><p >Inside of validator-keys.json enter your domain.</p>
-<p >Keep the key file in a secure but recoverable location, such as an encrypted USB flash drive. Do not modify its contents.</p>
-<h1><a class="anchor" id="autotoc_md248"></a>
+</div><!-- fragment --><p >Keep the key file in a secure but recoverable location, such as an encrypted USB flash drive. Do not modify its contents.</p>
+<h1><a class="anchor" id="autotoc_md262"></a>
 Validator Token</h1>
-<p >After first creating the validator keys or if the previous token has been compromised, use the <code>validator-keys</code> tool to create a new validator token:</p>
-<div class="fragment"><div class="line">$ validator-keys create_token</div>
+<p >After first creating the validator keys or if the previous token has been compromised, use the <code>validator-keys</code> tool to create a new validator token with the domain of your validator:</p>
+<div class="fragment"><div class="line">$ ./validator-keys set_domain [VALIDATOR_DOMAIN]</div>
 </div><!-- fragment --><p >Sample output:</p>
 <div class="fragment"><div class="line">Update postfiatd.cfg file with these values:</div>
 <div class="line"> </div>
@@ -166,7 +165,7 @@ Validator Token</h1>
 <div class="line">VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==</div>
 </div><!-- fragment --><p >For a new validator, add the [validator_token] value to the postfiatd config file. For a pre-existing validator, replace the old [validator_token] value with the newly generated one. A valid config file may only contain one [validator_token] value. After the config is updated, restart postfiatd.</p>
 <p >There is a hard limit of 4,294,967,293 tokens that can be generated for a given validator key pair.</p>
-<h1><a class="anchor" id="autotoc_md249"></a>
+<h1><a class="anchor" id="autotoc_md263"></a>
 Key Revocation</h1>
 <p >If a validator private key is compromised, the key must be revoked permanently. To revoke the validator key, use the <code>validator-keys</code> tool to generate a revocation, which indicates to other servers that the key is no longer valid:</p>
 <div class="fragment"><div class="line">$ validator-keys revoke_keys</div>
@@ -181,7 +180,7 @@ Key Revocation</h1>
 <div class="line">JP////9xIe0hvssbqmgzFH4/NDp1z|3ShkmCtFXuC5A0IUocppHopnASQN2MuMD1Puoyjvnr</div>
 <div class="line">jQ2KJSO/2tsjRhjO6q0QQHppslQsKNSXWxjGQNIEa6nPisBOKlDDcJVZAMP4QcIyNCadzgM=</div>
 </div><!-- fragment --><p >Add the <code>[validator_key_revocation]</code> value to this validator's config and restart postfiatd. Rename the old key file and generate new validator keys and a corresponding validator token.</p>
-<h1><a class="anchor" id="autotoc_md250"></a>
+<h1><a class="anchor" id="autotoc_md264"></a>
 Signing</h1>
 <p >The <code>validator-keys</code> tool can be used to sign arbitrary data with the validator key.</p>
 <div class="fragment"><div class="line">$ validator-keys sign &quot;your data to sign&quot;</div>
@@ -201,7 +200,7 @@ Signing</h1>
 </ul>
 </li>
 </ol>
-<h2><a class="anchor" id="autotoc_md251"></a>
+<h2><a class="anchor" id="autotoc_md265"></a>
 Security Best Practices</h2>
 <ul>
 <li>Store validator keys in a secure, offline location</li>
@@ -209,7 +208,7 @@ Security Best Practices</h2>
 <li>Regularly backup your configuration and keys</li>
 <li>Monitor your validator's performance and connectivity</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md252"></a>
+<h1><a class="anchor" id="autotoc_md266"></a>
 Troubleshooting</h1>
 <p >If you encounter issues:</p>
 <ol type="1">

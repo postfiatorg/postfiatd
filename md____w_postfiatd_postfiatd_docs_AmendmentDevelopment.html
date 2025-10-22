@@ -73,26 +73,26 @@ $(function() {
 </div><!--header-->
 <div class="contents">
 <div class="textblock"><p >This guide provides step-by-step instructions for creating new amendments (also called features) in the PostFiat codebase.</p>
-<h1><a class="anchor" id="autotoc_md140"></a>
+<h1><a class="anchor" id="autotoc_md154"></a>
 Overview</h1>
 <p >Amendments are protocol-level changes that are enabled through validator voting. They allow the network to upgrade in a coordinated, decentralized manner.</p>
-<h1><a class="anchor" id="autotoc_md141"></a>
+<h1><a class="anchor" id="autotoc_md155"></a>
 Amendment Types</h1>
 <ul>
 <li><b>XRPL_FEATURE</b>: New functionality or feature additions</li>
 <li><b>XRPL_FIX</b>: Bug fixes and corrections</li>
 <li><b>XRPL_RETIRE</b>: Deprecated amendments (kept for historical ledger compatibility)</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md142"></a>
+<h1><a class="anchor" id="autotoc_md156"></a>
 Development Workflow</h1>
-<h2><a class="anchor" id="autotoc_md143"></a>
+<h2><a class="anchor" id="autotoc_md157"></a>
 1. Register the Amendment</h2>
 <p >Add your amendment to <code>include/xrpl/protocol/detail/features.macro</code> at the <b>top of the list</b> (reverse chronological order):</p>
 <div class="fragment"><div class="line">XRPL_FEATURE(YourFeatureName, Supported::no, VoteBehavior::DefaultNo)</div>
 <div class="line"><span class="comment">// or for bug fixes:</span></div>
 <div class="line">XRPL_FIX(YourFixName, Supported::no, VoteBehavior::DefaultNo)</div>
 </div><!-- fragment --><p ><b>Important</b>: Increment <code>numFeatures</code> in <code><a class="el" href="Feature_8h_source.html">include/xrpl/protocol/Feature.h</a></code> when adding a new amendment.</p>
-<h2><a class="anchor" id="autotoc_md144"></a>
+<h2><a class="anchor" id="autotoc_md158"></a>
 2. Implement Feature Logic</h2>
 <p >Use the generated variable to control code execution:</p>
 <div class="fragment"><div class="line"><span class="keywordflow">if</span> (view.rules.enabled(featureYourFeatureName))</div>
@@ -104,14 +104,14 @@ Development Workflow</h1>
 <div class="line">    <span class="comment">// Legacy code path</span></div>
 <div class="line">}</div>
 </div><!-- fragment --><p >For fixes, the pattern is similar using <code>fixYourFixName</code>.</p>
-<h2><a class="anchor" id="autotoc_md145"></a>
+<h2><a class="anchor" id="autotoc_md159"></a>
 3. Mark as Supported</h2>
 <p >When development is <b>complete and tested</b>, update the amendment in <code>features.macro</code>:</p>
 <div class="fragment"><div class="line">XRPL_FEATURE(YourFeatureName, Supported::yes, VoteBehavior::DefaultNo)</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md146"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md160"></a>
 4. Choose Activation Strategy</h2>
 <p >There are two valid approaches for amendment activation:</p>
-<h3><a class="anchor" id="autotoc_md147"></a>
+<h3><a class="anchor" id="autotoc_md161"></a>
 Option A: External Governance (DefaultNo)</h3>
 <div class="fragment"><div class="line">XRPL_FEATURE(YourFeatureName, Supported::yes, VoteBehavior::DefaultNo)</div>
 </div><!-- fragment --><p >With <code>DefaultNo</code>, validators must explicitly vote for the amendment. This allows the community to coordinate activation timing through external governance:</p>
@@ -123,7 +123,7 @@ Option A: External Governance (DefaultNo)</h3>
 <li><b>Voting Process</b>: Once 67% of trusted validators vote yes for 2 weeks, the amendment activates</li>
 <li><b>Coordination</b>: This approach allows time for ecosystem preparation and coordinated rollout</li>
 </ol>
-<h3><a class="anchor" id="autotoc_md148"></a>
+<h3><a class="anchor" id="autotoc_md162"></a>
 Option B: Default Voting (DefaultYes)</h3>
 <div class="fragment"><div class="line">XRPL_FIX(CriticalFix, Supported::yes, VoteBehavior::DefaultYes)</div>
 </div><!-- fragment --><p >With <code>DefaultYes</code>, validators automatically vote for the amendment by default. This is appropriate when:</p><ul>
@@ -132,14 +132,14 @@ Option B: Default Voting (DefaultYes)</h3>
 <li>Pre-release communication has occurred through appropriate channels</li>
 </ul>
 <p ><b>Important</b>: Ensure adequate community communication before using <code>DefaultYes</code>.</p>
-<h1><a class="anchor" id="autotoc_md149"></a>
+<h1><a class="anchor" id="autotoc_md163"></a>
 Vote Behavior Options</h1>
 <ul>
 <li><b>VoteBehavior::DefaultNo</b>: Validators won't vote for it by default; requires explicit configuration for activation</li>
 <li><b>VoteBehavior::DefaultYes</b>: Validators will vote for it by default; activates automatically when 67% threshold is reached</li>
 <li><b>VoteBehavior::Obsolete</b>: Amendment was votable but never passed (kept for compatibility)</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md150"></a>
+<h1><a class="anchor" id="autotoc_md164"></a>
 Retirement Process</h1>
 <p >After an amendment has been enabled for several years (typically 2+), conditional code can be removed:</p>
 <ol type="1">
@@ -148,14 +148,14 @@ Retirement Process</h1>
 </ol>
 <div class="fragment"><div class="line">XRPL_RETIRE(OldFeatureName)</div>
 </div><!-- fragment --><p ><b>Note</b>: Retired amendments must remain registered indefinitely because they may exist in ledger history.</p>
-<h1><a class="anchor" id="autotoc_md151"></a>
+<h1><a class="anchor" id="autotoc_md165"></a>
 Key Files</h1>
 <ul>
 <li><code>include/xrpl/protocol/detail/features.macro</code> - Amendment definitions</li>
 <li><code><a class="el" href="Feature_8h_source.html">include/xrpl/protocol/Feature.h</a></code> - Feature declarations and <code>numFeatures</code> constant</li>
 <li><code><a class="el" href="Feature_8cpp_source.html">src/libxrpl/protocol/Feature.cpp</a></code> - Feature registration implementation</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md152"></a>
+<h1><a class="anchor" id="autotoc_md166"></a>
 Best Practices</h1>
 <ol type="1">
 <li>Always add new amendments at the <b>top</b> of <code>features.macro</code></li>
@@ -166,7 +166,7 @@ Best Practices</h1>
 <li>Always test with the amendment both enabled and disabled</li>
 <li>Remember to update <code>numFeatures</code> when adding amendments</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md153"></a>
+<h1><a class="anchor" id="autotoc_md167"></a>
 Testing</h1>
 <p >Ensure your amendment works correctly:</p><ul>
 <li>Test with amendment disabled (legacy behavior)</li>
@@ -174,7 +174,7 @@ Testing</h1>
 <li>Verify the transition works correctly</li>
 <li>Check replay of old ledgers still functions</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md154"></a>
+<h1><a class="anchor" id="autotoc_md168"></a>
 Variable Naming Convention</h1>
 <ul>
 <li>Features: <code>feature&lt;Name&gt;</code> (e.g., <code>featureAccountExclusion</code>)</li>

@@ -72,16 +72,16 @@ $(function() {
   <div class="headertitle"><div class="title">Validator Exclusion List System Documentation </div></div>
 </div><!--header-->
 <div class="contents">
-<div class="textblock"><h1><a class="anchor" id="autotoc_md196"></a>
+<div class="textblock"><h1><a class="anchor" id="autotoc_md210"></a>
 Overview</h1>
 <p >The Validator Exclusion List system allows validators to exclude specific accounts from participating in the network. This is a consensus-based mechanism where an account is only excluded if a sufficient percentage of validators (67% by default) agree to exclude it. The system supports two methods for managing exclusion lists:</p>
 <ol type="1">
 <li><b>Static Configuration</b> - Exclusions defined in the validator's configuration file</li>
 <li><b>Remote Fetching</b> - Dynamic exclusion lists fetched from remote sources and cryptographically verified</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md197"></a>
+<h1><a class="anchor" id="autotoc_md211"></a>
 System Architecture</h1>
-<h2><a class="anchor" id="autotoc_md198"></a>
+<h2><a class="anchor" id="autotoc_md212"></a>
 Key Components</h2>
 <ol type="1">
 <li><b>ExclusionManager</b> - Core component that maintains the consensus view of excluded accounts</li>
@@ -90,9 +90,9 @@ Key Components</h2>
 <li><b>AccountSet Transaction</b> - On-chain mechanism for validators to update their exclusion lists</li>
 <li><b>exclusion_info RPC</b> - Query interface to inspect current exclusion states</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md199"></a>
+<h1><a class="anchor" id="autotoc_md213"></a>
 Method 1: Configuration File-Based Exclusions</h1>
-<h2><a class="anchor" id="autotoc_md200"></a>
+<h2><a class="anchor" id="autotoc_md214"></a>
 Configuration Format</h2>
 <p >Add exclusions directly to your validator's configuration file:</p>
 <div class="fragment"><div class="line">[validator_exclusions]</div>
@@ -101,7 +101,7 @@ Configuration Format</h2>
 <div class="line">rN7n7otQDd6FczFgLdSqtcsAUxDkw6fzRH</div>
 <div class="line">rf1BiGeXwwQoi8Z2ueFYTEXSwuJYfV2Jpn</div>
 <div class="line">rJ6Bq42segvi7djJmt3QV3cRaCNnfVvTaS</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md201"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md215"></a>
 How It Works</h2>
 <ol type="1">
 <li>On startup, the validator reads the <code>[validator_exclusions]</code> section</li>
@@ -110,7 +110,7 @@ How It Works</h2>
 <li>Differences are queued as pending changes</li>
 <li>Changes are applied gradually (one every 10 ledgers) to avoid network disruption</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md202"></a>
+<h2><a class="anchor" id="autotoc_md216"></a>
 Characteristics</h2>
 <ul>
 <li><b>Persistent</b>: Remains in effect until manually changed</li>
@@ -118,9 +118,9 @@ Characteristics</h2>
 <li><b>Static</b>: Requires restart to update</li>
 <li><b>Individual</b>: Each validator manages their own list</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md203"></a>
+<h1><a class="anchor" id="autotoc_md217"></a>
 Method 2: Remote Fetcher with Signed Lists</h1>
-<h2><a class="anchor" id="autotoc_md204"></a>
+<h2><a class="anchor" id="autotoc_md218"></a>
 Configuration</h2>
 <p >Configure remote sources in the validator configuration file:</p>
 <div class="fragment"><div class="line">[validator_exclusions_sources]</div>
@@ -131,7 +131,7 @@ Configuration</h2>
 <div class="line">[validator_exclusions_interval]</div>
 <div class="line"># How often to fetch updates (in seconds)</div>
 <div class="line">300  # Default: 5 minutes</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md205"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md219"></a>
 Remote List JSON Format</h2>
 <div class="fragment"><div class="line">{</div>
 <div class="line">  &quot;version&quot;: &quot;1.0&quot;,</div>
@@ -155,7 +155,7 @@ Remote List JSON Format</h2>
 <div class="line">    &quot;signature&quot;: &quot;3045022100a1b2c3d4e5f6...&quot;</div>
 <div class="line">  }</div>
 <div class="line">}</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md206"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md220"></a>
 How Remote Fetching Works</h2>
 <ol type="1">
 <li><b>Startup</b>: <code>RemoteExclusionListFetcher</code> starts when the validator initializes</li>
@@ -165,7 +165,7 @@ How Remote Fetching Works</h2>
 <li><b>Update Detection</b>: When changes are detected, they're queued for gradual application</li>
 <li><b>Reason Storage</b>: Exclusion reasons are stored in memory (not on-chain) and available via RPC</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md207"></a>
+<h2><a class="anchor" id="autotoc_md221"></a>
 Security Features</h2>
 <ul>
 <li><b>Cryptographic Verification</b>: All lists must be signed with Ed25519 keys</li>
@@ -173,21 +173,21 @@ Security Features</h2>
 <li><b>Partial Updates Allowed</b>: After initial fetch, system continues with available sources</li>
 <li><b>Signature Validation</b>: Invalid signatures cause the list to be rejected</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md208"></a>
+<h1><a class="anchor" id="autotoc_md222"></a>
 Python Script for Creating Signed Exclusion Lists</h1>
-<h2><a class="anchor" id="autotoc_md209"></a>
+<h2><a class="anchor" id="autotoc_md223"></a>
 Script: &lt;tt&gt;sign_exclusion_list.py&lt;/tt&gt;</h2>
 <p >Located at: <code>/scripts/sign_exclusion_list.py</code></p>
-<h2><a class="anchor" id="autotoc_md210"></a>
+<h2><a class="anchor" id="autotoc_md224"></a>
 Prerequisites</h2>
 <div class="fragment"><div class="line">pip install nacl base58</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md211"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md225"></a>
 Usage</h2>
 <div class="fragment"><div class="line">python3 sign_exclusion_list.py \</div>
 <div class="line">  --secret-key YOUR_ED25519_SECRET_KEY_HEX \</div>
 <div class="line">  --input exclusions.json \</div>
 <div class="line">  --output signed_exclusions.json</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md212"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md226"></a>
 Input Format (exclusions.json)</h2>
 <div class="fragment"><div class="line">{</div>
 <div class="line">  &quot;version&quot;: &quot;1.0&quot;,</div>
@@ -201,7 +201,7 @@ Input Format (exclusions.json)</h2>
 <div class="line">    }</div>
 <div class="line">  ]</div>
 <div class="line">}</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md213"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md227"></a>
 How the Script Works</h2>
 <ol type="1">
 <li><b>Reads</b> the input JSON file containing the exclusion list</li>
@@ -216,7 +216,7 @@ How the Script Works</h2>
 <li><b>Adds</b> the signature to the JSON</li>
 <li><b>Writes</b> the signed JSON to the output file</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md214"></a>
+<h2><a class="anchor" id="autotoc_md228"></a>
 Key Generation</h2>
 <p >To generate an Ed25519 key pair for signing:</p>
 <div class="fragment"><div class="line"><span class="keyword">import</span> nacl.signing</div>
@@ -230,9 +230,9 @@ Key Generation</h2>
 <div class="line">print(f<span class="stringliteral">&quot;Secret key (keep private): {secret_key_hex}&quot;</span>)</div>
 <div class="line"> </div>
 <div class="line"><span class="comment"># The public key will be automatically derived and encoded by the script</span></div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md215"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md229"></a>
 Consensus Mechanism</h1>
-<h2><a class="anchor" id="autotoc_md216"></a>
+<h2><a class="anchor" id="autotoc_md230"></a>
 How Exclusion Consensus Works</h2>
 <ol type="1">
 <li><b>Vote Collection</b>: Each validator maintains their own exclusion list on-chain</li>
@@ -241,22 +241,22 @@ How Exclusion Consensus Works</h2>
 <li><b>Consensus Determination</b>: An address is considered excluded if votes &gt;= threshold</li>
 <li><b>Real-time Updates</b>: The consensus view updates as validators change their lists</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md217"></a>
+<h2><a class="anchor" id="autotoc_md231"></a>
 Rate Limiting</h2>
 <p >To prevent network disruption, changes are rate-limited:</p><ul>
 <li><b>One change per 10 ledgers</b>: Maximum rate of updates</li>
 <li><b>Gradual application</b>: Large list changes are queued and applied over time</li>
 <li><b>Add before remove</b>: When replacing lists, additions happen before removals</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md218"></a>
+<h1><a class="anchor" id="autotoc_md232"></a>
 RPC Interface: exclusion_info</h1>
-<h2><a class="anchor" id="autotoc_md219"></a>
+<h2><a class="anchor" id="autotoc_md233"></a>
 Query All Validators</h2>
 <div class="fragment"><div class="line">curl -X POST http://localhost:5005 -d &#39;{</div>
 <div class="line">  &quot;method&quot;: &quot;exclusion_info&quot;,</div>
 <div class="line">  &quot;params&quot;: [{}]</div>
 <div class="line">}&#39;</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md220"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md234"></a>
 Query Specific Validator</h2>
 <div class="fragment"><div class="line">curl -X POST http://localhost:5005 -d &#39;{</div>
 <div class="line">  &quot;method&quot;: &quot;exclusion_info&quot;,</div>
@@ -264,7 +264,7 @@ Query Specific Validator</h2>
 <div class="line">    &quot;validator&quot;: &quot;rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh&quot;</div>
 <div class="line">  }]</div>
 <div class="line">}&#39;</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md221"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md235"></a>
 Response Format</h2>
 <div class="fragment"><div class="line">{</div>
 <div class="line">  &quot;validators&quot;: {</div>
@@ -292,9 +292,9 @@ Response Format</h2>
 <div class="line">  &quot;consensus_threshold&quot;: 5,</div>
 <div class="line">  &quot;consensus_percentage&quot;: 67</div>
 <div class="line">}</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md222"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md236"></a>
 Operational Workflow</h1>
-<h2><a class="anchor" id="autotoc_md223"></a>
+<h2><a class="anchor" id="autotoc_md237"></a>
 Setting Up Exclusion Lists</h2>
 <ol type="1">
 <li><b>Choose Method</b>:<ul>
@@ -314,7 +314,7 @@ Setting Up Exclusion Lists</h2>
 </ul>
 </li>
 </ol>
-<h2><a class="anchor" id="autotoc_md224"></a>
+<h2><a class="anchor" id="autotoc_md238"></a>
 Best Practices</h2>
 <ol type="1">
 <li><b>Security</b>:<ul>
@@ -342,9 +342,9 @@ Best Practices</h2>
 </ul>
 </li>
 </ol>
-<h1><a class="anchor" id="autotoc_md225"></a>
+<h1><a class="anchor" id="autotoc_md239"></a>
 Troubleshooting</h1>
-<h2><a class="anchor" id="autotoc_md226"></a>
+<h2><a class="anchor" id="autotoc_md240"></a>
 Common Issues</h2>
 <ol type="1">
 <li><b>Reasons not showing in RPC</b>:<ul>
@@ -368,15 +368,15 @@ Common Issues</h2>
 </ul>
 </li>
 </ol>
-<h2><a class="anchor" id="autotoc_md227"></a>
+<h2><a class="anchor" id="autotoc_md241"></a>
 Log Messages to Monitor</h2>
 <div class="fragment"><div class="line">RemoteExclusionListFetcher: Successfully fetched and verified from &lt;url&gt;</div>
 <div class="line">ValidatorExclusionManager: Updated ExclusionManager with X exclusion reasons</div>
 <div class="line">ExclusionManager: Rebuilding exclusion cache from ledger</div>
 <div class="line">ValidatorExclusionManager: X pending changes queued</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md228"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md242"></a>
 Architecture Details</h1>
-<h2><a class="anchor" id="autotoc_md229"></a>
+<h2><a class="anchor" id="autotoc_md243"></a>
 Data Flow</h2>
 <div class="fragment"><div class="line">Configuration File ─┐</div>
 <div class="line">                    ├─&gt; ValidatorExclusionManager ─&gt; AccountSet TX ─&gt; Ledger</div>
@@ -385,14 +385,14 @@ Data Flow</h2>
 <div class="line">     └─&gt; ExclusionManager &lt;──────────────────────────────────────────────┘</div>
 <div class="line">              │</div>
 <div class="line">              └─&gt; exclusion_info RPC</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md230"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md244"></a>
 Storage</h2>
 <ul>
 <li><b>On-chain</b>: Account addresses only (no reasons or metadata)</li>
 <li><b>In-memory</b>: Reasons, dates, and other metadata from remote sources</li>
 <li><b>Configuration</b>: Static exclusion lists and remote source URLs</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md231"></a>
+<h1><a class="anchor" id="autotoc_md245"></a>
 Security Considerations</h1>
 <ol type="1">
 <li><b>No On-chain Reasons</b>: Exclusion reasons are never stored on-chain to prevent legal issues</li>
