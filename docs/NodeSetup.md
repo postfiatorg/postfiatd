@@ -23,12 +23,22 @@ sudo apt install docker-compose
 
 ### 2. Set Up the Node Directory
 
-Create the necessary directory structure and download the configuration:
+Create the necessary directory structure and download the configuration.
+
+**For Devnet:**
 
 ```bash
 mkdir -p /opt/postfiatd
 cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose.yml
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/develop/scripts/docker-compose-devnet.yml -O docker-compose.yml
+```
+
+**For Testnet:**
+
+```bash
+mkdir -p /opt/postfiatd
+cd /opt/postfiatd
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose-testnet.yml -O docker-compose.yml
 ```
 
 ### 3. Start the Node
