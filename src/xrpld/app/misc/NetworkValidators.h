@@ -40,15 +40,15 @@ public:
      */
     enum class NetworkType : std::uint32_t
     {
-        MAINNET = 0,
-        TESTNET = 1,
-        DEVNET = 2
+        DEVNET = 2024,
+        TESTNET = 2025,
+        MAINNET = 2026
     };
 
     /**
      * @brief Get the validator list for a specific network
      *
-     * @param networkId The network ID (0=mainnet, 1=testnet, 2=devnet)
+     * @param networkId The network ID (2024=devnet, 2025=testnet, 2026=mainnet)
      * @return std::vector<std::string> List of validator public keys
      */
     static std::vector<std::string>

@@ -59,15 +59,15 @@ NetworkValidators::getValidators(std::uint32_t networkId)
 {
     switch (static_cast<NetworkType>(networkId))
     {
-    case NetworkType::MAINNET:
-        return getMainnetValidators();
-    case NetworkType::TESTNET:
-        return getTestnetValidators();
-    case NetworkType::DEVNET:
+    case NetworkType::DEVNET:   // 2024
         return getDevnetValidators();
-    default:
-        // Default to mainnet validators for unknown network IDs
+    case NetworkType::TESTNET:  // 2025
+        return getTestnetValidators();
+    case NetworkType::MAINNET:  // 2026
         return getMainnetValidators();
+    default:
+        // Default to devnet validators for unknown network IDs
+        return getDevnetValidators();
     }
 }
 
