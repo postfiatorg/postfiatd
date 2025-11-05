@@ -11,6 +11,44 @@ Before proceeding, ensure you have:
 - Your existing `validator-keys.json` file backed up in a secure location
 - Docker and Docker Compose installed
 
+## Restoring Master Keys to Docker Container
+
+> **Important**: The `validator-keys.json` file is deleted whenever the Docker container is restarted or recreated. Before you can generate a new token or update your validator configuration, you must first copy your backed-up master keys file back into the running Docker container.
+
+### Copy the Master Keys File
+
+Before performing any validator key operations, restore your `validator-keys.json` file to the container:
+
+```bash
+# Copy the backed-up validator-keys.json from your secure location to the container
+docker cp /path/to/your/backup/validator-keys.json postfiatd:/root/.ripple/validator-keys.json
+```
+
+Replace `/path/to/your/backup/validator-keys.json` with the actual path to your backed-up file.
+
+### Verify the File Was Copied Successfully
+
+Confirm the file is now present in the container:
+
+```bash
+docker exec -it postfiatd ls -la /root/.ripple/validator-keys.json
+```
+
+You should see output showing the file exists with appropriate permissions.
+
+### Security Reminder
+
+After completing your validator key operations:
+
+1. **Backup the updated file** (it now contains the new sequence number):
+   ```bash
+   docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup-$(date +%Y%m%d).json
+   ```
+
+2. **Store the backup in a secure, offline location** (encrypted USB drive, secure vault, etc.)
+
+3. **Remove the local copy** from the validator machine after backing up to secure storage
+
 ## Understanding Validator Keys and Tokens
 
 A Post Fiat validator uses a two-tier key system:
@@ -34,7 +72,7 @@ All validator updates (whether updating the signing key, domain, or both) involv
 
 Before generating a new token, you must have:
 
-**Existing validator master keys**: Your `validator-keys.json` file must already exist and contain your validator's master key pair and the current sequence number. This file should be located at `/home/ubuntu/.ripple/validator-keys.json` (or `~/.ripple/validator-keys.json`).
+**Existing validator master keys**: Your `validator-keys.json` file must already exist and contain your validator's master key pair and the current sequence number. This file should be located at `/root/.ripple/validator-keys.json` (or `~/.ripple/validator-keys.json`).
 
 ### When to Generate a New Token
 

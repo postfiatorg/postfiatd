@@ -124,7 +124,7 @@ its key pair:
 
 Sample output:
 ```
-  Validator keys stored in /home/ubuntu/.ripple/validator-keys.json
+  Validator keys stored in /root/.ripple/validator-keys.json
 ```
 
 Keep the key file in a secure but recoverable location, such as an encrypted
@@ -161,10 +161,37 @@ Sample output:
 For a new validator, add the [validator_token] value to the postfiatd config file.
 For a pre-existing validator, replace the old [validator_token] value with the
 newly generated one. A valid config file may only contain one [validator_token]
-value. After the config is updated, restart postfiatd.
+value.
+
+> **CRITICAL: Backup Master Keys Before Docker Restart!**
+>
+> The `validator-keys.json` file contains your **master validator keys** and is stored inside the Docker container at `/root/.ripple/validator-keys.json`.
+>
+> **This file is deleted when the Docker container is restarted or recreated.**
+>
+> Before running `docker-compose down` or `docker-compose restart`:
+> 1. **Copy the file from the container to a secure location**:
+>    ```bash
+>    docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json
+>    ```
+> 2. **Store the backup in a secure, offline location** (encrypted USB drive, secure vault, etc.)
+> 3. **Never keep this file on the validator machine** after backing it up
+>
+> Without this backup, you will lose the ability to:
+> - Generate new validator tokens for your validator public key
+> - Update your validator domain
+> - Revoke your keys if compromised
+>
+> If you lose these master keys, you will need to create a completely new validator identity.
+
+After the config is updated, restart postfiatd.
 
 There is a hard limit of 4,294,967,293 tokens that can be generated for a given
 validator key pair.
+
+This operation also updates the validator-keys.json file with this data.
+Save the validator-keys.json to a secure location to be used when creating a 
+new signing key or updating the domain.
 
 ## Key Revocation
 
