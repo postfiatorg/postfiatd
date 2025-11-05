@@ -172,6 +172,27 @@ eyJ... [OLD TOKEN] ...ifQ==
 eyJ... [NEW TOKEN] ...ifQ==
 ```
 
+> **CRITICAL: Backup Master Keys Before Docker Restart!**
+>
+> The `validator-keys.json` file contains your **master validator keys** and is stored inside the Docker container at `/root/.ripple/validator-keys.json`.
+>
+> **This file is deleted when the Docker container is restarted or recreated.**
+>
+> Before running `docker-compose down` or `docker-compose restart`:
+> 1. **Copy the file from the container to a secure location**:
+>    ```bash
+>    docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json
+>    ```
+> 2. **Store the backup in a secure, offline location** (encrypted USB drive, secure vault, etc.)
+> 3. **Never keep this file on the validator machine** after backing it up
+>
+> Without this backup, you will lose the ability to:
+> - Generate new validator tokens for your validator public key
+> - Update your validator domain
+> - Revoke your keys if compromised
+>
+> If you lose these master keys, you will need to create a completely new validator identity.
+
 ### Restart the Validator
 
 Exit the container and restart it to apply the changes:

@@ -127,9 +127,6 @@ Sample output:
   Validator keys stored in /root/.ripple/validator-keys.json
 ```
 
-Keep the key file in a secure but recoverable location, such as an encrypted
-USB flash drive. Do not modify its contents.
-
 ## Validator Token
 
 After first creating the [validator keys](#validator-keys) or if the previous
