@@ -190,7 +190,24 @@ Update the Configuration</h2>
 <div class="line">eyJ... [OLD TOKEN] ...ifQ==</div>
 </div><!-- fragment --><p ><b>After:</b> </p><div class="fragment"><div class="line">[validator_token]</div>
 <div class="line">eyJ... [NEW TOKEN] ...ifQ==</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md287"></a>
+</div><!-- fragment --><blockquote class="doxtable">
+<p >&zwj;<b>CRITICAL: Backup Master Keys Before Docker Restart!</b></p>
+<p >The <code>validator-keys.json</code> file contains your <b>master validator keys</b> and is stored inside the Docker container at <code>/root/.ripple/validator-keys.json</code>.</p>
+<p ><b>This file is deleted when the Docker container is restarted or recreated.</b></p>
+<p >Before running <code>docker-compose down</code> or <code>docker-compose restart</code>:</p><ol type="1">
+<li><b>Copy the file from the container to a secure location</b>: <div class="fragment"><div class="line">docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json</div>
+</div><!-- fragment --></li>
+<li><b>Store the backup in a secure, offline location</b> (encrypted USB drive, secure vault, etc.)</li>
+<li><b>Never keep this file on the validator machine</b> after backing it up</li>
+</ol>
+<p >Without this backup, you will lose the ability to:</p><ul>
+<li>Generate new validator tokens for your validator public key</li>
+<li>Update your validator domain</li>
+<li>Revoke your keys if compromised</li>
+</ul>
+<p >If you lose these master keys, you will need to create a completely new validator identity. </p>
+</blockquote>
+<h2><a class="anchor" id="autotoc_md287"></a>
 Restart the Validator</h2>
 <p >Exit the container and restart it to apply the changes:</p>
 <div class="fragment"><div class="line">exit</div>
