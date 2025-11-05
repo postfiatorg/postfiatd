@@ -148,7 +148,7 @@ Validator keys tool</h2>
 Validator Keys</h1>
 <p >When first setting up a validator, use the <code>validator-keys</code> tool to generate its key pair:</p>
 <div class="fragment"><div class="line">$ validator-keys create_keys</div>
-</div><!-- fragment --><p >Sample output: </p><div class="fragment"><div class="line">Validator keys stored in /home/ubuntu/.ripple/validator-keys.json</div>
+</div><!-- fragment --><p >Sample output: </p><div class="fragment"><div class="line">Validator keys stored in /root/.ripple/validator-keys.json</div>
 </div><!-- fragment --><p >Keep the key file in a secure but recoverable location, such as an encrypted USB flash drive. Do not modify its contents.</p>
 <h1><a class="anchor" id="autotoc_md262"></a>
 Validator Token</h1>
@@ -168,8 +168,27 @@ Validator Token</h1>
 <div class="line">hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1</div>
 <div class="line">NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj</div>
 <div class="line">VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==</div>
-</div><!-- fragment --><p >For a new validator, add the [validator_token] value to the postfiatd config file. For a pre-existing validator, replace the old [validator_token] value with the newly generated one. A valid config file may only contain one [validator_token] value. After the config is updated, restart postfiatd.</p>
+</div><!-- fragment --><p >For a new validator, add the [validator_token] value to the postfiatd config file. For a pre-existing validator, replace the old [validator_token] value with the newly generated one. A valid config file may only contain one [validator_token] value.</p>
+<blockquote class="doxtable">
+<p >&zwj;<b>CRITICAL: Backup Master Keys Before Docker Restart!</b></p>
+<p >The <code>validator-keys.json</code> file contains your <b>master validator keys</b> and is stored inside the Docker container at <code>/root/.ripple/validator-keys.json</code>.</p>
+<p ><b>This file is deleted when the Docker container is restarted or recreated.</b></p>
+<p >Before running <code>docker-compose down</code> or <code>docker-compose restart</code>:</p><ol type="1">
+<li><b>Copy the file from the container to a secure location</b>: <div class="fragment"><div class="line">docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json</div>
+</div><!-- fragment --></li>
+<li><b>Store the backup in a secure, offline location</b> (encrypted USB drive, secure vault, etc.)</li>
+<li><b>Never keep this file on the validator machine</b> after backing it up</li>
+</ol>
+<p >Without this backup, you will lose the ability to:</p><ul>
+<li>Generate new validator tokens for your validator public key</li>
+<li>Update your validator domain</li>
+<li>Revoke your keys if compromised</li>
+</ul>
+<p >If you lose these master keys, you will need to create a completely new validator identity. </p>
+</blockquote>
+<p>After the config is updated, restart postfiatd.</p>
 <p >There is a hard limit of 4,294,967,293 tokens that can be generated for a given validator key pair.</p>
+<p >This operation also updates the validator-keys.json file with this data. Save the validator-keys.json to a secure location to be used when creating a new signing key or updating the domain.</p>
 <h1><a class="anchor" id="autotoc_md263"></a>
 Key Revocation</h1>
 <p >If a validator private key is compromised, the key must be revoked permanently. To revoke the validator key, use the <code>validator-keys</code> tool to generate a revocation, which indicates to other servers that the key is no longer valid:</p>

@@ -83,6 +83,31 @@ Prerequisites</h1>
 <li>Docker and Docker Compose installed</li>
 </ul>
 <h1><a class="anchor" id="autotoc_md273"></a>
+Restoring Master Keys to Docker Container</h1>
+<blockquote class="doxtable">
+<p >&zwj;<b>Important</b>: The <code>validator-keys.json</code> file is deleted whenever the Docker container is restarted or recreated. Before you can generate a new token or update your validator configuration, you must first copy your backed-up master keys file back into the running Docker container. </p>
+</blockquote>
+<h2><a class="anchor" id="autotoc_md274"></a>
+Copy the Master Keys File</h2>
+<p >Before performing any validator key operations, restore your <code>validator-keys.json</code> file to the container:</p>
+<div class="fragment"><div class="line"># Copy the backed-up validator-keys.json from your secure location to the container</div>
+<div class="line">docker cp /path/to/your/backup/validator-keys.json postfiatd:/root/.ripple/validator-keys.json</div>
+</div><!-- fragment --><p >Replace <code>/path/to/your/backup/validator-keys.json</code> with the actual path to your backed-up file.</p>
+<h2><a class="anchor" id="autotoc_md275"></a>
+Verify the File Was Copied Successfully</h2>
+<p >Confirm the file is now present in the container:</p>
+<div class="fragment"><div class="line">docker exec -it postfiatd ls -la /root/.ripple/validator-keys.json</div>
+</div><!-- fragment --><p >You should see output showing the file exists with appropriate permissions.</p>
+<h2><a class="anchor" id="autotoc_md276"></a>
+Security Reminder</h2>
+<p >After completing your validator key operations:</p>
+<ol type="1">
+<li><b>Backup the updated file</b> (it now contains the new sequence number): <div class="fragment"><div class="line">docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup-$(date +%Y%m%d).json</div>
+</div><!-- fragment --></li>
+<li><b>Store the backup in a secure, offline location</b> (encrypted USB drive, secure vault, etc.)</li>
+<li><b>Remove the local copy</b> from the validator machine after backing up to secure storage</li>
+</ol>
+<h1><a class="anchor" id="autotoc_md277"></a>
 Understanding Validator Keys and Tokens</h1>
 <p >A Post Fiat validator uses a two-tier key system:</p>
 <ul>
@@ -97,14 +122,14 @@ Understanding Validator Keys and Tokens</h1>
 <li>A sequence number (incremented with each new token)</li>
 <li>Signatures from both the master key and ephemeral signing key</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md274"></a>
+<h1><a class="anchor" id="autotoc_md278"></a>
 Generating a New Token</h1>
 <p >All validator updates (whether updating the signing key, domain, or both) involve generating a new validator token. This section explains the token generation process that applies to all scenarios.</p>
-<h2><a class="anchor" id="autotoc_md275"></a>
+<h2><a class="anchor" id="autotoc_md279"></a>
 Prerequisites</h2>
 <p >Before generating a new token, you must have:</p>
-<p ><b>Existing validator master keys</b>: Your <code>validator-keys.json</code> file must already exist and contain your validator's master key pair and the current sequence number. This file should be located at <code>/home/ubuntu/.ripple/validator-keys.json</code> (or <code>~/.ripple/validator-keys.json</code>).</p>
-<h2><a class="anchor" id="autotoc_md276"></a>
+<p ><b>Existing validator master keys</b>: Your <code>validator-keys.json</code> file must already exist and contain your validator's master key pair and the current sequence number. This file should be located at <code>/root/.ripple/validator-keys.json</code> (or <code>~/.ripple/validator-keys.json</code>).</p>
+<h2><a class="anchor" id="autotoc_md280"></a>
 When to Generate a New Token</h2>
 <p >You should generate a new validator token when:</p>
 <ul>
@@ -114,21 +139,21 @@ When to Generate a New Token</h2>
 <li>Updating or setting your validator's domain</li>
 <li>As part of routine security maintenance</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md277"></a>
+<h2><a class="anchor" id="autotoc_md281"></a>
 Access the Validator Keys Tool</h2>
 <p >For all token generation operations, first enter the running Docker container:</p>
 <div class="fragment"><div class="line">docker exec -it postfiatd bash</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md278"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md282"></a>
 Updating the Signing Key Only</h1>
 <p >Use this method when you want to rotate your signing key while keeping your existing domain unchanged.</p>
-<h2><a class="anchor" id="autotoc_md279"></a>
+<h2><a class="anchor" id="autotoc_md283"></a>
 Generate a New Token</h2>
 <p >Generate a new validator token (this will keep your existing domain if you have one):</p>
 <div class="fragment"><div class="line">validator-keys create_token</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md280"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md284"></a>
 Updating the Domain (and Signing Key)</h1>
 <p >Use this method when you want to set or change your validator's domain. <b>Note that <code>set_domain</code> automatically generates a new signing key along with the domain update</b>, so you get both updates in one operation.</p>
-<h2><a class="anchor" id="autotoc_md281"></a>
+<h2><a class="anchor" id="autotoc_md285"></a>
 Set the New Domain</h2>
 <p >The <code>set_domain</code> command generates a new token with both a new signing key and your specified domain:</p>
 <div class="fragment"><div class="line">validator-keys set_domain your-domain.com</div>
@@ -152,7 +177,7 @@ Set the New Domain</h2>
 <div class="line">hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1</div>
 <div class="line">NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj</div>
 <div class="line">VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md282"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md286"></a>
 Update the Configuration</h2>
 <p >After generating a new token (regardless of the method used), you need to update the configuration file.</p>
 <p ><b>Option A: Direct edit (if you have access to the volume)</b></p>
@@ -165,14 +190,14 @@ Update the Configuration</h2>
 <div class="line">eyJ... [OLD TOKEN] ...ifQ==</div>
 </div><!-- fragment --><p ><b>After:</b> </p><div class="fragment"><div class="line">[validator_token]</div>
 <div class="line">eyJ... [NEW TOKEN] ...ifQ==</div>
-</div><!-- fragment --><h2><a class="anchor" id="autotoc_md283"></a>
+</div><!-- fragment --><h2><a class="anchor" id="autotoc_md287"></a>
 Restart the Validator</h2>
 <p >Exit the container and restart it to apply the changes:</p>
 <div class="fragment"><div class="line">exit</div>
 <div class="line">docker-compose restart</div>
-</div><!-- fragment --><h1><a class="anchor" id="autotoc_md284"></a>
+</div><!-- fragment --><h1><a class="anchor" id="autotoc_md288"></a>
 Important Considerations</h1>
-<h2><a class="anchor" id="autotoc_md285"></a>
+<h2><a class="anchor" id="autotoc_md289"></a>
 Token Sequence Numbers</h2>
 <ul>
 <li>Each new token has a higher sequence number than the previous one</li>
@@ -180,7 +205,7 @@ Token Sequence Numbers</h2>
 <li>Old tokens are automatically invalidated when a new token is published</li>
 <li>There is a hard limit of 4,294,967,293 tokens per validator key pair</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md286"></a>
+<h2><a class="anchor" id="autotoc_md290"></a>
 Propagation Time</h2>
 <ul>
 <li>New tokens propagate through the network automatically</li>
@@ -188,7 +213,7 @@ Propagation Time</h2>
 <li>No coordination with other operators is required</li>
 <li>The validator identity (master public key) remains unchanged</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md287"></a>
+<h2><a class="anchor" id="autotoc_md291"></a>
 Key File Management</h2>
 <ul>
 <li><b>Never lose your <code>validator-keys.json</code> file</b> - it contains your validator identity</li>
@@ -196,7 +221,7 @@ Key File Management</h2>
 <li>The key file should be protected with appropriate file permissions</li>
 <li>Consider keeping the key file offline and only accessing it when needed for key operations</li>
 </ul>
-<h2><a class="anchor" id="autotoc_md288"></a>
+<h2><a class="anchor" id="autotoc_md292"></a>
 Security Best Practices</h2>
 <ol type="1">
 <li><b>Rotation Schedule</b>: Establish a regular key rotation schedule (e.g., quarterly or semi-annually)</li>
@@ -205,9 +230,9 @@ Security Best Practices</h2>
 <li><b>Monitor After Updates</b>: Watch logs and network status after updating to ensure proper operation</li>
 <li><b>Document Changes</b>: Keep a record of when keys were rotated and why</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md289"></a>
+<h1><a class="anchor" id="autotoc_md293"></a>
 Troubleshooting</h1>
-<h2><a class="anchor" id="autotoc_md290"></a>
+<h2><a class="anchor" id="autotoc_md294"></a>
 Token Not Accepted</h2>
 <p >If your new token is not being accepted:</p>
 <ol type="1">
@@ -216,7 +241,7 @@ Token Not Accepted</h2>
 <li>Ensure the <code>[validator_token]</code> section header is present</li>
 <li>Confirm there is only one <code>[validator_token]</code> section in the config</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md291"></a>
+<h2><a class="anchor" id="autotoc_md295"></a>
 Validator Not Showing in Network</h2>
 <p >If your validator doesn't appear in the network after updating:</p>
 <ol type="1">
@@ -226,7 +251,7 @@ Validator Not Showing in Network</h2>
 <li>Confirm the container restarted successfully: <code>docker-compose ps</code></li>
 <li>Check network connectivity and peer connections</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md292"></a>
+<h2><a class="anchor" id="autotoc_md296"></a>
 Domain Not Appearing</h2>
 <p >If the domain is not showing for your validator:</p>
 <ol type="1">
@@ -235,13 +260,13 @@ Domain Not Appearing</h2>
 <li>Allow time for the manifest to propagate through the network (usually a few minutes)</li>
 <li>Check that your domain is accessible and properly configured</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md293"></a>
+<h1><a class="anchor" id="autotoc_md297"></a>
 Related Documentation</h1>
 <ul>
 <li><a class="el" href="md____w_postfiatd_postfiatd_docs_NodeSetup.html">NodeSetup.md</a> - Initial validator setup guide</li>
 <li><a href="https://explorer.testnet.postfiat.org/network/validators">Post Fiat Explorer</a> - Monitor validator status</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md294"></a>
+<h1><a class="anchor" id="autotoc_md298"></a>
 Getting Help</h1>
 <p >If you encounter issues not covered in this guide:</p>
 <ol type="1">
