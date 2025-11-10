@@ -124,11 +124,19 @@ validator-keys set_domain your-domain.com
 **Sample output:**
 
 ```
-The validator key pair is generated.
+The domain name has been set to: validator.example.com
 
-Update postfiatd.cfg file with these values:
+The domain attestation for validator nHUHS6rzWd2toxnaCLLcAD6nTLUBKxBsRanjywxLeyZ2q19AmZxe is:
 
-# validator public key: nHUtNnLVx7odrz5dnfb2xpIgbEeJPbzJWfdicSkGyVw1eE5GpjQr
+attestation="2E5A9E5E5370B04CD9E8DA3CAA2CCE12635561218D75C5F7EF48699700220CD5B2667DB316B256166257D44AB9880E0CDA241FCAB579F883D897C567E8E8A503"
+
+You should include it in your pft-ledger.toml file in the
+section for this validator.
+
+You also need to update the postfiatd.cfg file to add a new
+validator token and restart postfiatd:
+
+# validator public key: nHUHS6rzWd2toxnaCLLcAD6nTLUBKxBsRanjywxLeyZ2q19AmZxe
 
 [validator_token]
 eyJ2YWxpZGF0aW9uX3NlY3J|dF9rZXkiOiI5ZWQ0NWY4NjYyNDFjYzE4YTI3NDdiNT
@@ -140,6 +148,28 @@ hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1
 NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj
 VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==
 ```
+
+**Note**: The public key and token values shown above are examples. Your actual output will contain different values unique to your validator.
+
+### Domain Verification
+
+To verify your validator's domain ownership, you need to publish the attestation on your domain:
+
+1. **Create the domain verification file** at `https://your-domain.com/.well-known/pft-ledger.toml`
+
+2. **Add your validator information** in the following format:
+
+```toml
+[[VALIDATORS]]
+public_key = "nHUHS6rzWd2toxnaCLLcAD6nTLUBKxBsRanjywxLeyZ2q19AmZxe"
+attestation = "2E5A9E5E5370B04CD9E8DA3CAA2CCE12635561218D75C5F7EF48699700220CD5B2667DB316B256166257D44AB9880E0CDA241FCAB579F883D897C567E8E8A503"
+```
+
+Replace the `public_key` and `attestation` values with your actual values from the `set_domain` command output.
+
+3. **Ensure the file is publicly accessible** at `https://your-domain.com/.well-known/pft-ledger.toml`
+
+This attestation proves that you control both the validator keys and the domain, establishing a verifiable link between your validator identity and your domain.
 
 ### Update the Configuration
 

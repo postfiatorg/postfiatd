@@ -1,15 +1,15 @@
 [![codecov](https://codecov.io/gh/XRPLF/rippled/graph/badge.svg?token=WyFr5ajq3O)](https://codecov.io/gh/XRPLF/rippled)
 
-## The XPF Ledger
+## The PFT Ledger
 
-The XPF Ledger is a next-generation decentralized blockchain designed as an immutable settlement layer for the emerging AI-agent economy. Built on battle-tested XRPL technology, the XPF Ledger uses a novel Proof of Economic Value (PoEV) consensus mechanism powered by AI agents to validate transactions and secure the network. Unlike traditional blockchains, the XPF Ledger serves as the foundation for orchestrating interactions between AI agents and human experts, creating a decentralized expert network that bridges artificial and human intelligence.
+The PFT Ledger is a next-generation decentralized blockchain designed as an immutable settlement layer for the emerging AI-agent economy. Built on battle-tested XRPL technology, the PFT Ledger uses a novel Proof of Economic Value (PoEV) consensus mechanism powered by AI agents to validate transactions and secure the network. Unlike traditional blockchains, the PFT Ledger serves as the foundation for orchestrating interactions between AI agents and human experts, creating a decentralized expert network that bridges artificial and human intelligence.
 
-## XPF
+## PFT
 
-XPF is the native digital asset of the XPF Ledger, designed to facilitate value exchange in a post-fiat world where AI agents operate as autonomous economic actors. XPF enables seamless transactions between AI agents, rewards human experts for providing proprietary insights, and powers the network's unique indexing technologies that create ontologies for any asset. As the currency of choice for AI-driven financial services, XPF is built to support the complex economic interactions of an AGI-enabled future while maintaining the speed, security, and efficiency inherited from proven XRPL architecture.
+PFT is the native digital asset of the PFT Ledger, designed to facilitate value exchange in a post-fiat world where AI agents operate as autonomous economic actors. PFT enables seamless transactions between AI agents, rewards human experts for providing proprietary insights, and powers the network's unique indexing technologies that create ontologies for any asset. As the currency of choice for AI-driven financial services, PFT is built to support the complex economic interactions of an AGI-enabled future while maintaining the speed, security, and efficiency inherited from proven XRPL architecture.
 
 ## postfiatd
-The server software that powers the XPF Ledger is called `postfiatd`. It is a fork of rippled server. Shared code and documentation will still have mentions of rippled and XRP. Any mention of rippled applies to postfiatd and mention of XRP asset applies to XPF.
+The server software that powers the PFT Ledger is called `postfiatd`. It is a fork of rippled server. Shared code and documentation will still have mentions of rippled and XRP. Any mention of rippled applies to postfiatd and mention of XRP asset applies to PFT.
 
 ## rippled
 The server software that powers the XRP Ledger is called `rippled` and is available in this repository under the permissive [ISC open-source license](LICENSE.md). The `rippled` server software is written primarily in C++ and runs on a variety of platforms. The `rippled` server software can run in several modes depending on its [configuration](https://xrpl.org/rippled-server-modes.html).

@@ -140,25 +140,59 @@ validator token with the domain of your validator:
 Sample output:
 
 ```
-  Update postfiatd.cfg file with these values:
+The domain name has been set to: postfiat.org
 
-  # validator public key: nHUtNnLVx7odrz5dnfb2xpIgbEeJPbzJWfdicSkGyVw1eE5GpjQr
+The domain attestation for validator nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ is:
 
-  [validator_token]
-  eyJ2YWxpZGF0aW9uX3NlY3J|dF9rZXkiOiI5ZWQ0NWY4NjYyNDFjYzE4YTI3NDdiNT
-  QzODdjMDYyNTkwNzk3MmY0ZTcxOTAyMzFmYWE5Mzc0NTdmYT|kYWY2IiwibWFuaWZl
-  c3QiOiJKQUFBQUFGeEllMUZ0d21pbXZHdEgyaUNjTUpxQzlnVkZLaWxHZncxL3ZDeE
-  hYWExwbGMyR25NaEFrRTFhZ3FYeEJ3RHdEYklENk9NU1l1TTBGREFscEFnTms4U0tG
-  bjdNTzJmZGtjd1JRSWhBT25ndTlzQUtxWFlvdUorbDJWMFcrc0FPa1ZCK1pSUzZQU2
-  hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1
-  NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj
-  VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==
+attestation="52AD96B548AC71213D487307870440B74EC3A8A7B0DC887A1B936D932E4101782E08C9CCF620F0605021B38A4A42889941F4EFFB18BFB8DA3EF67181FE88C301"
+
+You should include it in your pft-ledger.toml file in the
+section for this validator.
+
+You also need to update the postfiatd.cfg file to add a new
+validator token and restart postfiatd:
+
+# validator public key: nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ
+
+[validator_token]
+eyJ2YWxpZGF0aW9uX3NlY3J|dF9rZXkiOiI5ZWQ0NWY4NjYyNDFjYzE4YTI3NDdiNT
+QzODdjMDYyNTkwNzk3MmY0ZTcxOTAyMzFmYWE5Mzc0NTdmYT|kYWY2IiwibWFuaWZl
+c3QiOiJKQUFBQUFGeEllMUZ0d21pbXZHdEgyaUNjTUpxQzlnVkZLaWxHZncxL3ZDeE
+hYWExwbGMyR25NaEFrRTFhZ3FYeEJ3RHdEYklENk9NU1l1TTBGREFscEFnTms4U0tG
+bjdNTzJmZGtjd1JRSWhBT25ndTlzQUtxWFlvdUorbDJWMFcrc0FPa1ZCK1pSUzZQU2
+hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1
+NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj
+VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==
 ```
 
-For a new validator, add the [validator_token] value to the postfiatd config file.
-For a pre-existing validator, replace the old [validator_token] value with the
-newly generated one. A valid config file may only contain one [validator_token]
+**Note**: The public key and token values shown above are examples. Your actual output will contain different values unique to your validator.
+
+### Configuring Your Validator
+
+For a new validator, add the `[validator_token]` value to the postfiatd config file.
+For a pre-existing validator, replace the old `[validator_token]` value with the
+newly generated one. A valid config file may only contain one `[validator_token]`
 value.
+
+### Domain Verification
+
+To verify your validator's domain ownership, you need to publish the attestation on your domain:
+
+1. **Create the domain verification file** at `https://your-domain.com/.well-known/pft-ledger.toml`
+
+2. **Add your validator information** in the following format:
+
+```toml
+[[VALIDATORS]]
+public_key = "nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ"
+attestation = "52AD96B548AC71213D487307870440B74EC3A8A7B0DC887A1B936D932E4101782E08C9CCF620F0605021B38A4A42889941F4EFFB18BFB8DA3EF67181FE88C301"
+```
+
+Replace the `public_key` and `attestation` values with your actual values from the `set_domain` command output.
+
+3. **Ensure the file is publicly accessible** at `https://your-domain.com/.well-known/pft-ledger.toml`
+
+This attestation proves that you control both the validator keys and the domain, establishing a verifiable link between your validator identity and your domain.
 
 > **CRITICAL: Backup Master Keys Before Docker Restart!**
 >
