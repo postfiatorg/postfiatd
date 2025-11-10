@@ -154,9 +154,19 @@ Validator Token</h1>
 <p >After first creating the validator keys or if the previous token has been compromised, use the <code>validator-keys</code> tool to create a new validator token with the domain of your validator:</p>
 <div class="fragment"><div class="line">$ ./validator-keys set_domain [VALIDATOR_DOMAIN]</div>
 </div><!-- fragment --><p >Sample output:</p>
-<div class="fragment"><div class="line">Update postfiatd.cfg file with these values:</div>
+<div class="fragment"><div class="line">The domain name has been set to: postfiat.org</div>
 <div class="line"> </div>
-<div class="line"># validator public key: nHUtNnLVx7odrz5dnfb2xpIgbEeJPbzJWfdicSkGyVw1eE5GpjQr</div>
+<div class="line">The domain attestation for validator nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ is:</div>
+<div class="line"> </div>
+<div class="line">attestation=&quot;52AD96B548AC71213D487307870440B74EC3A8A7B0DC887A1B936D932E4101782E08C9CCF620F0605021B38A4A42889941F4EFFB18BFB8DA3EF67181FE88C301&quot;</div>
+<div class="line"> </div>
+<div class="line">You should include it in your pft-ledger.toml file in the</div>
+<div class="line">section for this validator.</div>
+<div class="line"> </div>
+<div class="line">You also need to update the postfiatd.cfg file to add a new</div>
+<div class="line">validator token and restart postfiatd:</div>
+<div class="line"> </div>
+<div class="line"># validator public key: nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ</div>
 <div class="line"> </div>
 <div class="line">[validator_token]</div>
 <div class="line">eyJ2YWxpZGF0aW9uX3NlY3J|dF9rZXkiOiI5ZWQ0NWY4NjYyNDFjYzE4YTI3NDdiNT</div>
@@ -167,7 +177,25 @@ Validator Token</h1>
 <div class="line">hsSkFmVXNYZkFpQnNWSkdlc2FhZE9KYy9hQVpva1MxdnltR21WcmxIUEtXWDNZeXd1</div>
 <div class="line">NmluOEhBU1FLUHVnQkQ2N2tNYVJGR3ZtcEFUSGxHS0pkdkRGbFdQWXk1QXFEZWRGdj</div>
 <div class="line">VUSmEydzBpMjFlcTNNWXl3TFZKWm5GT3I3QzBrdzJBaVR6U0NqSXpkaXRROD0ifQ==</div>
-</div><!-- fragment --><p >For a new validator, add the [validator_token] value to the postfiatd config file. For a pre-existing validator, replace the old [validator_token] value with the newly generated one. A valid config file may only contain one [validator_token] value.</p>
+</div><!-- fragment --><p ><b>Note</b>: The public key and token values shown above are examples. Your actual output will contain different values unique to your validator.</p>
+<h2><a class="anchor" id="autotoc_md263"></a>
+Configuring Your Validator</h2>
+<p >For a new validator, add the <code>[validator_token]</code> value to the postfiatd config file. For a pre-existing validator, replace the old <code>[validator_token]</code> value with the newly generated one. A valid config file may only contain one <code>[validator_token]</code> value.</p>
+<h2><a class="anchor" id="autotoc_md264"></a>
+Domain Verification</h2>
+<p >To verify your validator's domain ownership, you need to publish the attestation on your domain:</p>
+<ol type="1">
+<li><b>Create the domain verification file</b> at <code><a href="https://your-domain.com/.well-known/pft-ledger.toml">https://your-domain.com/.well-known/pft-ledger.toml</a></code></li>
+<li><b>Add your validator information</b> in the following format:</li>
+</ol>
+<div class="fragment"><div class="line">[[VALIDATORS]]</div>
+<div class="line">public_key = &quot;nHU3VNRD3cBsFwcDcKaMUoikag3RE7PS9p8L4Uj9dYQFv3zsLWdQ&quot;</div>
+<div class="line">attestation = &quot;52AD96B548AC71213D487307870440B74EC3A8A7B0DC887A1B936D932E4101782E08C9CCF620F0605021B38A4A42889941F4EFFB18BFB8DA3EF67181FE88C301&quot;</div>
+</div><!-- fragment --><p >Replace the <code>public_key</code> and <code>attestation</code> values with your actual values from the <code>set_domain</code> command output.</p>
+<ol type="1">
+<li><b>Ensure the file is publicly accessible</b> at <code><a href="https://your-domain.com/.well-known/pft-ledger.toml">https://your-domain.com/.well-known/pft-ledger.toml</a></code></li>
+</ol>
+<p >This attestation proves that you control both the validator keys and the domain, establishing a verifiable link between your validator identity and your domain.</p>
 <blockquote class="doxtable">
 <p >&zwj;<b>CRITICAL: Backup Master Keys Before Docker Restart!</b></p>
 <p >The <code>validator-keys.json</code> file contains your <b>master validator keys</b> and is stored inside the Docker container at <code>/root/.ripple/validator-keys.json</code>.</p>
@@ -188,7 +216,7 @@ Validator Token</h1>
 <p>After the config is updated, restart postfiatd.</p>
 <p >There is a hard limit of 4,294,967,293 tokens that can be generated for a given validator key pair.</p>
 <p >This operation also updates the validator-keys.json file with this data. Save the validator-keys.json to a secure location to be used when creating a new signing key or updating the domain.</p>
-<h1><a class="anchor" id="autotoc_md263"></a>
+<h1><a class="anchor" id="autotoc_md265"></a>
 Key Revocation</h1>
 <p >If a validator private key is compromised, the key must be revoked permanently. To revoke the validator key, use the <code>validator-keys</code> tool to generate a revocation, which indicates to other servers that the key is no longer valid:</p>
 <div class="fragment"><div class="line">$ validator-keys revoke_keys</div>
@@ -203,7 +231,7 @@ Key Revocation</h1>
 <div class="line">JP////9xIe0hvssbqmgzFH4/NDp1z|3ShkmCtFXuC5A0IUocppHopnASQN2MuMD1Puoyjvnr</div>
 <div class="line">jQ2KJSO/2tsjRhjO6q0QQHppslQsKNSXWxjGQNIEa6nPisBOKlDDcJVZAMP4QcIyNCadzgM=</div>
 </div><!-- fragment --><p >Add the <code>[validator_key_revocation]</code> value to this validator's config and restart postfiatd. Rename the old key file and generate new validator keys and a corresponding validator token.</p>
-<h1><a class="anchor" id="autotoc_md264"></a>
+<h1><a class="anchor" id="autotoc_md266"></a>
 Signing</h1>
 <p >The <code>validator-keys</code> tool can be used to sign arbitrary data with the validator key.</p>
 <div class="fragment"><div class="line">$ validator-keys sign &quot;your data to sign&quot;</div>
@@ -223,7 +251,7 @@ Signing</h1>
 </ul>
 </li>
 </ol>
-<h2><a class="anchor" id="autotoc_md265"></a>
+<h2><a class="anchor" id="autotoc_md267"></a>
 Security Best Practices</h2>
 <ul>
 <li>Store validator keys in a secure, offline location</li>
@@ -231,7 +259,7 @@ Security Best Practices</h2>
 <li>Regularly backup your configuration and keys</li>
 <li>Monitor your validator's performance and connectivity</li>
 </ul>
-<h1><a class="anchor" id="autotoc_md266"></a>
+<h1><a class="anchor" id="autotoc_md268"></a>
 Troubleshooting</h1>
 <p >If you encounter issues:</p>
 <ol type="1">
