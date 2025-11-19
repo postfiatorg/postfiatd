@@ -50,30 +50,35 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: install Conan
+      - name: Delete old build tools installed using Homebrew
         run: |
-          brew install conan
-      - name: install Ninja
-        if: matrix.generator == 'Ninja'
-        run: brew install ninja
-      - name: install python
+          brew uninstall --force \
+          cmake \
+          conan
+
+      - name: Install build tools using Homebrew
         run: |
-          if which python > /dev/null 2>&1; then
-              echo "Python executable exists"
-          else
-              brew install python@3.13
-              ln -s /opt/homebrew/bin/python3 /opt/homebrew/bin/python
-          fi
-      - name: install cmake
+          brew install --quiet \
+          ca-certificates \
+          ninja \
+          python@3.14
+
+      - name: Remove old fmt using Homebrew
         run: |
-          if which cmake > /dev/null 2>&1; then
-              echo "cmake executable exists"
-          else
-              brew install cmake
-          fi
-      - name: install nproc
+          brew unlink fmt
+          brew cleanup
+          brew link fmt
+
+      - name: List software installed using Homebrew
+        run: brew list --version
+
+      - name: Install build tools using pip
+        shell: bash
         run: |
-          brew install coreutils
+          pip3 install --break-system-packages --upgrade pip
+          pip3 install --break-system-packages \
+          cmake==4.1.2 \
+          conan==2.22.1
       - name: check environment
         run: |
           env | sort
