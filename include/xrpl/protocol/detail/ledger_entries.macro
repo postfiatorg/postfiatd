@@ -506,10 +506,10 @@ LEDGER_ENTRY(ltVAULT, 0x0084, Vault, vault, ({
 }))
 
 /** A ledger object which tracks validator voting statistics.
-   
+
     Each validator account has an associated ValidatorVoteStats object
     that tracks their total vote count.
-    
+
     \sa keylet::validatorVoteStats
  */
 LEDGER_ENTRY(ltVALIDATOR_VOTE_STATS, 0x0085, ValidatorVoteStats, validator_vote_stats, ({
@@ -518,6 +518,31 @@ LEDGER_ENTRY(ltVALIDATOR_VOTE_STATS, 0x0085, ValidatorVoteStats, validator_vote_
     {sfOwnerNode,            soeREQUIRED},
     {sfPreviousTxnID,        soeREQUIRED},
     {sfPreviousTxnLgrSeq,    soeREQUIRED},
+}))
+
+/** A ledger object representing a spent Orchard nullifier.
+
+    Nullifiers are used to prevent double-spending of shielded notes.
+    Once a nullifier is spent, it's recorded on the ledger permanently.
+
+    \sa keylet::orchardNullifier
+ */
+LEDGER_ENTRY(ltORCHARD_NULLIFIER, 0x0086, OrchardNullifier, orchard_nullifier, ({
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
+
+/** A ledger object representing an Orchard Merkle tree anchor.
+
+    Anchors represent the state of the note commitment tree at a specific
+    ledger. They are used to validate shielded spends.
+
+    \sa keylet::orchardAnchor
+ */
+LEDGER_ENTRY(ltORCHARD_ANCHOR, 0x0087, OrchardAnchor, orchard_anchor, ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
 }))
 
 #undef EXPAND

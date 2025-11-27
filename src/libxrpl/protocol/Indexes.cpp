@@ -96,6 +96,8 @@ enum class LedgerNameSpace : std::uint16_t {
     PERMISSIONED_DOMAIN = 'm',
     DELEGATE = 'E',
     VAULT = 'V',
+    ORCHARD_NULLIFIER = 'Z',  // Orchard spent notes (nullifiers)
+    ORCHARD_ANCHOR = 'Y',     // Orchard Merkle tree anchors
 
     // No longer used or supported. Left here to reserve the space
     // to avoid accidental reuse.
@@ -584,6 +586,21 @@ Keylet
 permissionedDomain(uint256 const& domainID) noexcept
 {
     return {ltPERMISSIONED_DOMAIN, domainID};
+}
+
+Keylet
+orchardNullifier(uint256 const& nullifier) noexcept
+{
+    return {
+        ltORCHARD_NULLIFIER,
+        indexHash(LedgerNameSpace::ORCHARD_NULLIFIER, nullifier)};
+}
+
+Keylet
+orchardAnchor(uint256 const& anchor) noexcept
+{
+    return {
+        ltORCHARD_ANCHOR, indexHash(LedgerNameSpace::ORCHARD_ANCHOR, anchor)};
 }
 
 }  // namespace keylet

@@ -524,6 +524,37 @@ TRANSACTION(ttBATCH, 71, Batch, Delegation::notDelegatable, ({
     {sfBatchSigners, soeOPTIONAL},
 }))
 
+/** This transaction type performs shielded payments using Orchard/Halo2 zero-knowledge proofs.
+
+    Uses Zcash's value balance model where the OrchardBundle.valueBalance represents
+    the net flow of value between transparent and shielded pools:
+
+    - Negative valueBalance: transparent → shielded (t->z shielding)
+      Example: Account sends 100 XRP, bundle.valueBalance = -100
+      The 100 XRP moves from transparent to shielded pool
+
+    - Positive valueBalance: shielded → transparent (z->t unshielding or fee payment)
+      Example: Bundle spends 100 XRP shielded, bundle.valueBalance = +100
+      The 100 XRP moves from shielded pool (can go to sfDestination or fees)
+
+    - Zero valueBalance: fully shielded (z->z)
+      Example: Bundle spends 100 XRP, outputs 100 XRP (both shielded)
+      No transparent interaction
+
+    Transaction balance equation:
+      Account balance + OrchardBundle.valueBalance (if positive) =
+        sfAmount (if present) + Fee + OrchardBundle.valueBalance (if negative)
+
+    Fee payment options:
+    1. From transparent: Account pays fee (traditional)
+    2. From shielded: Positive valueBalance includes fee amount
+ */
+TRANSACTION(ttSHIELDED_PAYMENT, 72, ShieldedPayment, Delegation::notDelegatable, ({
+    {sfDestination, soeOPTIONAL},  // For z->t: transparent recipient
+    {sfAmount, soeOPTIONAL},       // For t->z: amount to shield, or z->t: amount to unshield
+    {sfOrchardBundle, soeOPTIONAL}, // The shielded operations (contains valueBalance)
+}))
+
 /** This system-generated transaction type is used to update the status of the various amendments.
 
     For details, see: https://xrpl.org/amendments.html
