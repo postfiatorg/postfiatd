@@ -526,7 +526,31 @@ LEDGER_ENTRY(ltVALIDATOR_VOTE_STATS, 0x008A, ValidatorVoteStats, validator_vote_
     {sfPreviousTxnLgrSeq,    soeREQUIRED},
 }))
 
-/** Reserved: 0x0084 (ltVAULT), 0x0085-0x0087 for future Vault-related objects. */
+/** Reserved: 0x0084 (ltVAULT), 0x0085 for future Vault-related objects. */
+
+/** A ledger object representing a spent Orchard nullifier.
+
+    Nullifiers are used to prevent double-spending of shielded notes.
+    Once a nullifier is spent, it is recorded on the ledger permanently.
+
+    \sa keylet::orchardNullifier
+ */
+LEDGER_ENTRY(ltORCHARD_NULLIFIER, 0x0086, OrchardNullifier, orchard_nullifier, ({
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
+
+/** A ledger object representing an Orchard Merkle tree anchor.
+
+    Anchors represent note-commitment tree state at a specific ledger.
+
+    \sa keylet::orchardAnchor
+ */
+LEDGER_ENTRY(ltORCHARD_ANCHOR, 0x0087, OrchardAnchor, orchard_anchor, ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
 
 /** A ledger object representing a loan broker
 
