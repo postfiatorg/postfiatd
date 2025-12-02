@@ -13,6 +13,8 @@ fn main() {
 
     // Tell cargo to rerun this build script if the bridge changes
     println!("cargo:rerun-if-changed=src/ffi/bridge.rs");
-    println!("cargo:rerun-if-changed=src/bundle.rs");
+    println!("cargo:rerun-if-changed=src/bundle_real.rs");
+    println!("cargo:rerun-if-changed=src/bundle_stub.rs");
+    println!("cargo:rerun-if-changed=src/bundle_builder.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
 }

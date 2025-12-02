@@ -28,8 +28,9 @@ else()
 endif()
 
 # CXX bridge generated header location
-set(CXX_BRIDGE_HEADER "${RUST_TARGET_DIR}/cxxbridge/orchard-postfiat/src/ffi/bridge.rs.h")
-set(CXX_BRIDGE_SOURCE "${RUST_TARGET_DIR}/cxxbridge/orchard-postfiat/src/ffi/bridge.rs.cc")
+# Note: cxx-build generates files in target/cxxbridge, not target/debug/cxxbridge
+set(CXX_BRIDGE_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/target/cxxbridge/orchard-postfiat/src/ffi/bridge.rs.h")
+set(CXX_BRIDGE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/target/cxxbridge/orchard-postfiat/src/ffi/bridge.rs.cc")
 
 # Custom command to build the Rust library
 add_custom_command(
@@ -41,7 +42,9 @@ add_custom_command(
         ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml
         ${CMAKE_CURRENT_SOURCE_DIR}/build.rs
         ${CMAKE_CURRENT_SOURCE_DIR}/src/lib.rs
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/bundle.rs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/bundle_real.rs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/bundle_stub.rs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/bundle_builder.rs
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ffi/mod.rs
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ffi/bridge.rs
 )
@@ -63,7 +66,7 @@ add_library(orchard_postfiat_cxx STATIC
     ${CXX_BRIDGE_SOURCE}
 )
 target_include_directories(orchard_postfiat_cxx PUBLIC
-    ${RUST_TARGET_DIR}/cxxbridge
+    ${CMAKE_CURRENT_SOURCE_DIR}/target/cxxbridge
 )
 add_dependencies(orchard_postfiat_cxx orchard_postfiat_rust)
 
@@ -77,7 +80,7 @@ target_link_libraries(orchard_postfiat INTERFACE
     orchard_postfiat_cxx
 )
 target_include_directories(orchard_postfiat INTERFACE
-    ${RUST_TARGET_DIR}/cxxbridge
+    ${CMAKE_CURRENT_SOURCE_DIR}/target/cxxbridge
 )
 
 # On Linux, we need to link against system libraries that Rust uses

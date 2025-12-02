@@ -1,6 +1,6 @@
 //! CXX Bridge definitions for Orchard operations
 
-use crate::bundle::OrchardBundle;
+use crate::bundle_real::OrchardBundle;
 
 /// Batch verifier for multiple Orchard bundles
 pub struct OrchardBatchVerifier {
@@ -68,6 +68,17 @@ pub mod ffi {
             sighash: [u8; 32]
         );
         fn orchard_batch_verify_finalize(verifier: Box<OrchardBatchVerifier>) -> bool;
+
+        // Bundle building (for testing)
+        // WARNING: These are for TESTING only! Production use should have proper key management
+        fn orchard_test_get_empty_anchor() -> [u8; 32];
+        fn orchard_test_generate_spending_key(seed_byte: u8) -> Vec<u8>;
+        fn orchard_test_get_address_from_sk(sk_bytes: &[u8]) -> Result<Vec<u8>>;
+        fn orchard_test_build_transparent_to_shielded(
+            amount_drops: u64,
+            recipient_addr_bytes: &[u8],
+            anchor: &[u8; 32]
+        ) -> Result<Vec<u8>>;
     }
 }
 
@@ -150,4 +161,71 @@ pub fn orchard_batch_verify_add(
 /// Finalize and verify all bundles in the batch
 pub fn orchard_batch_verify_finalize(verifier: Box<OrchardBatchVerifier>) -> bool {
     verifier.verify()
+}
+
+//------------------------------------------------------------------------------
+// Bundle Building Functions (for Testing)
+//------------------------------------------------------------------------------
+
+/// Get the empty anchor (for first transactions when tree is empty)
+pub fn orchard_test_get_empty_anchor() -> [u8; 32] {
+    crate::bundle_builder::get_empty_anchor().to_bytes()
+}
+
+/// Generate a deterministic spending key for testing
+/// WARNING: Uses a fixed seed! Only for testing!
+pub fn orchard_test_generate_spending_key(seed_byte: u8) -> Vec<u8> {
+    let sk = crate::bundle_builder::generate_test_spending_key(seed_byte);
+    sk.to_bytes().to_vec()
+}
+
+/// Get an Orchard address from a spending key
+pub fn orchard_test_get_address_from_sk(sk_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    use orchard::keys::SpendingKey;
+
+    let sk_array: [u8; 32] = sk_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid spending key length, expected 32 bytes"))?;
+
+    let sk = Option::from(SpendingKey::from_bytes(sk_array))
+        .ok_or_else(|| anyhow::anyhow!("Invalid spending key"))?;
+
+    let addr = crate::bundle_builder::get_address_from_sk(&sk, 0);
+    Ok(addr.to_raw_address_bytes().to_vec())
+}
+
+/// Build a transparent-to-shielded (t→z) bundle for testing
+///
+/// This generates a REAL Orchard bundle with valid proofs.
+/// WARNING: This is EXPENSIVE - takes ~5-10 seconds for proof generation!
+///
+/// # Arguments
+/// * `amount_drops` - Amount in drops (1 XRP = 1,000,000 drops)
+/// * `recipient_addr_bytes` - Raw Orchard address bytes (43 bytes)
+/// * `anchor` - Current Merkle tree root (32 bytes)
+///
+/// # Returns
+/// Serialized bundle bytes ready to include in a transaction
+pub fn orchard_test_build_transparent_to_shielded(
+    amount_drops: u64,
+    recipient_addr_bytes: &[u8],
+    anchor: &[u8; 32],
+) -> anyhow::Result<Vec<u8>> {
+    use orchard::{Address, Anchor};
+
+    // Parse recipient address
+    let addr_array: [u8; 43] = recipient_addr_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid address length, expected 43 bytes"))?;
+
+    let recipient = Option::from(Address::from_raw_address_bytes(&addr_array))
+        .ok_or_else(|| anyhow::anyhow!("Invalid Orchard address"))?;
+
+    // Parse anchor
+    let anchor = Option::from(Anchor::from_bytes(*anchor))
+        .ok_or_else(|| anyhow::anyhow!("Invalid anchor"))?;
+
+    // Build the bundle
+    crate::bundle_builder::build_transparent_to_shielded(amount_drops, recipient, anchor)
+        .map_err(|e| anyhow::anyhow!("Failed to build bundle: {}", e))
 }
