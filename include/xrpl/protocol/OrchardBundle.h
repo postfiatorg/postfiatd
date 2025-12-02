@@ -29,17 +29,8 @@
 #include <vector>
 #include <memory>
 
-// Forward declarations for Rust types (from cxx bridge)
-namespace rust {
-    template<typename T> class Box;
-}
-
-namespace orchard_postfiat {
-    namespace ffi {
-        struct OrchardBundle;
-        struct OrchardBatchVerifier;
-    }
-}
+// Include the CXX bridge header for Rust types
+#include "orchard-postfiat/src/ffi/bridge.rs.h"
 
 namespace ripple {
 
@@ -57,11 +48,11 @@ class OrchardBundleWrapper
 {
 private:
     // Opaque pointer to Rust OrchardBundle
-    std::unique_ptr<rust::Box<orchard_postfiat::ffi::OrchardBundle>> inner_;
+    std::unique_ptr<rust::Box<::OrchardBundle>> inner_;
 
     // Private constructor - use parse() to create instances
     explicit OrchardBundleWrapper(
-        std::unique_ptr<rust::Box<orchard_postfiat::ffi::OrchardBundle>> bundle);
+        std::unique_ptr<rust::Box<::OrchardBundle>> bundle);
 
 public:
     OrchardBundleWrapper() = delete;
@@ -172,7 +163,7 @@ public:
      * @warning This exposes the internal Rust type. Use with caution.
      * @return Reference to the Rust bundle
      */
-    rust::Box<orchard_postfiat::ffi::OrchardBundle> const&
+    rust::Box<::OrchardBundle> const&
     getRustBundle() const;
 };
 
@@ -185,7 +176,7 @@ public:
 class OrchardBatchVerifier
 {
 private:
-    std::unique_ptr<rust::Box<orchard_postfiat::ffi::OrchardBatchVerifier>> inner_;
+    std::unique_ptr<rust::Box<::OrchardBatchVerifier>> inner_;
 
 public:
     OrchardBatchVerifier();

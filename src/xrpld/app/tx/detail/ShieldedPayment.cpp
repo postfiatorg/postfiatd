@@ -108,6 +108,19 @@ ShieldedPayment::preflight(PreflightContext const& ctx)
         return temMALFORMED;
     }
 
+    // Check for empty bundle (no actions)
+    if (bundle->numActions() == 0)
+    {
+        // Empty bundle with Amount field is invalid
+        // (no shielded operations but trying to transfer value)
+        if (ctx.tx.isFieldPresent(sfAmount))
+        {
+            JLOG(ctx.j.warn())
+                << "ShieldedPayment: Empty bundle cannot have Amount field";
+            return temMALFORMED;
+        }
+    }
+
     // Get value balance for field validation
     auto valueBalance = bundle->getValueBalance();
 
@@ -301,7 +314,7 @@ ShieldedPayment::preclaim(PreclaimContext const& ctx)
         {
             JLOG(ctx.j.warn())
                 << "ShieldedPayment: Insufficient balance for fee";
-            return tecINSUF_FEE;
+            return tecINSUFF_FEE;
         }
     }
     // else: Fee fully paid from shielded pool (valueBalance >= fee)

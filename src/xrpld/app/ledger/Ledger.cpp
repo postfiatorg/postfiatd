@@ -40,6 +40,7 @@
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/SecretKey.h>
+#include <xrpl/protocol/Seed.h>
 #include <xrpl/protocol/digest.h>
 #include <xrpl/protocol/jss.h>
 
@@ -180,7 +181,25 @@ Ledger::Ledger(
     info_.drops = INITIAL_XRP;
     info_.closeTimeResolution = ledgerGenesisTimeResolution;
 
-    static auto const id = *parseBase58<AccountID>("r4vhrMChCsaoFsBoCkRTRGUuc1njfr7bmA");
+    // Select genesis account based on network type:
+    // - PostFiat production networks (mainnet=2026, testnet=2025, devnet=2024)
+    //   use the PostFiat genesis account
+    // - Unit tests and other usage derive from "masterpassphrase"
+    AccountID id;
+    if (config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
+        config.NETWORK_ID == 2026)
+    {
+        // PostFiat production networks
+        id = *parseBase58<AccountID>("r4vhrMChCsaoFsBoCkRTRGUuc1njfr7bmA");
+    }
+    else
+    {
+        // Unit tests and other usage: derive from masterpassphrase
+        auto const seed = generateSeed("masterpassphrase");
+        auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
+        id = calcAccountID(keypair.first);
+    }
+
     {
         auto const sle = std::make_shared<SLE>(keylet::account(id));
         sle->setFieldU32(sfSequence, 1);

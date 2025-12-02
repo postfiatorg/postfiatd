@@ -9,12 +9,25 @@ license = "MIT"
 [lib]
 crate-type = ["staticlib"]
 
+[[bin]]
+name = "generate_test_bundle"
+path = "src/bin/generate_test_bundle.rs"
+required-features = ["test-utils"]
+
+[features]
+test-utils = []
+
 [dependencies]
 # Orchard and Halo2 cryptography
-orchard = "0.7"
+orchard = "0.11"
 halo2_proofs = "0.3"
 pasta_curves = "0.5"
 group = "0.13"
+
+# Zcash primitives for serialization and types
+zcash_primitives = { version = "0.26", features = ["transparent-inputs"] }
+zcash_protocol = "0.7"
+zcash_note_encryption = "0.4"
 
 # FFI and serialization
 cxx = "1.0"
@@ -24,6 +37,7 @@ anyhow = "1.0"
 # Utilities
 hex = "0.4"
 blake2b_simd = "1.0"
+rand = "0.8"  # For bundle generation in tests
 
 [build-dependencies]
 cxx-build = "1.0"
