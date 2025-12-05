@@ -31,6 +31,8 @@
 #include <xrpld/nodestore/Database.h>
 #include <xrpld/nodestore/detail/DatabaseNodeImp.h>
 
+#include "orchard-postfiat/src/ffi/bridge.rs.h"
+
 #include <xrpl/basics/Log.h>
 #include <xrpl/basics/contract.h>
 #include <xrpl/beast/utility/instrumentation.h>
@@ -239,6 +241,32 @@ Ledger::Ledger(
             sle->at(sfReferenceFeeUnits) = Config::FEE_UNITS_DEPRECATED;
         }
         rawInsert(sle);
+    }
+
+    std::cout << "DEBUG: Reached genesis anchor check point" << std::endl;
+
+    // Initialize empty anchor for Orchard privacy (if feature is enabled)
+    if (std::find(amendments.begin(), amendments.end(), featureOrchardPrivacy) !=
+        amendments.end())
+    {
+        std::cout << "DEBUG: OrchardPrivacy feature is enabled in genesis!" << std::endl;
+
+        // Get the proper empty anchor from Orchard library
+        auto emptyAnchorBytes = orchard_test_get_empty_anchor();
+        uint256 emptyAnchor;
+        std::memcpy(emptyAnchor.data(), emptyAnchorBytes.data(), 32);
+
+        std::cout << "GENESIS: Storing empty anchor: " << to_string(emptyAnchor) << std::endl;
+
+        auto sle = std::make_shared<SLE>(keylet::orchardAnchor(emptyAnchor));
+        sle->setFieldU32(sfLedgerSequence, 1);
+        rawInsert(sle);
+
+        std::cout << "GENESIS: Empty anchor stored successfully" << std::endl;
+    }
+    else
+    {
+        std::cout << "DEBUG: OrchardPrivacy feature NOT enabled in genesis" << std::endl;
     }
 
     stateMap_.flushDirty(hotACCOUNT_NODE);

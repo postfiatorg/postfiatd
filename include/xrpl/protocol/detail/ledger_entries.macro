@@ -545,6 +545,26 @@ LEDGER_ENTRY(ltORCHARD_ANCHOR, 0x0087, OrchardAnchor, orchard_anchor, ({
     {sfPreviousTxnLgrSeq,    soeOPTIONAL},
 }))
 
+/** A ledger object representing an Orchard note commitment.
+
+    Note commitments (cmx) represent shielded outputs that have been created.
+    They are added to the Merkle tree and can be spent in future transactions
+    by anyone with the corresponding spending key.
+
+    The encrypted note data allows wallets to scan the ledger and trial-decrypt
+    notes to find which ones belong to them.
+
+    \sa keylet::orchardNoteCommitment
+ */
+LEDGER_ENTRY(ltORCHARD_NOTE_COMMITMENT, 0x0088, OrchardNoteCommitment, orchard_note_commitment, ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfOrchardEncryptedNote, soeOPTIONAL},  // 580-byte encrypted note ciphertext
+    {sfOrchardEphemeralKey,  soeOPTIONAL},  // 32-byte ephemeral public key
+    {sfOrchardBundle,        soeOPTIONAL},  // Full bundle for decryption
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
+
 #undef EXPAND
 #undef LEDGER_ENTRY_DUPLICATE
 

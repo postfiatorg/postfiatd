@@ -278,6 +278,8 @@ TYPED_SFIELD(sfProvider,                 VL,        29)
 TYPED_SFIELD(sfMPTokenMetadata,          VL,        30)
 TYPED_SFIELD(sfCredentialType,           VL,        31)
 TYPED_SFIELD(sfOrchardBundle,            VL,        32)
+TYPED_SFIELD(sfOrchardEncryptedNote,     VL,        33) // Encrypted note ciphertext (580 bytes)
+TYPED_SFIELD(sfOrchardEphemeralKey,      VL,        34) // Ephemeral public key (32 bytes)
 TYPED_SFIELD(sfValidatorPublicKey,       VL,        52)
 
 // account (common)

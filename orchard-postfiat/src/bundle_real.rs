@@ -162,6 +162,54 @@ impl OrchardBundle {
             .clone()
     }
 
+    /// Get all note commitments from this bundle
+    ///
+    /// Note commitments (cmx) represent the outputs of this transaction.
+    /// They are added to the Merkle tree and can be spent in future transactions.
+    /// Each action has exactly one note commitment.
+    pub fn note_commitments(&self) -> Vec<[u8; 32]> {
+        self.inner()
+            .map(|bundle| {
+                bundle
+                    .actions()
+                    .iter()
+                    .map(|action| action.cmx().to_bytes())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get encrypted note data for all actions
+    ///
+    /// Returns a vector of (cmx, ephemeral_key, encrypted_note) tuples where:
+    /// - cmx is the 32-byte note commitment
+    /// - ephemeral_key is the 32-byte ephemeral public key
+    /// - encrypted_note is the 580-byte encrypted note ciphertext
+    ///
+    /// This data is needed to trial-decrypt notes with a viewing key.
+    pub fn encrypted_notes(&self) -> Vec<([u8; 32], [u8; 32], Vec<u8>)> {
+        self.inner()
+            .map(|bundle| {
+                bundle
+                    .actions()
+                    .iter()
+                    .map(|action| {
+                        // Get note commitment (32 bytes)
+                        let cmx = action.cmx().to_bytes();
+
+                        // Get ephemeral key (32 bytes)
+                        let ephemeral_key = action.encrypted_note().epk_bytes;
+
+                        // Get encrypted note ciphertext (580 bytes)
+                        let enc_ciphertext = action.encrypted_note().enc_ciphertext.to_vec();
+
+                        (cmx, ephemeral_key, enc_ciphertext)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Get the number of actions in this bundle
     ///
     /// Each action represents one spend + one output

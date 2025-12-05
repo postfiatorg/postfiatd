@@ -137,6 +137,33 @@ public:
     getNullifiers() const;
 
     /**
+     * @brief Get all note commitments from this bundle
+     *
+     * Note commitments (cmx) represent the outputs created by this transaction.
+     * They are added to the Merkle tree and can be spent in future transactions.
+     *
+     * @return Vector of 32-byte note commitments
+     */
+    std::vector<uint256>
+    getNoteCommitments() const;
+
+    /**
+     * @brief Get encrypted note data for all actions
+     *
+     * Returns data needed to trial-decrypt notes with a viewing key.
+     * Each tuple contains (cmx, ephemeral_key, encrypted_note).
+     *
+     * @return Vector of (32-byte cmx, 32-byte epk, 580-byte ciphertext) tuples
+     */
+    struct EncryptedNoteData {
+        uint256 cmx;
+        Blob ephemeralKey;  // 32 bytes
+        Blob encryptedNote; // 580 bytes
+    };
+    std::vector<EncryptedNoteData>
+    getEncryptedNotes() const;
+
+    /**
      * @brief Get the number of actions in this bundle
      *
      * @return Number of actions

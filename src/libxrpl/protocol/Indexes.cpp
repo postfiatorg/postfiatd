@@ -96,8 +96,9 @@ enum class LedgerNameSpace : std::uint16_t {
     PERMISSIONED_DOMAIN = 'm',
     DELEGATE = 'E',
     VAULT = 'V',
-    ORCHARD_NULLIFIER = 'Z',  // Orchard spent notes (nullifiers)
-    ORCHARD_ANCHOR = 'Y',     // Orchard Merkle tree anchors
+    ORCHARD_NULLIFIER = 'Z',        // Orchard spent notes (nullifiers)
+    ORCHARD_ANCHOR = 'Y',           // Orchard Merkle tree anchors
+    ORCHARD_NOTE_COMMITMENT = 'X',  // Orchard note commitments (outputs)
 
     // No longer used or supported. Left here to reserve the space
     // to avoid accidental reuse.
@@ -601,6 +602,14 @@ orchardAnchor(uint256 const& anchor) noexcept
 {
     return {
         ltORCHARD_ANCHOR, indexHash(LedgerNameSpace::ORCHARD_ANCHOR, anchor)};
+}
+
+Keylet
+orchardNoteCommitment(uint256 const& commitment) noexcept
+{
+    return {
+        ltORCHARD_NOTE_COMMITMENT,
+        indexHash(LedgerNameSpace::ORCHARD_NOTE_COMMITMENT, commitment)};
 }
 
 }  // namespace keylet

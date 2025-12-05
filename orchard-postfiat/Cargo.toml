@@ -38,6 +38,7 @@ anyhow = "1.0"
 hex = "0.4"
 blake2b_simd = "1.0"
 rand = "0.8"  # For bundle generation in tests
+incrementalmerkletree = "0.8"  # For Merkle tree operations
 
 [build-dependencies]
 cxx-build = "1.0"
