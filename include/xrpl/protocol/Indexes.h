@@ -388,6 +388,13 @@ orchardNullifier(uint256 const& nullifier) noexcept;
 Keylet
 orchardAnchor(uint256 const& anchor) noexcept;
 
+/** Keylet for an Orchard note commitment (shielded output).
+    @param commitment The 32-byte note commitment (cmx)
+    @return Keylet for the note commitment ledger object
+*/
+Keylet
+orchardNoteCommitment(uint256 const& commitment) noexcept;
+
 }  // namespace keylet
 
 // Everything below is deprecated and should be removed in favor of keylets:

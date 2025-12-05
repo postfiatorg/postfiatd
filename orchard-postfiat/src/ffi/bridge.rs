@@ -52,6 +52,8 @@ pub mod ffi {
         fn orchard_bundle_get_value_balance(bundle: &OrchardBundle) -> i64;
         fn orchard_bundle_get_anchor(bundle: &OrchardBundle) -> [u8; 32];
         fn orchard_bundle_get_nullifiers(bundle: &OrchardBundle) -> Vec<u8>;
+        fn orchard_bundle_get_note_commitments(bundle: &OrchardBundle) -> Vec<u8>;
+        fn orchard_bundle_get_encrypted_notes(bundle: &OrchardBundle) -> Vec<u8>;
         fn orchard_bundle_num_actions(bundle: &OrchardBundle) -> usize;
 
         // Proof verification
@@ -79,6 +81,20 @@ pub mod ffi {
             recipient_addr_bytes: &[u8],
             anchor: &[u8; 32]
         ) -> Result<Vec<u8>>;
+
+        // Viewing key operations (for testing)
+        fn orchard_test_get_full_viewing_key(sk_bytes: &[u8]) -> Result<Vec<u8>>;
+        fn orchard_test_try_decrypt_note(
+            bundle: &OrchardBundle,
+            action_index: usize,
+            fvk_bytes: &[u8]
+        ) -> Result<u64>;
+        fn orchard_test_try_decrypt_note_from_ciphertext(
+            encrypted_note: &[u8],
+            cmx_bytes: &[u8; 32],
+            ephemeral_key_bytes: &[u8; 32],
+            fvk_bytes: &[u8]
+        ) -> Result<u64>;
     }
 }
 
@@ -128,6 +144,29 @@ pub fn orchard_bundle_get_nullifiers(bundle: &OrchardBundle) -> Vec<u8> {
     bundle.nullifiers()
         .into_iter()
         .flat_map(|n| n.into_iter())
+        .collect()
+}
+
+/// Get all note commitments from the bundle (for Merkle tree)
+/// Returns a flattened Vec<u8> with 32 bytes per commitment
+pub fn orchard_bundle_get_note_commitments(bundle: &OrchardBundle) -> Vec<u8> {
+    bundle.note_commitments()
+        .into_iter()
+        .flat_map(|c| c.into_iter())
+        .collect()
+}
+
+/// Get encrypted note data from the bundle
+/// Returns flattened data: for each note (32 bytes cmx + 32 bytes epk + 580 bytes ciphertext)
+/// Total: 644 bytes per note
+pub fn orchard_bundle_get_encrypted_notes(bundle: &OrchardBundle) -> Vec<u8> {
+    bundle.encrypted_notes()
+        .into_iter()
+        .flat_map(|(cmx, epk, ciphertext)| {
+            cmx.into_iter()
+                .chain(epk.into_iter())
+                .chain(ciphertext.into_iter())
+        })
         .collect()
 }
 
@@ -228,4 +267,94 @@ pub fn orchard_test_build_transparent_to_shielded(
     // Build the bundle
     crate::bundle_builder::build_transparent_to_shielded(amount_drops, recipient, anchor)
         .map_err(|e| anyhow::anyhow!("Failed to build bundle: {}", e))
+}
+
+/// Derive a full viewing key from a spending key
+///
+/// # Arguments
+/// * `sk_bytes` - Spending key bytes (32 bytes)
+///
+/// # Returns
+/// Full viewing key bytes (96 bytes)
+pub fn orchard_test_get_full_viewing_key(sk_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+    use orchard::keys::SpendingKey;
+
+    let sk_array: [u8; 32] = sk_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid spending key length, expected 32 bytes"))?;
+
+    let sk = Option::from(SpendingKey::from_bytes(sk_array))
+        .ok_or_else(|| anyhow::anyhow!("Invalid spending key"))?;
+
+    let fvk = crate::bundle_builder::get_full_viewing_key_from_sk(&sk);
+    Ok(fvk.to_bytes().to_vec())
+}
+
+/// Try to decrypt a note from a bundle action using a full viewing key
+///
+/// # Arguments
+/// * `bundle` - The Orchard bundle containing the note
+/// * `action_index` - Index of the action to decrypt (0-based)
+/// * `fvk_bytes` - Full viewing key bytes (96 bytes)
+///
+/// # Returns
+/// Note value in drops if decryption succeeds
+pub fn orchard_test_try_decrypt_note(
+    bundle: &OrchardBundle,
+    action_index: usize,
+    fvk_bytes: &[u8],
+) -> anyhow::Result<u64> {
+    use orchard::keys::FullViewingKey;
+
+    let fvk_array: [u8; 96] = fvk_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid full viewing key length, expected 96 bytes"))?;
+
+    let fvk = Option::from(FullViewingKey::from_bytes(&fvk_array))
+        .ok_or_else(|| anyhow::anyhow!("Invalid full viewing key"))?;
+
+    // Get the inner bundle
+    let inner = bundle.inner()
+        .ok_or_else(|| anyhow::anyhow!("Bundle is empty"))?;
+
+    // Try to decrypt the note
+    crate::bundle_builder::try_decrypt_note(inner, action_index, &fvk)
+        .ok_or_else(|| anyhow::anyhow!("Failed to decrypt note - may not be for this viewing key"))
+}
+
+/// Try to decrypt a note from raw encrypted ciphertext
+///
+/// This is used to decrypt notes retrieved from ledger state.
+///
+/// # Arguments
+/// * `encrypted_note` - The 580-byte encrypted note ciphertext
+/// * `cmx_bytes` - The 32-byte note commitment
+/// * `ephemeral_key_bytes` - The 32-byte ephemeral public key
+/// * `fvk_bytes` - Full viewing key bytes (96 bytes)
+///
+/// # Returns
+/// Note value in drops if decryption succeeds
+pub fn orchard_test_try_decrypt_note_from_ciphertext(
+    encrypted_note: &[u8],
+    cmx_bytes: &[u8; 32],
+    ephemeral_key_bytes: &[u8; 32],
+    fvk_bytes: &[u8],
+) -> anyhow::Result<u64> {
+    use orchard::keys::FullViewingKey;
+
+    let fvk_array: [u8; 96] = fvk_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid full viewing key length, expected 96 bytes"))?;
+
+    let fvk = Option::from(FullViewingKey::from_bytes(&fvk_array))
+        .ok_or_else(|| anyhow::anyhow!("Invalid full viewing key"))?;
+
+    // Try to decrypt
+    crate::bundle_builder::try_decrypt_note_from_ciphertext(
+        encrypted_note,
+        cmx_bytes,
+        ephemeral_key_bytes,
+        &fvk,
+    )
+    .ok_or_else(|| anyhow::anyhow!("Failed to decrypt note - may not be for this viewing key"))
 }

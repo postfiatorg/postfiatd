@@ -243,13 +243,33 @@ ShieldedPayment::preclaim(PreclaimContext const& ctx)
     }
 
     // Verify anchor exists in recent ledger history
+    // For the empty anchor (first transactions), we'll auto-create it in doApply
     auto anchor = bundle->getAnchor();
+    JLOG(ctx.j.warn())
+        << "ShieldedPayment: Checking anchor: " << to_string(anchor);
+
     if (!ctx.view.exists(keylet::orchardAnchor(anchor)))
     {
-        JLOG(ctx.j.warn())
-            << "ShieldedPayment: Anchor not found in ledger history";
-        return tefORCHARD_INVALID_ANCHOR;
+        // Check if this is the empty anchor (for first transactions)
+        // The empty anchor is a well-known constant, so we can accept it here
+        // and create it in doApply if needed
+        auto emptyAnchorBytes = orchard_test_get_empty_anchor();
+        uint256 emptyAnchor;
+        std::memcpy(emptyAnchor.data(), emptyAnchorBytes.data(), 32);
+
+        if (anchor != emptyAnchor)
+        {
+            JLOG(ctx.j.warn())
+                << "ShieldedPayment: Anchor not found in ledger history";
+            return tefORCHARD_INVALID_ANCHOR;
+        }
+
+        JLOG(ctx.j.info())
+            << "ShieldedPayment: Empty anchor will be created in doApply";
     }
+
+    JLOG(ctx.j.warn())
+        << "ShieldedPayment: Anchor validated successfully";
 
     // Check destination (if z→t)
     if (ctx.tx.isFieldPresent(sfDestination))
@@ -353,11 +373,12 @@ ShieldedPayment::doApply()
         }
 
         // Deduct amount from account (going to shielded pool)
+        // Note: Fee is automatically deducted by Transactor::payFee(), not here!
         (*sleAccount)[sfBalance] = (*sleAccount)[sfBalance] - amount;
         view().update(sleAccount);
 
         JLOG(j_.trace()) << "ShieldedPayment: Debited " << amount
-                         << " from account (t→z)";
+                         << " from account (t→z), fee handled by base class";
     }
 
     // Handle transparent output (z→t)
@@ -391,31 +412,8 @@ ShieldedPayment::doApply()
         }
     }
 
-    // Handle fee payment
-    if (valueBalance < fee.drops())
-    {
-        // Fee from transparent account (partial or full)
-        XRPAmount transparentFee = fee;
-
-        if (valueBalance > 0)
-        {
-            // Partial fee from shielded
-            transparentFee = fee - XRPAmount(valueBalance);
-        }
-
-        auto sleAccount = view().peek(keylet::account(account_));
-        (*sleAccount)[sfBalance] = (*sleAccount)[sfBalance] - transparentFee;
-        view().update(sleAccount);
-
-        JLOG(j_.trace()) << "ShieldedPayment: Fee " << transparentFee
-                         << " paid from transparent account";
-    }
-    else
-    {
-        JLOG(j_.trace()) << "ShieldedPayment: Fee " << fee
-                         << " paid from shielded pool";
-    }
-    // else: Fee fully paid from shielded pool (included in valueBalance)
+    // Note: Fee payment is handled automatically by Transactor::payFee()
+    // We don't need to deduct it here
 
     // Store nullifiers (mark as spent to prevent double-spend)
     auto nullifiers = bundle->getNullifiers();
@@ -427,6 +425,46 @@ ShieldedPayment::doApply()
 
         JLOG(j_.trace()) << "ShieldedPayment: Stored nullifier "
                          << to_string(nf);
+    }
+
+    // Store note commitments with full bundle (outputs that can be spent in future transactions)
+    // This allows wallets to scan the ledger and trial-decrypt notes with their viewing keys
+    // We store the full bundle so we can decrypt notes properly
+    auto encryptedNotes = bundle->getEncryptedNotes();
+    auto bundleData = ctx_.tx[sfOrchardBundle];
+
+    for (auto const& noteData : encryptedNotes)
+    {
+        auto sleCommitment =
+            std::make_shared<SLE>(keylet::orchardNoteCommitment(noteData.cmx));
+        sleCommitment->setFieldU32(sfLedgerSequence, view().seq());
+        sleCommitment->setFieldVL(sfOrchardEncryptedNote, noteData.encryptedNote);
+        sleCommitment->setFieldVL(sfOrchardEphemeralKey, noteData.ephemeralKey);
+        sleCommitment->setFieldVL(sfOrchardBundle, bundleData);  // Store full bundle for decryption
+        view().insert(sleCommitment);
+
+        JLOG(j_.trace()) << "ShieldedPayment: Stored note commitment "
+                         << to_string(noteData.cmx) << " with full bundle at ledger " << view().seq();
+    }
+
+    // Store anchor (for future transactions to reference)
+    auto anchor = bundle->getAnchor();
+    auto sleAnchor = view().peek(keylet::orchardAnchor(anchor));
+    if (!sleAnchor)
+    {
+        // Create new anchor entry with current ledger sequence
+        sleAnchor = std::make_shared<SLE>(keylet::orchardAnchor(anchor));
+        (*sleAnchor)[sfLedgerSequence] = view().seq();
+        view().insert(sleAnchor);
+
+        JLOG(j_.trace()) << "ShieldedPayment: Stored new anchor "
+                         << to_string(anchor) << " at ledger "
+                         << view().seq();
+    }
+    else
+    {
+        JLOG(j_.trace()) << "ShieldedPayment: Anchor " << to_string(anchor)
+                         << " already exists";
     }
 
     JLOG(j_.info()) << "ShieldedPayment: Successfully applied transaction";

@@ -235,6 +235,26 @@ XRPNotCreated::finalize(
     ReadView const&,
     beast::Journal const& j)
 {
+    // For ShieldedPayment transactions, XRP can move to/from the shielded pool
+    // The net XRP change = fee + value transferred to shielded pool
+    // (or - value from shielded pool for z→t)
+    XRPAmount expectedChange = fee;
+
+    if (tx.getTxnType() == ttSHIELDED_PAYMENT && tx.isFieldPresent(sfAmount))
+    {
+        // Amount field represents XRP moving into (t→z) or out of (z→t) shielded pool
+        auto amount = tx[sfAmount];
+        if (amount.native())
+        {
+            // For t→z: expect drops_ = -(fee + amount)
+            // For z→t: expect drops_ = -(fee - amount) = amount - fee
+            // Actually, amount is always the absolute value
+            // and for t→z it's deducted from sender, for z→t it's added to receiver
+            // So expectedChange includes the amount going to/from shielded pool
+            expectedChange = fee + amount.xrp();
+        }
+    }
+
     // The net change should never be positive, as this would mean that the
     // transaction created XRP out of thin air. That's not possible.
     if (drops_ > 0)
@@ -244,11 +264,13 @@ XRPNotCreated::finalize(
         return false;
     }
 
-    // The negative of the net change should be equal to actual fee charged.
-    if (-drops_ != fee.drops())
+    // The negative of the net change should be equal to actual fee charged
+    // (plus any XRP moved to shielded pool for ShieldedPayment)
+    if (-drops_ != expectedChange.drops())
     {
         JLOG(j.fatal()) << "Invariant failed: XRP net change of " << drops_
-                        << " doesn't match fee " << fee.drops();
+                        << " doesn't match expected " << expectedChange.drops()
+                        << " (fee " << fee.drops() << ")";
         return false;
     }
 

@@ -8,11 +8,15 @@
 
 use orchard::{
     builder::{Builder, BundleType},
-    keys::{FullViewingKey, Scope, SpendingKey},
+    keys::{FullViewingKey, Scope, SpendingKey, PreparedIncomingViewingKey},
+    tree::MerkleHashOrchard,
     value::NoteValue,
-    Address, Anchor,
+    Address, Anchor, Bundle,
 };
+use incrementalmerkletree::Hashable;
 use rand::rngs::OsRng;
+use zcash_note_encryption::try_note_decryption;
+use zcash_protocol::value::ZatBalance;
 
 /// Generate a deterministic spending key for testing
 ///
@@ -32,8 +36,64 @@ pub fn get_address_from_sk(sk: &SpendingKey, index: u32) -> Address {
 
 /// Get the empty anchor (for the first transactions when tree is empty)
 pub fn get_empty_anchor() -> Anchor {
-    // Empty anchor is all zeros for an empty Merkle tree
-    Option::from(Anchor::from_bytes([0u8; 32])).expect("Valid empty anchor")
+    // Compute the correct empty root for a depth-32 Orchard tree
+    Anchor::from(MerkleHashOrchard::empty_root(32.into()))
+}
+
+/// Derive a full viewing key from a spending key
+pub fn get_full_viewing_key_from_sk(sk: &SpendingKey) -> FullViewingKey {
+    FullViewingKey::from(sk)
+}
+
+/// Try to decrypt a note from a bundle action using an incoming viewing key
+///
+/// Returns the note value in drops if decryption succeeds, None otherwise
+pub fn try_decrypt_note(
+    bundle: &Bundle<orchard::bundle::Authorized, ZatBalance>,
+    action_index: usize,
+    fvk: &FullViewingKey,
+) -> Option<u64> {
+    // Get the action
+    let action = bundle.actions().get(action_index)?;
+
+    // Prepare the incoming viewing key for trial decryption
+    let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
+
+    // Try to decrypt the note
+    // The compact action contains the encrypted note ciphertext
+    let domain = orchard::note_encryption::OrchardDomain::for_action(action);
+
+    match try_note_decryption(&domain, &ivk, action) {
+        Some((_note, _addr, _memo)) => {
+            // Successfully decrypted! Extract the value
+            Some(_note.value().inner())
+        }
+        None => None,
+    }
+}
+
+/// Try to decrypt a note from raw encrypted ciphertext
+///
+/// This is used to decrypt notes retrieved from ledger state.
+///
+/// NOTE: Due to Orchard library limitations, this approach won't work with just the encrypted ciphertext.
+/// For now, we'll need to keep the full bundle data or use a different approach.
+///
+/// Returns None for now - we'll decrypt from the in-memory bundle instead
+pub fn try_decrypt_note_from_ciphertext(
+    _encrypted_note: &[u8],
+    _cmx_bytes: &[u8; 32],
+    _ephemeral_key_bytes: &[u8; 32],
+    _fvk: &FullViewingKey,
+) -> Option<u64> {
+    // TODO: Orchard's CompactAction expects 52-byte compact ciphertext, not 580-byte full ciphertext
+    // We would need to either:
+    // 1. Store the full OrchardBundle in each transaction
+    // 2. Reconstruct the Action from the stored data
+    // 3. Use a different decryption method
+    //
+    // For now, return None - we'll use the in-memory bundle for decryption
+    None
 }
 
 /// Create a transparent-to-shielded (t→z) Orchard bundle

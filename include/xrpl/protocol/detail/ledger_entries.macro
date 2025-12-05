@@ -662,5 +662,26 @@ LEDGER_ENTRY(ltLOAN, 0x0089, Loan, loan, ({
     {sfLoanScale,                soeDEFAULT},
 }))
 
+/** A ledger object representing an Orchard note commitment.
+
+    Note commitments represent newly created shielded notes that wallets can
+    scan and decrypt.
+
+    \sa keylet::orchardNoteCommitment
+ */
+LEDGER_ENTRY(
+    ltORCHARD_NOTE_COMMITMENT,
+    0x008B,
+    OrchardNoteCommitment,
+    orchard_note_commitment,
+    ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfOrchardEncryptedNote, soeOPTIONAL},
+    {sfOrchardEphemeralKey,  soeOPTIONAL},
+    {sfOrchardBundle,        soeOPTIONAL},
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
+
 #undef EXPAND
 #undef LEDGER_ENTRY_DUPLICATE

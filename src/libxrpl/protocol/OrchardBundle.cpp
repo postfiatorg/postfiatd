@@ -138,6 +138,75 @@ OrchardBundleWrapper::getNullifiers() const
     return result;
 }
 
+std::vector<uint256>
+OrchardBundleWrapper::getNoteCommitments() const
+{
+    // Get flattened note commitments (32 bytes per commitment)
+    auto rust_commitments_flat = ::orchard_bundle_get_note_commitments(**inner_);
+
+    // Each commitment is 32 bytes
+    std::size_t num_commitments = rust_commitments_flat.size() / 32;
+    std::vector<uint256> result;
+    result.reserve(num_commitments);
+
+    for (std::size_t i = 0; i < num_commitments; ++i)
+    {
+        uint256 commitment;
+        std::memcpy(
+            commitment.data(),
+            rust_commitments_flat.data() + (i * 32),
+            32
+        );
+        result.push_back(commitment);
+    }
+
+    return result;
+}
+
+std::vector<OrchardBundleWrapper::EncryptedNoteData>
+OrchardBundleWrapper::getEncryptedNotes() const
+{
+    // Get flattened encrypted note data (644 bytes per note: 32 cmx + 32 epk + 580 ciphertext)
+    auto rust_notes_flat = ::orchard_bundle_get_encrypted_notes(**inner_);
+
+    // Each note is 644 bytes total
+    constexpr std::size_t NOTE_SIZE = 644;
+    std::size_t num_notes = rust_notes_flat.size() / NOTE_SIZE;
+    std::vector<EncryptedNoteData> result;
+    result.reserve(num_notes);
+
+    for (std::size_t i = 0; i < num_notes; ++i)
+    {
+        std::size_t offset = i * NOTE_SIZE;
+        EncryptedNoteData note;
+
+        // Extract cmx (32 bytes)
+        std::memcpy(
+            note.cmx.data(),
+            rust_notes_flat.data() + offset,
+            32
+        );
+        offset += 32;
+
+        // Extract ephemeral key (32 bytes)
+        note.ephemeralKey.assign(
+            rust_notes_flat.data() + offset,
+            rust_notes_flat.data() + offset + 32
+        );
+        offset += 32;
+
+        // Extract encrypted note (580 bytes)
+        note.encryptedNote.assign(
+            rust_notes_flat.data() + offset,
+            rust_notes_flat.data() + offset + 580
+        );
+
+        result.push_back(std::move(note));
+    }
+
+    return result;
+}
+
 std::size_t
 OrchardBundleWrapper::numActions() const
 {
