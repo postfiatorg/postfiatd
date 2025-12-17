@@ -25,6 +25,7 @@
 #include <xrpl/protocol/TxFlags.h>
 #include <xrpl/protocol/st.h>
 #include <xrpld/ledger/View.h>
+#include <xrpld/app/misc/OrchardWallet.h>
 
 namespace ripple {
 
@@ -427,11 +428,15 @@ ShieldedPayment::doApply()
                          << to_string(nf);
     }
 
-    // Store note commitments with full bundle (outputs that can be spent in future transactions)
+    // Store note commitments (outputs that can be spent in future transactions)
     // This allows wallets to scan the ledger and trial-decrypt notes with their viewing keys
-    // We store the full bundle so we can decrypt notes properly
+    // We only store the encrypted note + ephemeral key, not the full bundle
+    // The bundle is already stored in the transaction itself
     auto encryptedNotes = bundle->getEncryptedNotes();
-    auto bundleData = ctx_.tx[sfOrchardBundle];
+
+    // Update wallet with new notes
+    // This happens during ledger processing so wallets automatically track incoming funds
+    auto& wallet = ctx_.app.getOrchardWallet();
 
     for (auto const& noteData : encryptedNotes)
     {
@@ -440,12 +445,34 @@ ShieldedPayment::doApply()
         sleCommitment->setFieldU32(sfLedgerSequence, view().seq());
         sleCommitment->setFieldVL(sfOrchardEncryptedNote, noteData.encryptedNote);
         sleCommitment->setFieldVL(sfOrchardEphemeralKey, noteData.ephemeralKey);
-        sleCommitment->setFieldVL(sfOrchardBundle, bundleData);  // Store full bundle for decryption
+        // Note: We do NOT store sfOrchardBundle here to avoid duplication
+        // Wallets decrypt from transaction bundle during real-time processing
+        // or from the encrypted note + ephemeral key for historical scanning
         view().insert(sleCommitment);
 
         JLOG(j_.trace()) << "ShieldedPayment: Stored note commitment "
-                         << to_string(noteData.cmx) << " with full bundle at ledger " << view().seq();
+                         << to_string(noteData.cmx) << " at ledger " << view().seq();
+
+        // Add commitment to wallet tree
+        wallet.appendCommitment(noteData.cmx);
+
+        JLOG(j_.trace()) << "ShieldedPayment: Added commitment to wallet tree";
     }
+
+    // Try to decrypt notes with registered IVKs
+    // This is the key step for automatic note detection!
+    auto decryptedCount = wallet.tryDecryptNotes(*bundle, ctx_.tx.getTransactionID(), view().seq());
+    if (decryptedCount > 0)
+    {
+        JLOG(j_.info()) << "ShieldedPayment: Decrypted " << decryptedCount
+                        << " note(s) for tracked keys in tx "
+                        << to_string(ctx_.tx.getTransactionID());
+    }
+
+    // Checkpoint wallet at this ledger sequence
+    // This allows wallet to track which ledgers have been processed
+    wallet.checkpoint(view().seq());
+    JLOG(j_.trace()) << "ShieldedPayment: Wallet checkpointed at ledger " << view().seq();
 
     // Store anchor (for future transactions to reference)
     auto anchor = bundle->getAnchor();

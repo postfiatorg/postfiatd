@@ -127,6 +127,7 @@ JSS(accounts_proposed);       // in: Subscribe, Unsubscribe
 JSS(action);
 JSS(acquiring);               // out: LedgerRequest
 JSS(address);                 // out: PeerImp
+JSS(address_type);            // out: Orchard RPCs
 JSS(affected);                // out: AcceptedLedgerTx
 JSS(age);                     // out: NetworkOPs, Peers
 JSS(alternatives);            // out: PathRequest, RipplePathFind
@@ -134,6 +135,8 @@ JSS(amendment_blocked);       // out: NetworkOPs
 JSS(amm_account);             // in: amm_info
 JSS(amount);                  // out: AccountChannels, amm_info
 JSS(amount2);                 // out: amm_info
+JSS(amount_xrp);              // out: Orchard RPCs
+JSS(anchor);                  // in/out: Orchard RPCs
 JSS(api_version);             // in: many, out: Version
 JSS(api_version_low);         // out: Version
 JSS(applied);                 // out: SubmitTransaction
@@ -175,6 +178,8 @@ JSS(broadcast);               // out: SubmitTransaction
 JSS(bridge_account);          // in: LedgerEntry
 JSS(build_path);              // in: TransactionSign
 JSS(build_version);           // out: NetworkOPs
+JSS(bundle_size);             // out: Orchard RPCs
+JSS(bundle_info);             // out: Orchard RPCs
 JSS(cancel_after);            // out: AccountChannels
 JSS(can_delete);              // out: CanDelete
 JSS(mpt_amount);              // out: mpt_holders
@@ -186,6 +191,7 @@ JSS(channels);                // out: AccountChannels
 JSS(check_nodes);             // in: LedgerCleaner
 JSS(clear);                   // in/out: FetchInfo
 JSS(close);                   // out: BookChanges
+JSS(cmx);                     // out: Orchard RPCs (note commitment)
 JSS(close_flags);             // out: LedgerToJson
 JSS(close_time);              // in: Application, out: NetworkOPs,
                               //      RCLCxPeerPos, LedgerToJson
@@ -245,6 +251,8 @@ JSS(dir_entry);               // out: DirectoryEntryIterator
 JSS(dir_index);               // out: DirectoryEntryIterator
 JSS(dir_root);                // out: DirectoryEntryIterator
 JSS(discounted_fee);          // out: amm_info
+JSS(diversifier);             // out: Orchard RPCs
+JSS(diversifier_index);       // in/out: Orchard RPCs
 JSS(domain);                  // out: ValidatorInfo, Manifest
 JSS(drops);                   // out: TxQ
 JSS(duration_us);             // out: NetworkOPs
@@ -262,6 +270,7 @@ JSS(errored);
 JSS(error_code);              // out: error
 JSS(error_exception);         // out: Submit
 JSS(error_message);           // out: error
+JSS(error_reason);            // out: Orchard RPCs
 JSS(exclusion_count);         // out: ExclusionInfo
 JSS(exclusion_list);          // out: ExclusionInfo
 JSS(excluded_accounts);       // out: ExclusionInfo
@@ -296,6 +305,7 @@ JSS(deep_freeze_peer);             // out: AccountLines
 JSS(frozen_balances);         // out: GatewayBalances
 JSS(full);                    // in: LedgerClearer, handlers/Ledger
 JSS(full_reply);              // out: PathFind
+JSS(full_viewing_key);        // in/out: Orchard RPCs
 JSS(fullbelow_size);          // out: GetCounts
 JSS(git);                     // out: server_info
 JSS(good);                    // out: RPCVersion
@@ -322,12 +332,14 @@ JSS(index);                   // in: LedgerEntry
                               //      LedgerEntry, TxHistory, LedgerData
 JSS(info);                    // out: ServerInfo, ConsensusInfo, FetchInfo
 JSS(initial_sync_duration_us);
+JSS(include_raw);             // in: Orchard RPCs
 JSS(internal_command);        // in: Internal
 JSS(invalid_API_version);     // out: Many, when a request has an invalid
                               //      version
 JSS(io_latency_ms);           // out: NetworkOPs
 JSS(ip);                      // in: Connect, out: OverlayImpl
 JSS(is_burned);               // out: nft_info (clio)
+JSS(is_empty);                // out: Orchard RPCs
 JSS(isSerialized);            // out: RPC server_definitions
                               // matches definitions.json format
 JSS(isSigningField);          // out: RPC server_definitions
@@ -370,9 +382,12 @@ JSS(ledger_index_max);        // in, out: AccountTx*
 JSS(ledger_index_min);        // in, out: AccountTx*
 JSS(ledger_max);              // in, out: AccountTx*
 JSS(ledger_min);              // in, out: AccountTx*
+JSS(ledger_range);            // out: Orchard RPCs
 JSS(ledger_time);             // out: NetworkOPs
 JSS(LEDGER_ENTRY_TYPES);      // out: RPC server_definitions
                               // matches definitions.json format
+JSS(length_bytes);            // out: Orchard RPCs
+JSS(length_hex);              // out: Orchard RPCs
 JSS(levels);                  // LogLevels
 JSS(limit);                   // in/out: AccountTx*, AccountOffers,
                               //         AccountLines, AccountObjects
@@ -411,6 +426,7 @@ JSS(master_key);              // out: WalletPropose, NetworkOPs,
 JSS(master_seed);             // out: WalletPropose
 JSS(master_seed_hex);         // out: WalletPropose
 JSS(master_signature);        // out: pubManifest
+JSS(max);                     // out: Orchard RPCs (ledger_range)
 JSS(max_ledger);              // in/out: LedgerCleaner
 JSS(max_queue_size);          // out: TxQ
 JSS(max_spend_drops);         // out: AccountInfo
@@ -427,6 +443,7 @@ JSS(metadata);                // out: TransactionEntry
 JSS(method);                  // RPC
 JSS(methods);
 JSS(metrics);                 // out: Peers
+JSS(min);                     // out: Orchard RPCs (ledger_range)
 JSS(min_count);               // in: GetCounts
 JSS(min_ledger);              // in: LedgerCleaner
 JSS(minimum_fee);             // out: TxQ
@@ -462,6 +479,8 @@ JSS(node_written_bytes);      // out: GetCounts
 JSS(node_writes_duration_us); // out: GetCounts
 JSS(node_write_retries);      // out: GetCounts
 JSS(node_writes_delayed);     // out::GetCounts
+JSS(note_count);              // out: Orchard RPCs
+JSS(notes);                   // out: Orchard RPCs
 JSS(nth);                     // out: RPC server_definitions
 JSS(obligations);             // out: GatewayBalances
 JSS(offers);                  // out: NetworkOPs, AccountOffers, Subscribe
@@ -486,6 +505,7 @@ JSS(password);                // in: Subscribe
 JSS(paths);                   // in: RipplePathFind
 JSS(paths_canonical);         // out: RipplePathFind
 JSS(paths_computed);          // out: PathRequest, RipplePathFind
+JSS(payment_type);            // in/out: Orchard RPCs
 JSS(peer);                    // in: AccountLines
 JSS(peer_authorized);         // out: AccountLines
 JSS(peer_id);                 // out: RCLCxPeerPos
@@ -523,6 +543,7 @@ JSS(quote_asset);             // in: get_aggregate_price
 JSS(random);                  // out: Random
 JSS(raw_meta);                // out: AcceptedLedgerTx
 JSS(receive_currencies);      // out: AccountCurrencies
+JSS(recipient);               // in/out: Orchard RPCs
 JSS(reference_level);         // out: TxQ
 JSS(refresh_interval);        // in: UNL
 JSS(refresh_interval_min);    // out: ValidatorSites
@@ -579,6 +600,10 @@ JSS(source_account);          // in: PathRequest, RipplePathFind
 JSS(source_amount);           // in: PathRequest, RipplePathFind
 JSS(source_currencies);       // in: PathRequest, RipplePathFind
 JSS(source_tag);              // out: AccountChannels
+JSS(spend_amount);            // in: Orchard RPCs (z→z transfers)
+JSS(spending_key);            // in/out: Orchard RPCs
+JSS(spent);                   // out: Orchard RPCs
+JSS(spent_count);             // out: Orchard RPCs
 JSS(stand_alone);             // out: NetworkOPs
 JSS(standard_deviation);      // out: get_aggregate_price
 JSS(start);                   // in: TxHistory
@@ -615,6 +640,8 @@ JSS(traffic);                 // out: Overlay
 JSS(trim);                    // in: get_aggregate_price
 JSS(trimmed_set);             // out: get_aggregate_price
 JSS(total);                   // out: counters
+JSS(total_balance);           // out: Orchard RPCs
+JSS(total_balance_xrp);       // out: Orchard RPCs
 JSS(total_bytes_recv);        // out: Peers
 JSS(total_bytes_sent);        // out: Peers
 JSS(total_coins);             // out: LedgerToJson
@@ -636,6 +663,7 @@ JSS(TYPES);                   // out: RPC server_definitions
                               // matches definitions.json format
 JSS(transfer_rate);           // out: nft_info (clio)
 JSS(transitions);             // out: NetworkOPs
+JSS(tree_size);               // out: Orchard RPCs
 JSS(treenode_cache_size);     // out: GetCounts
 JSS(treenode_track_size);     // out: GetCounts
 JSS(trusted);                 // out: UnlList
@@ -695,6 +723,7 @@ JSS(validation_seed);           // out: ValidationCreate, ValidationSeed
 JSS(validations);               // out: AmendmentTableImpl
 JSS(validator_list_threshold);  // out: ValidatorList
 JSS(validator_sites);           // out: ValidatorSites
+JSS(valid);                     // out: Orchard RPCs
 JSS(value);                     // out: STAmount
 JSS(vault_id);                  // in: VaultInfo
 JSS(version);                   // out: RPCVersion

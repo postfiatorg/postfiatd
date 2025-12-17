@@ -322,18 +322,17 @@ public:
                 std::cout << "TEST: Decrypted note value from bundle: " << decrypted_value << " drops" << std::endl;
                 BEAST_EXPECT(decrypted_value == amount_drops);  // Should match 1000 XRP
 
-                // SECOND: Scan the ledger and calculate shielded balance from ledger state
-                std::cout << "TEST: Scanning ledger state for note commitments..." << std::endl;
+                // SECOND: Verify note commitments are stored in ledger
+                std::cout << "TEST: Verifying note commitments in ledger..." << std::endl;
 
                 // Get all note commitment objects from the ledger
                 auto const& view = env.current();
-                uint64_t totalShieldedBalance = 0;
                 size_t notesFound = 0;
 
                 // Get the note commitments we stored
                 auto commitments = bundle->getNoteCommitments();
 
-                // Try to retrieve each note commitment from the ledger
+                // Verify each note commitment exists in the ledger
                 for (auto const& cmx : commitments) {
                     auto sle = view->read(keylet::orchardNoteCommitment(cmx));
                     if (!sle) {
@@ -343,62 +342,30 @@ public:
 
                     notesFound++;
 
-                    // Extract the full bundle from ledger
-                    if (!sle->isFieldPresent(sfOrchardBundle))
-                    {
-                        std::cout << "TEST: Note commitment missing bundle data" << std::endl;
-                        continue;
-                    }
+                    // Verify the commitment has required fields
+                    BEAST_EXPECT(sle->isFieldPresent(sfLedgerSequence));
+                    BEAST_EXPECT(sle->isFieldPresent(sfOrchardEncryptedNote));
+                    BEAST_EXPECT(sle->isFieldPresent(sfOrchardEphemeralKey));
 
-                    auto ledgerBundleData = sle->getFieldVL(sfOrchardBundle);
+                    // Verify bundle is NOT stored (we removed duplication)
+                    BEAST_EXPECT(!sle->isFieldPresent(sfOrchardBundle));
 
-                    std::cout << "TEST: Found note commitment in ledger with bundle ("
-                              << ledgerBundleData.size() << " bytes), attempting decryption..." << std::endl;
+                    auto encryptedNote = sle->getFieldVL(sfOrchardEncryptedNote);
+                    auto ephemeralKey = sle->getFieldVL(sfOrchardEphemeralKey);
 
-                    // Parse the bundle from ledger
-                    try {
-                        Blob bundleBlob(ledgerBundleData.begin(), ledgerBundleData.end());
-                        auto ledgerBundle = OrchardBundleWrapper::parse(makeSlice(bundleBlob));
+                    std::cout << "TEST: Found note commitment with encrypted note ("
+                              << encryptedNote.size() << " bytes) and ephemeral key ("
+                              << ephemeralKey.size() << " bytes)" << std::endl;
 
-                        if (!ledgerBundle) {
-                            std::cout << "TEST: Failed to parse bundle from ledger" << std::endl;
-                            continue;
-                        }
-
-                        // Try to decrypt notes from this bundle
-                        size_t numActions = ledgerBundle->numActions();
-                        for (size_t i = 0; i < numActions; ++i) {
-                            try {
-                                rust::Slice<const uint8_t> fvk_decrypt_slice{fvk_bytes.data(), fvk_bytes.size()};
-                                auto ledger_decrypt_result = orchard_test_try_decrypt_note(
-                                    *ledgerBundle->getRustBundle(),
-                                    i,
-                                    fvk_decrypt_slice
-                                );
-
-                                auto note_value = std::move(ledger_decrypt_result);
-                                totalShieldedBalance += note_value;
-
-                                std::cout << "TEST: Successfully decrypted note from ledger: "
-                                          << note_value << " drops" << std::endl;
-                            } catch (const std::exception& e) {
-                                // Note not for this viewing key, continue
-                            }
-                        }
-                    } catch (const std::exception& e) {
-                        std::cout << "TEST: Error processing bundle from ledger: " << e.what() << std::endl;
-                    }
+                    BEAST_EXPECT(encryptedNote.size() == 580);  // Expected encrypted note size
+                    BEAST_EXPECT(ephemeralKey.size() == 32);    // Expected ephemeral key size
                 }
 
                 std::cout << "TEST: Ledger scan complete. Found " << notesFound << " note commitments" << std::endl;
-                std::cout << "TEST: Total shielded balance from ledger: " << totalShieldedBalance << " drops"
-                          << " (" << (totalShieldedBalance / 1000000) << " XRP)" << std::endl;
 
                 BEAST_EXPECT(notesFound == 1);  // Should find exactly 1 note
-                BEAST_EXPECT(totalShieldedBalance == amount_drops);  // Should match 1000 XRP
 
-                std::cout << "TEST: Shielded balance verified from ledger state! Successfully scanned and decrypted "
-                          << notesFound << " note(s) showing " << (totalShieldedBalance / 1000000) << " XRP" << std::endl;
+                std::cout << "TEST: Note commitment verified in ledger state! Bundle decryption verified." << std::endl;
                 std::cout << "TEST: Shielded payment transaction with real bundle successful!" << std::endl;
             }
 
