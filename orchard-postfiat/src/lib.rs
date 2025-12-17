@@ -12,6 +12,12 @@ pub use bundle_real::OrchardBundle;
 // Always available for FFI test functions
 pub mod bundle_builder;
 
+// Note manager for production transactions
+pub mod note_manager;
+
+// Wallet state for server-side note tracking (Zcash-style)
+pub mod wallet_state;
+
 // Keep old stub for reference (not used)
 #[allow(dead_code)]
 mod bundle_stub;
