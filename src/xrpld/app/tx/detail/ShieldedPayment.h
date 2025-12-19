@@ -89,6 +89,18 @@ public:
     static TER
     preclaim(PreclaimContext const& ctx);
 
+    /** Check transaction signature authorization.
+
+        For z→z transactions without account field, authorization comes
+        from OrchardBundle cryptographic signatures (spend_auth_sig).
+        For traditional transactions, uses standard account signature verification.
+
+        @param ctx Preclaim context
+        @return NotTEC error code or tesSUCCESS
+    */
+    static NotTEC
+    checkSign(PreclaimContext const& ctx);
+
     /** Apply transaction to ledger (execution).
 
         Performs:

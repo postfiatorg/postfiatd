@@ -305,42 +305,100 @@ ShieldedPayment::preclaim(PreclaimContext const& ctx)
         }
     }
 
-    // Check account balance for fees and amounts
-    auto const sleAccount = ctx.view.read(keylet::account(ctx.tx[sfAccount]));
-    if (!sleAccount)
-    {
-        JLOG(ctx.j.warn())
-            << "ShieldedPayment: Source account does not exist";
-        return terNO_ACCOUNT;
-    }
+    // Check account balance for fees and amounts (skip for z->z with no account)
+    auto const accountID = ctx.tx.getAccountID(sfAccount);
 
-    auto balance = (*sleAccount)[sfBalance].xrp();
-    auto fee = ctx.tx[sfFee].xrp();
-
-    if (valueBalance < 0)
+    if (accountID != beast::zero)
     {
-        // t→z: Account must pay amount + fee
-        auto amount = ctx.tx[sfAmount].xrp();
-        if (balance < amount + fee)
+        // Traditional transaction with account
+        auto const sleAccount = ctx.view.read(keylet::account(accountID));
+        if (!sleAccount)
         {
             JLOG(ctx.j.warn())
-                << "ShieldedPayment: Insufficient balance for amount and fee";
-            return tecUNFUNDED_PAYMENT;
+                << "ShieldedPayment: Source account does not exist";
+            return terNO_ACCOUNT;
         }
+
+        auto balance = (*sleAccount)[sfBalance].xrp();
+        auto fee = ctx.tx[sfFee].xrp();
+
+        if (valueBalance < 0)
+        {
+            // t→z: Account must pay amount + fee
+            auto amount = ctx.tx[sfAmount].xrp();
+            if (balance < amount + fee)
+            {
+                JLOG(ctx.j.warn())
+                    << "ShieldedPayment: Insufficient balance for amount and fee";
+                return tecUNFUNDED_PAYMENT;
+            }
+        }
+        else if (valueBalance < fee.drops())
+        {
+            // Partial or full fee from transparent
+            if (balance < fee)
+            {
+                JLOG(ctx.j.warn())
+                    << "ShieldedPayment: Insufficient balance for fee";
+                return tecINSUFF_FEE;
+            }
+        }
+        // else: Fee fully paid from shielded pool (valueBalance >= fee)
     }
-    else if (valueBalance < fee.drops())
+    else
     {
-        // Partial or full fee from transparent
-        if (balance < fee)
+        // z->z transaction: no account, fee must be paid from shielded pool
+        auto fee = ctx.tx[sfFee].xrp();
+
+        if (valueBalance < fee.drops())
         {
             JLOG(ctx.j.warn())
-                << "ShieldedPayment: Insufficient balance for fee";
+                << "ShieldedPayment: z->z transaction requires fee payment from shielded pool";
             return tecINSUFF_FEE;
         }
+
+        // z->z with no destination means pure shielded transfer
+        // valueBalance should equal fee (no transparent output)
+        if (!ctx.tx.isFieldPresent(sfDestination) && valueBalance != fee.drops())
+        {
+            JLOG(ctx.j.warn())
+                << "ShieldedPayment: z->z valueBalance must equal fee for pure shielded transfer";
+            return temBAD_AMOUNT;
+        }
     }
-    // else: Fee fully paid from shielded pool (valueBalance >= fee)
 
     return tesSUCCESS;
+}
+
+//------------------------------------------------------------------------------
+
+NotTEC
+ShieldedPayment::checkSign(PreclaimContext const& ctx)
+{
+    // For z->z transactions with no account, authorization comes from
+    // the OrchardBundle cryptographic signatures (spend_auth_sig).
+    // The verifyProof() call in preclaim() already validates these signatures.
+    auto const accountID = ctx.tx.getAccountID(sfAccount);
+
+    if (accountID == beast::zero)
+    {
+        // z->z transaction: authorization is cryptographically proven
+        // in the OrchardBundle via RedPallas signatures on each spend action.
+        // The spend_auth_sig proves control of the spent notes without
+        // needing an account signature.
+        //
+        // Verification is already done in preclaim() via verifyProof(),
+        // which checks:
+        // 1. Zero-knowledge proof validity
+        // 2. spend_auth_sig for each Action
+        // 3. Binding signature for value balance
+        //
+        // No additional signature check needed here.
+        return tesSUCCESS;
+    }
+
+    // Traditional account-based authorization
+    return Transactor::checkSign(ctx);
 }
 
 //------------------------------------------------------------------------------
