@@ -186,12 +186,24 @@ Transactor::preflight1(PreflightContext const& ctx, std::uint32_t flagMask)
     auto const id = ctx.tx.getAccountID(sfAccount);
     if (id == beast::zero)
     {
-        JLOG(ctx.j.warn()) << "preflight1: bad account id";
-        return temBAD_SRC_ACCOUNT;
+        // Allow zero account for z->z ShieldedPayment transactions
+        // when OrchardPrivacy is enabled (fully shielded transactions)
+        if (ctx.tx.getTxnType() == ttSHIELDED_PAYMENT &&
+            ctx.rules.enabled(featureOrchardPrivacy) &&
+            ctx.tx.isFieldPresent(sfOrchardBundle))
+        {
+            // This is a z->z transaction - validation happens in ShieldedPayment::preflight
+            // No account field needed for fully shielded transactions
+        }
+        else
+        {
+            JLOG(ctx.j.warn()) << "preflight1: bad account id";
+            return temBAD_SRC_ACCOUNT;
+        }
     }
 
-    // Check if the sender account is excluded by consensus
-    if (ctx.app.getExclusionManager().isExcluded(id))
+    // Check if the sender account is excluded by consensus (only if account is present)
+    if (id != beast::zero && ctx.app.getExclusionManager().isExcluded(id))
     {
         JLOG(ctx.j.warn()) << "preflight1: sender account is excluded by consensus: "
                           << toBase58(id);
