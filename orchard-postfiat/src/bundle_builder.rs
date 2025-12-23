@@ -18,6 +18,18 @@ use rand::rngs::OsRng;
 use zcash_note_encryption::try_note_decryption;
 use zcash_protocol::value::ZatBalance;
 
+/// Generate a cryptographically secure random spending key
+///
+/// Uses the operating system's random number generator (OsRng) to generate
+/// 32 bytes of cryptographically secure random data for the spending key.
+pub fn generate_random_spending_key() -> SpendingKey {
+    use rand::RngCore;
+
+    let mut seed = [0u8; 32];
+    OsRng.fill_bytes(&mut seed);
+    SpendingKey::from_bytes(seed).expect("Valid random seed for spending key")
+}
+
 /// Generate a deterministic spending key for testing
 ///
 /// WARNING: This uses a fixed seed! Only for testing!

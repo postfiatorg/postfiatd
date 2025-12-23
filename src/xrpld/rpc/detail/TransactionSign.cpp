@@ -431,13 +431,7 @@ transactionPreProcessImpl(
     auto j = app.journal("RPCHandler");
 
     Json::Value jvResult;
-    std::optional<std::pair<PublicKey, SecretKey>> keyPair =
-        keypairForSignature(params, jvResult);
-    if (!keyPair || contains_error(jvResult))
-        return jvResult;
-
-    PublicKey const& pk = keyPair->first;
-    SecretKey const& sk = keyPair->second;
+    std::optional<std::pair<PublicKey, SecretKey>> keyPair;
 
     bool const verify =
         !(params.isMember(jss::offline) && params[jss::offline].asBool());
@@ -470,6 +464,26 @@ transactionPreProcessImpl(
 
     Json::Value& tx_json(params[jss::tx_json]);
 
+    // z->z ShieldedPayment may be authorized by Orchard proofs without an
+    // account secret for tx-level signing.
+    bool const isShieldedPaymentWithoutSecret =
+        tx_json.isObject() && tx_json.isMember(jss::TransactionType) &&
+        tx_json[jss::TransactionType].isString() &&
+        tx_json[jss::TransactionType].asString() == "ShieldedPayment" &&
+        !params.isMember(jss::secret);
+
+    if (!isShieldedPaymentWithoutSecret)
+    {
+        keyPair = keypairForSignature(params, jvResult);
+        if (!keyPair || contains_error(jvResult))
+            return jvResult;
+    }
+    else if (!tx_json.isMember(jss::Account))
+    {
+        // Placeholder so tx_json structural validation passes.
+        tx_json[jss::Account] = "rrrrrrrrrrrrrrrrrrrrrhoLvTp";
+    }
+
     // Check tx_json fields, but don't add any.
     auto [txJsonResult, srcAddressID] = checkTxJsonFields(
         tx_json,
@@ -490,10 +504,10 @@ transactionPreProcessImpl(
         return RPC::missing_field_error("tx_json.Sequence");
 
     std::shared_ptr<SLE const> sle;
-    if (verify)
+    if (verify && !isShieldedPaymentWithoutSecret)
         sle = app.openLedger().current()->read(keylet::account(srcAddressID));
 
-    if (verify && !sle)
+    if (verify && !sle && !isShieldedPaymentWithoutSecret)
     {
         // If not offline and did not find account, error.
         JLOG(j.debug()) << "transactionSign: Failed to find source account "
@@ -506,18 +520,25 @@ transactionPreProcessImpl(
     {
         if (!tx_json.isMember(jss::Sequence))
         {
-            bool const hasTicketSeq =
-                tx_json.isMember(sfTicketSequence.jsonName);
-            if (!hasTicketSeq && !sle)
+            if (isShieldedPaymentWithoutSecret)
             {
-                JLOG(j.debug())
-                    << "transactionSign: Failed to find source account "
-                    << "in current ledger: " << toBase58(srcAddressID);
-
-                return rpcError(rpcSRC_ACT_NOT_FOUND);
+                tx_json[jss::Sequence] = 0;
             }
-            tx_json[jss::Sequence] =
-                hasTicketSeq ? 0 : app.getTxQ().nextQueuableSeq(sle).value();
+            else
+            {
+                bool const hasTicketSeq =
+                    tx_json.isMember(sfTicketSequence.jsonName);
+                if (!hasTicketSeq && !sle)
+                {
+                    JLOG(j.debug())
+                        << "transactionSign: Failed to find source account "
+                        << "in current ledger: " << toBase58(srcAddressID);
+
+                    return rpcError(rpcSRC_ACT_NOT_FOUND);
+                }
+                tx_json[jss::Sequence] =
+                    hasTicketSeq ? 0 : app.getTxQ().nextQueuableSeq(sle).value();
+            }
         }
 
         if (!tx_json.isMember(jss::NetworkID))
@@ -556,27 +577,28 @@ transactionPreProcessImpl(
     }
 
     // If multisigning there should not be a single signature and vice versa.
-    if (signingArgs.isMultiSigning())
+    if (!isShieldedPaymentWithoutSecret && signingArgs.isMultiSigning())
     {
         if (tx_json.isMember(jss::TxnSignature))
             return rpcError(rpcALREADY_SINGLE_SIG);
 
         // If multisigning then we need to return the public key.
-        signingArgs.setPublicKey(pk);
+        signingArgs.setPublicKey(keyPair->first);
     }
-    else if (signingArgs.isSingleSigning())
+    else if (!isShieldedPaymentWithoutSecret && signingArgs.isSingleSigning())
     {
         if (tx_json.isMember(jss::Signers))
             return rpcError(rpcALREADY_MULTISIG);
     }
 
-    if (verify)
+    if (verify && !isShieldedPaymentWithoutSecret)
     {
         if (!sle)
             // XXX Ignore transactions for accounts not created.
             return rpcError(rpcSRC_ACT_NOT_FOUND);
 
-        JLOG(j.trace()) << "verify: " << toBase58(calcAccountID(pk)) << " : "
+        JLOG(j.trace()) << "verify: "
+                        << toBase58(calcAccountID(keyPair->first)) << " : "
                         << toBase58(srcAddressID);
 
         // Don't do this test if multisigning or if the signature is going into
@@ -607,20 +629,25 @@ transactionPreProcessImpl(
                     return rpcError(rpcDELEGATE_ACT_NOT_FOUND);
 
                 auto const err =
-                    acctMatchesPubKey(delegatedSle, delegatedAddressID, pk);
+                    acctMatchesPubKey(
+                        delegatedSle, delegatedAddressID, keyPair->first);
 
                 if (err != rpcSUCCESS)
                     return rpcError(err);
             }
             else
             {
-                auto const err = acctMatchesPubKey(sle, srcAddressID, pk);
+                auto const err =
+                    acctMatchesPubKey(sle, srcAddressID, keyPair->first);
 
                 if (err != rpcSUCCESS)
                     return rpcError(err);
             }
         }
     }
+
+    if (isShieldedPaymentWithoutSecret && !tx_json.isMember(jss::SigningPubKey))
+        tx_json[jss::SigningPubKey] = "";
 
     STParsedJSONObject parsed(std::string(jss::tx_json), tx_json);
     if (!parsed.object.has_value())
@@ -635,21 +662,30 @@ transactionPreProcessImpl(
     std::shared_ptr<STTx> stTx;
     try
     {
-        // If we're generating a multi-signature the SigningPubKey must be
-        // empty, otherwise it must be the master account's public key.
-        STObject* sigObject = &*parsed.object;
-        if (signatureTarget)
+        if (isShieldedPaymentWithoutSecret)
         {
-            // If the target object doesn't exist, make one.
-            if (!parsed.object->isFieldPresent(*signatureTarget))
-                parsed.object->setFieldObject(
-                    *signatureTarget,
-                    STObject{*signatureTemplate, *signatureTarget});
-            sigObject = &parsed.object->peekFieldObject(*signatureTarget);
+            parsed.object->setAccountID(sfAccount, AccountID());
+            parsed.object->setFieldVL(sfSigningPubKey, Slice(nullptr, 0));
         }
-        sigObject->setFieldVL(
-            sfSigningPubKey,
-            signingArgs.isMultiSigning() ? Slice(nullptr, 0) : pk.slice());
+        else
+        {
+            // If we're generating a multi-signature the SigningPubKey must be
+            // empty, otherwise it must be the master account's public key.
+            STObject* sigObject = &*parsed.object;
+            if (signatureTarget)
+            {
+                // If the target object doesn't exist, make one.
+                if (!parsed.object->isFieldPresent(*signatureTarget))
+                    parsed.object->setFieldObject(
+                        *signatureTarget,
+                        STObject{*signatureTemplate, *signatureTarget});
+                sigObject = &parsed.object->peekFieldObject(*signatureTarget);
+            }
+            sigObject->setFieldVL(
+                sfSigningPubKey,
+                signingArgs.isMultiSigning() ? Slice(nullptr, 0)
+                                             : keyPair->first.slice());
+        }
 
         stTx = std::make_shared<STTx>(std::move(parsed.object.value()));
     }
@@ -669,17 +705,17 @@ transactionPreProcessImpl(
         return RPC::make_error(rpcINVALID_PARAMS, reason);
 
     // If multisign then return multiSignature, else set TxnSignature field.
-    if (signingArgs.isMultiSigning())
+    if (!isShieldedPaymentWithoutSecret && signingArgs.isMultiSigning())
     {
         Serializer s = buildMultiSigningData(*stTx, signingArgs.getSigner());
 
-        auto multisig = ripple::sign(pk, sk, s.slice());
+        auto multisig = ripple::sign(keyPair->first, keyPair->second, s.slice());
 
         signingArgs.moveMultiSignature(std::move(multisig));
     }
-    else if (signingArgs.isSingleSigning())
+    else if (!isShieldedPaymentWithoutSecret && signingArgs.isSingleSigning())
     {
-        stTx->sign(pk, sk, signatureTarget);
+        stTx->sign(keyPair->first, keyPair->second, signatureTarget);
     }
 
     return transactionPreProcessResult{std::move(stTx)};

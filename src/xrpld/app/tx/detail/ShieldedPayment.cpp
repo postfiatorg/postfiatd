@@ -82,6 +82,8 @@ ShieldedPayment::preflight(PreflightContext const& ctx)
         return temDISABLED;
 
     // Standard preflight checks (account, fee, etc.)
+    JLOG(ctx.j.warn()) << "ShieldedPayment::preflight: CALLED";
+
     if (auto const ret = preflight1(ctx); !isTesSuccess(ret))
         return ret;
 
@@ -210,6 +212,9 @@ ShieldedPayment::preflight(PreflightContext const& ctx)
 TER
 ShieldedPayment::preclaim(PreclaimContext const& ctx)
 {
+    JLOG(ctx.j.warn()) << "ShieldedPayment::preclaim: CALLED for tx "
+                       << to_string(ctx.tx.getTransactionID());
+
     // Get bundle
     auto bundle = getBundle(ctx.tx);
     if (!bundle)
@@ -313,11 +318,7 @@ ShieldedPayment::preclaim(PreclaimContext const& ctx)
         // Traditional transaction with account
         auto const sleAccount = ctx.view.read(keylet::account(accountID));
         if (!sleAccount)
-        {
-            JLOG(ctx.j.warn())
-                << "ShieldedPayment: Source account does not exist";
             return terNO_ACCOUNT;
-        }
 
         auto balance = (*sleAccount)[sfBalance].xrp();
         auto fee = ctx.tx[sfFee].xrp();
@@ -406,6 +407,8 @@ ShieldedPayment::checkSign(PreclaimContext const& ctx)
 TER
 ShieldedPayment::doApply()
 {
+    JLOG(j_.warn()) << "ShieldedPayment::doApply: CALLED";
+
     // Get bundle
     auto bundle = getBundle(ctx_.tx);
     if (!bundle)
@@ -417,6 +420,9 @@ ShieldedPayment::doApply()
 
     auto valueBalance = bundle->getValueBalance();
     XRPAmount fee = ctx_.tx[sfFee].xrp();
+
+    JLOG(j_.warn()) << "ShieldedPayment::doApply: valueBalance=" << valueBalance
+                    << " fee=" << fee;
 
     // Handle transparent input (t→z)
     if (valueBalance < 0)
@@ -519,7 +525,13 @@ ShieldedPayment::doApply()
 
     // Try to decrypt notes with registered IVKs
     // This is the key step for automatic note detection!
+    JLOG(j_.warn()) << "ShieldedPayment::doApply: About to call wallet.tryDecryptNotes, tracked_keys="
+                    << wallet.getIncomingViewingKeyCount();
+
     auto decryptedCount = wallet.tryDecryptNotes(*bundle, ctx_.tx.getTransactionID(), view().seq());
+
+    JLOG(j_.warn()) << "ShieldedPayment::doApply: Decrypted " << decryptedCount << " notes";
+
     if (decryptedCount > 0)
     {
         JLOG(j_.info()) << "ShieldedPayment: Decrypted " << decryptedCount

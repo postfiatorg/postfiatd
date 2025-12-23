@@ -20,6 +20,7 @@
 #include <xrpld/rpc/Context.h>
 #include <xrpld/rpc/detail/RPCHelpers.h>
 #include <xrpld/app/misc/OrchardScanner.h>
+#include <xrpld/app/ledger/LedgerMaster.h>
 
 #include <xrpl/basics/strHex.h>
 #include <xrpl/protocol/ErrorCodes.h>
@@ -136,14 +137,28 @@ doOrchardScanBalance(RPC::JsonContext& context)
 
     try
     {
-        // Scan ledger for notes
-        auto notes = scanForOrchardNotes(
-            *ledger,
-            *fvk_blob,
-            min_ledger,
-            max_ledger,
-            marker,
-            limit);
+        // Scan ledgers in the specified range for notes
+        std::vector<OrchardNote> notes;
+
+        for (LedgerIndex seq = min_ledger; seq <= max_ledger && notes.size() < limit; ++seq)
+        {
+            // Get the ledger at this sequence
+            auto scan_ledger = context.ledgerMaster.getLedgerBySeq(seq);
+            if (!scan_ledger)
+                continue;  // Ledger not available, skip
+
+            // Scan this ledger for notes
+            auto ledger_notes = scanForOrchardNotes(
+                *scan_ledger,
+                *fvk_blob,
+                seq,  // min_ledger for this call
+                seq,  // max_ledger for this call
+                marker,
+                limit - notes.size());  // Remaining limit
+
+            // Add found notes to result
+            notes.insert(notes.end(), ledger_notes.begin(), ledger_notes.end());
+        }
 
         // Calculate balance
         auto total_balance = calculateOrchardBalance(notes, false);  // Only unspent

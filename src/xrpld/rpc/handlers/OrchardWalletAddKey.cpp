@@ -20,7 +20,9 @@
 #include <xrpld/rpc/Context.h>
 #include <xrpld/rpc/detail/RPCHelpers.h>
 #include <xrpld/app/misc/OrchardWallet.h>
+#include <xrpld/app/misc/OrchardScanner.h>
 #include <xrpld/app/main/Application.h>
+#include <xrpld/app/ledger/LedgerMaster.h>
 
 #include <xrpl/basics/strHex.h>
 #include <xrpl/protocol/ErrorCodes.h>
@@ -81,6 +83,8 @@ doOrchardWalletAddKey(RPC::JsonContext& context)
         auto& wallet = context.app.getOrchardWallet();
         Blob ivk_blob(ivk_vec.begin(), ivk_vec.end());
 
+        // Add the new IVK without resetting the wallet
+        // The commitment tree must persist to match anchors stored in the ledger
         if (!wallet.addIncomingViewingKey(ivk_blob))
         {
             result[jss::error] = "internal";
@@ -88,10 +92,82 @@ doOrchardWalletAddKey(RPC::JsonContext& context)
             return result;
         }
 
+        // Scan backward through existing ledgers to find notes for this key
+        // This allows the wallet to discover historical notes
+        auto& ledgerMaster = context.ledgerMaster;
+        auto current_ledger = ledgerMaster.getValidatedLedger();
+
+        std::size_t notes_found = 0;
+
+        if (current_ledger)
+        {
+            LedgerIndex current_seq = current_ledger->seq();
+            LedgerIndex start_seq = (current_seq > 1000) ? (current_seq - 1000) : 1;  // Scan last 1000 ledgers
+
+            // Scan from start to current, processing each ShieldedPayment transaction
+            for (LedgerIndex seq = start_seq; seq <= current_seq; ++seq)
+            {
+                auto scan_ledger = ledgerMaster.getLedgerBySeq(seq);
+                if (!scan_ledger)
+                    continue;
+
+                // Iterate through all transactions in this ledger
+                for (auto const& item : scan_ledger->txs)
+                {
+                    auto const& [sttx, stmeta] = item;
+                    if (!sttx || sttx->getTxnType() != ttSHIELDED_PAYMENT)
+                        continue;
+
+                    // Extract OrchardBundle if present
+                    if (!sttx->isFieldPresent(sfOrchardBundle))
+                        continue;
+
+                    auto const& bundle_blob = sttx->getFieldVL(sfOrchardBundle);
+                    if (bundle_blob.empty())
+                        continue;
+
+                    try
+                    {
+                        // Parse the bundle
+                        Slice bundle_slice(bundle_blob.data(), bundle_blob.size());
+                        auto bundle = OrchardBundleWrapper::parse(bundle_slice);
+                        if (!bundle)
+                            continue;
+
+                        // Get transaction hash
+                        uint256 tx_hash = sttx->getTransactionID();
+
+                        // First add ALL commitments to tree for witness computation
+                        // This must happen BEFORE tryDecryptNotes() to avoid overflow
+                        auto commitments = bundle->getNoteCommitments();
+                        for (auto const& cmx : commitments)
+                        {
+                            wallet.appendCommitment(cmx);
+                        }
+
+                        // Now try to decrypt notes from this bundle
+                        // The tree now has commitments, so witness creation won't overflow
+                        std::size_t decrypted = wallet.tryDecryptNotes(*bundle, tx_hash, seq);
+                        notes_found += decrypted;
+                    }
+                    catch (...)
+                    {
+                        // Failed to parse bundle or decrypt notes
+                        continue;
+                    }
+                }
+
+                // Checkpoint after each ledger
+                wallet.checkpoint(seq);
+            }
+        }
+
         // Return success
         result[jss::status] = "success";
         result["ivk"] = strHex(ivk_blob);
         result["tracked_keys"] = static_cast<unsigned>(wallet.getIncomingViewingKeyCount());
+        result["notes_found"] = static_cast<unsigned>(notes_found);
+        result["balance"] = std::to_string(wallet.getBalance());
 
         return result;
     }
