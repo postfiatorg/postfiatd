@@ -44,25 +44,12 @@ public:
         Env env{*this, supported_amendments() - featureOrchardPrivacy};
         Account const alice("alice");
 
-        std::cout << "TEST: Created alice account object" << std::endl;
-        std::cout << "TEST: Alice address: " << alice.human() << std::endl;
-        std::cout.flush();
-
-        std::cout << "TEST: About to fund alice..." << std::endl;
-        std::cout.flush();
         env.fund(XRP(10000), alice);
-        std::cout << "TEST: Funded alice with XRP(10000)" << std::endl;
-        std::cout.flush();
-
         env.close();
-        std::cout << "TEST: Closed ledger" << std::endl;
-        std::cout << "TEST: Alice balance: " << env.balance(alice) << std::endl;
-        std::cout << "TEST: Alice sequence: " << env.seq(alice) << std::endl;
 
         // Create an empty bundle (minimal valid structure)
         Blob emptyBundle;
         emptyBundle.push_back(0);  // nActionsOrchard = 0
-        std::cout << "TEST: Created empty bundle" << std::endl;
 
         // Create transaction JSON with explicit Sequence and Fee
         // to avoid account lookup before preflight
@@ -74,19 +61,9 @@ public:
         jv[jss::Fee] = to_string(env.current()->fees().base);
         jv[sfOrchardBundle.jsonName] = strHex(emptyBundle);
 
-        std::cout << "TEST: Created transaction JSON:" << std::endl;
-        std::cout << jv.toStyledString() << std::endl;
-        std::cout << "TEST: jv[Account] = " << jv[jss::Account].asString() << std::endl;
-        std::cout << "TEST: jv[Sequence] = " << jv[jss::Sequence].asUInt() << std::endl;
-        std::cout << "TEST: jv has Sequence? " << jv.isMember(jss::Sequence) << std::endl;
-
-        std::cout << "TEST: About to submit transaction..." << std::endl;
-
         // Should fail because OrchardPrivacy amendment is not enabled
         // Use sig(alice) to pass Account object for signing instead of string lookup
         env(jv, sig(alice), ter(temDISABLED));
-
-        std::cout << "TEST: Transaction submitted successfully" << std::endl;
     }
 
     void
@@ -229,8 +206,6 @@ public:
         env.fund(XRP(10000), alice);
         env.close();
 
-        std::cout << "TEST: Generating real Orchard bundle (this takes ~5-10 seconds)..." << std::endl;
-
         try {
             // Generate a deterministic spending key for testing
             auto sk_bytes = orchard_test_generate_spending_key(42);
@@ -257,8 +232,6 @@ public:
             );
             auto bundle_bytes = std::move(bundle_result);
 
-            std::cout << "TEST: Bundle generated! Size: " << bundle_bytes.size() << " bytes" << std::endl;
-
             // Convert rust::Vec to Blob for parsing
             Blob bundle_blob(bundle_bytes.begin(), bundle_bytes.end());
 
@@ -275,14 +248,8 @@ public:
                 auto nullifiers = bundle->getNullifiers();
                 BEAST_EXPECT(nullifiers.size() == 1);
 
-                std::cout << "TEST: Bundle validation passed!" << std::endl;
-                std::cout << "TEST:   - Actions: " << bundle->numActions() << std::endl;
-                std::cout << "TEST:   - Value balance: " << bundle->getValueBalance() << " drops" << std::endl;
-                std::cout << "TEST:   - Nullifiers: " << nullifiers.size() << std::endl;
-
                 // Now submit as a transaction!
                 // The empty anchor should exist after OrchardPrivacy amendment activation
-                std::cout << "TEST: Submitting transaction..." << std::endl;
 
                 Json::Value jv;
                 jv[jss::TransactionType] = jss::ShieldedPayment;
@@ -294,36 +261,27 @@ public:
                 // Submit and expect success now that anchor tracking is implemented!
                 env(jv, sig(alice), ter(tesSUCCESS));
 
-                std::cout << "TEST: Transaction succeeded!" << std::endl;
-
                 env.close();
 
                 // Verify alice's balance was debited
                 auto const balance = env.balance(alice);
-                std::cout << "TEST: Alice's balance after: " << balance << std::endl;
                 BEAST_EXPECT(balance < XRP(10000) - XRP(1000));
 
                 // Now verify the shielded balance using the viewing key!
-                std::cout << "TEST: Verifying shielded balance with viewing key..." << std::endl;
-
                 // Derive full viewing key from spending key
                 rust::Slice<const uint8_t> sk_slice_for_fvk{sk_bytes.data(), sk_bytes.size()};
                 auto fvk_result = orchard_test_get_full_viewing_key(sk_slice_for_fvk);
                 auto fvk_bytes = std::move(fvk_result);
                 BEAST_EXPECT(fvk_bytes.size() == 96);
-                std::cout << "TEST: Derived full viewing key (" << fvk_bytes.size() << " bytes)" << std::endl;
 
                 // FIRST: Try to decrypt the note from the bundle (in-memory verification)
-                std::cout << "TEST: Verifying in-memory bundle decryption..." << std::endl;
                 rust::Slice<const uint8_t> fvk_slice{fvk_bytes.data(), fvk_bytes.size()};
                 auto decrypt_result = orchard_test_try_decrypt_note(*bundle->getRustBundle(), 0, fvk_slice);
                 auto decrypted_value = std::move(decrypt_result);
 
-                std::cout << "TEST: Decrypted note value from bundle: " << decrypted_value << " drops" << std::endl;
                 BEAST_EXPECT(decrypted_value == amount_drops);  // Should match 1000 XRP
 
                 // SECOND: Verify note commitments are stored in ledger
-                std::cout << "TEST: Verifying note commitments in ledger..." << std::endl;
 
                 // Get all note commitment objects from the ledger
                 auto const& view = env.current();
@@ -335,10 +293,8 @@ public:
                 // Verify each note commitment exists in the ledger
                 for (auto const& cmx : commitments) {
                     auto sle = view->read(keylet::orchardNoteCommitment(cmx));
-                    if (!sle) {
-                        std::cout << "TEST: Note commitment not found in ledger" << std::endl;
+                    if (!sle)
                         continue;
-                    }
 
                     notesFound++;
 
@@ -353,24 +309,14 @@ public:
                     auto encryptedNote = sle->getFieldVL(sfOrchardEncryptedNote);
                     auto ephemeralKey = sle->getFieldVL(sfOrchardEphemeralKey);
 
-                    std::cout << "TEST: Found note commitment with encrypted note ("
-                              << encryptedNote.size() << " bytes) and ephemeral key ("
-                              << ephemeralKey.size() << " bytes)" << std::endl;
-
                     BEAST_EXPECT(encryptedNote.size() == 580);  // Expected encrypted note size
                     BEAST_EXPECT(ephemeralKey.size() == 32);    // Expected ephemeral key size
                 }
 
-                std::cout << "TEST: Ledger scan complete. Found " << notesFound << " note commitments" << std::endl;
-
                 BEAST_EXPECT(notesFound == 1);  // Should find exactly 1 note
-
-                std::cout << "TEST: Note commitment verified in ledger state! Bundle decryption verified." << std::endl;
-                std::cout << "TEST: Shielded payment transaction with real bundle successful!" << std::endl;
             }
 
-        } catch (const std::exception& e) {
-            std::cout << "TEST: Exception during bundle generation: " << e.what() << std::endl;
+        } catch (const std::exception&) {
             BEAST_EXPECT(false);  // Test failed
         }
     }

@@ -86,6 +86,7 @@ pub mod ffi {
         // Bundle building (for testing)
         // WARNING: These are for TESTING only! Production use should have proper key management
         fn orchard_test_get_empty_anchor() -> [u8; 32];
+        fn orchard_generate_random_spending_key() -> Vec<u8>;
         fn orchard_test_generate_spending_key(seed_byte: u8) -> Vec<u8>;
         fn orchard_test_get_address_from_sk(sk_bytes: &[u8]) -> Result<Vec<u8>>;
         fn orchard_test_build_transparent_to_shielded(
@@ -313,6 +314,15 @@ pub fn orchard_batch_verify_finalize(verifier: Box<OrchardBatchVerifier>) -> boo
 /// Get the empty anchor (for first transactions when tree is empty)
 pub fn orchard_test_get_empty_anchor() -> [u8; 32] {
     crate::bundle_builder::get_empty_anchor().to_bytes()
+}
+
+/// Generate a cryptographically secure random spending key
+///
+/// Uses OsRng to generate 32 bytes of secure random data for the spending key.
+/// This is suitable for production use.
+pub fn orchard_generate_random_spending_key() -> Vec<u8> {
+    let sk = crate::bundle_builder::generate_random_spending_key();
+    sk.to_bytes().to_vec()
 }
 
 /// Generate a deterministic spending key for testing

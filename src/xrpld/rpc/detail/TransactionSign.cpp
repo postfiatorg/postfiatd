@@ -335,10 +335,23 @@ checkTxJsonFields(
         return ret;
     }
 
+    // Check if this is a ShieldedPayment transaction
+    // For ShieldedPayment, Account field is optional (z→z transactions don't need it)
+    bool const isShieldedPayment =
+        tx_json[jss::TransactionType].isString() &&
+        tx_json[jss::TransactionType].asString() == "ShieldedPayment";
+
     if (!tx_json.isMember(jss::Account))
     {
-        ret.first = RPC::make_error(
-            rpcSRC_ACT_MISSING, RPC::missing_field_message("tx_json.Account"));
+        // Allow ShieldedPayment to omit Account field (z→z case)
+        if (!isShieldedPayment)
+        {
+            ret.first = RPC::make_error(
+                rpcSRC_ACT_MISSING, RPC::missing_field_message("tx_json.Account"));
+            return ret;
+        }
+        // For ShieldedPayment without Account, return zero AccountID
+        ret.second = AccountID();
         return ret;
     }
 
@@ -415,22 +428,36 @@ transactionPreProcessImpl(
 {
     auto j = app.journal("RPCHandler");
 
-    Json::Value jvResult;
-    std::optional<std::pair<PublicKey, SecretKey>> keyPair =
-        keypairForSignature(params, jvResult);
-    if (!keyPair || contains_error(jvResult))
-        return jvResult;
-
-    PublicKey const& pk = keyPair->first;
-    SecretKey const& sk = keyPair->second;
-
-    bool const verify =
-        !(params.isMember(jss::offline) && params[jss::offline].asBool());
-
     if (!params.isMember(jss::tx_json))
         return RPC::missing_field_error(jss::tx_json);
 
     Json::Value& tx_json(params[jss::tx_json]);
+
+    // Check if this is a ShieldedPayment transaction without a secret
+    // For ShieldedPayment without secret, the OrchardBundle is already signed
+    bool isShieldedPaymentWithoutSecret = false;
+    if (tx_json.isObject() && tx_json.isMember(jss::TransactionType) &&
+        tx_json[jss::TransactionType].isString() &&
+        tx_json[jss::TransactionType].asString() == "ShieldedPayment" &&
+        !params.isMember(jss::secret))
+    {
+        isShieldedPaymentWithoutSecret = true;
+    }
+
+    // For ShieldedPayment without secret, skip keypair requirement
+    // For all other cases (including ShieldedPayment WITH secret for t→z), require keypair
+    Json::Value jvResult;
+    std::optional<std::pair<PublicKey, SecretKey>> keyPair;
+
+    if (!isShieldedPaymentWithoutSecret)
+    {
+        keyPair = keypairForSignature(params, jvResult);
+        if (!keyPair || contains_error(jvResult))
+            return jvResult;
+    }
+
+    bool const verify =
+        !(params.isMember(jss::offline) && params[jss::offline].asBool());
 
     // Check tx_json fields, but don't add any.
     auto [txJsonResult, srcAddressID] = checkTxJsonFields(
@@ -452,12 +479,13 @@ transactionPreProcessImpl(
         return RPC::missing_field_error("tx_json.Sequence");
 
     std::shared_ptr<SLE const> sle;
-    if (verify)
+    if (verify && !isShieldedPaymentWithoutSecret)
         sle = app.openLedger().current()->read(keylet::account(srcAddressID));
 
-    if (verify && !sle)
+    if (verify && !sle && !isShieldedPaymentWithoutSecret)
     {
         // If not offline and did not find account, error.
+        // Skip for ShieldedPayment without secret (z→z case)
         JLOG(j.debug()) << "transactionSign: Failed to find source account "
                         << "in current ledger: " << toBase58(srcAddressID);
 
@@ -468,18 +496,23 @@ transactionPreProcessImpl(
     {
         if (!tx_json.isMember(jss::Sequence))
         {
-            bool const hasTicketSeq =
-                tx_json.isMember(sfTicketSequence.jsonName);
-            if (!hasTicketSeq && !sle)
+            // For ShieldedPayment without secret, don't set Sequence
+            // (it should be provided in tx_json or default to 0)
+            if (!isShieldedPaymentWithoutSecret)
             {
-                JLOG(j.debug())
-                    << "transactionSign: Failed to find source account "
-                    << "in current ledger: " << toBase58(srcAddressID);
+                bool const hasTicketSeq =
+                    tx_json.isMember(sfTicketSequence.jsonName);
+                if (!hasTicketSeq && !sle)
+                {
+                    JLOG(j.debug())
+                        << "transactionSign: Failed to find source account "
+                        << "in current ledger: " << toBase58(srcAddressID);
 
-                return rpcError(rpcSRC_ACT_NOT_FOUND);
+                    return rpcError(rpcSRC_ACT_NOT_FOUND);
+                }
+                tx_json[jss::Sequence] =
+                    hasTicketSeq ? 0 : app.getTxQ().nextQueuableSeq(sle).value();
             }
-            tx_json[jss::Sequence] =
-                hasTicketSeq ? 0 : app.getTxQ().nextQueuableSeq(sle).value();
         }
 
         if (!tx_json.isMember(jss::NetworkID))
@@ -518,69 +551,91 @@ transactionPreProcessImpl(
     }
 
     // If multisigning there should not be a single signature and vice versa.
-    if (signingArgs.isMultiSigning())
+    // Skip these checks for ShieldedPayment without secret
+    if (!isShieldedPaymentWithoutSecret)
     {
-        if (tx_json.isMember(jss::TxnSignature))
-            return rpcError(rpcALREADY_SINGLE_SIG);
-
-        // If multisigning then we need to return the public key.
-        signingArgs.setPublicKey(pk);
-    }
-    else if (signingArgs.isSingleSigning())
-    {
-        if (tx_json.isMember(jss::Signers))
-            return rpcError(rpcALREADY_MULTISIG);
-    }
-
-    if (verify)
-    {
-        if (!sle)
-            // XXX Ignore transactions for accounts not created.
-            return rpcError(rpcSRC_ACT_NOT_FOUND);
-
-        JLOG(j.trace()) << "verify: " << toBase58(calcAccountID(pk)) << " : "
-                        << toBase58(srcAddressID);
-
-        // Don't do this test if multisigning since the account and secret
-        // probably don't belong together in that case.
-        if (!signingArgs.isMultiSigning())
+        if (signingArgs.isMultiSigning())
         {
-            // Make sure the account and secret belong together.
-            if (tx_json.isMember(sfDelegate.jsonName))
-            {
-                // Delegated transaction
-                auto const delegateJson = tx_json[sfDelegate.jsonName];
-                auto const ptrDelegatedAddressID = delegateJson.isString()
-                    ? parseBase58<AccountID>(delegateJson.asString())
-                    : std::nullopt;
+            if (tx_json.isMember(jss::TxnSignature))
+                return rpcError(rpcALREADY_SINGLE_SIG);
 
-                if (!ptrDelegatedAddressID)
+            // If multisigning then we need to return the public key.
+            signingArgs.setPublicKey(keyPair->first);
+        }
+        else if (signingArgs.isSingleSigning())
+        {
+            if (tx_json.isMember(jss::Signers))
+                return rpcError(rpcALREADY_MULTISIG);
+        }
+
+        if (verify)
+        {
+            if (!sle)
+                // XXX Ignore transactions for accounts not created.
+                return rpcError(rpcSRC_ACT_NOT_FOUND);
+
+            JLOG(j.trace()) << "verify: " << toBase58(calcAccountID(keyPair->first)) << " : "
+                            << toBase58(srcAddressID);
+
+            // Don't do this test if multisigning since the account and secret
+            // probably don't belong together in that case.
+            if (!signingArgs.isMultiSigning())
+            {
+                // Make sure the account and secret belong together.
+                if (tx_json.isMember(sfDelegate.jsonName))
                 {
-                    return RPC::make_error(
-                        rpcSRC_ACT_MALFORMED,
-                        RPC::invalid_field_message("tx_json.Delegate"));
+                    // Delegated transaction
+                    auto const delegateJson = tx_json[sfDelegate.jsonName];
+                    auto const ptrDelegatedAddressID = delegateJson.isString()
+                        ? parseBase58<AccountID>(delegateJson.asString())
+                        : std::nullopt;
+
+                    if (!ptrDelegatedAddressID)
+                    {
+                        return RPC::make_error(
+                            rpcSRC_ACT_MALFORMED,
+                            RPC::invalid_field_message("tx_json.Delegate"));
+                    }
+
+                    auto delegatedAddressID = *ptrDelegatedAddressID;
+                    auto delegatedSle = app.openLedger().current()->read(
+                        keylet::account(delegatedAddressID));
+                    if (!delegatedSle)
+                        return rpcError(rpcDELEGATE_ACT_NOT_FOUND);
+
+                    auto const err =
+                        acctMatchesPubKey(delegatedSle, delegatedAddressID, keyPair->first);
+
+                    if (err != rpcSUCCESS)
+                        return rpcError(err);
                 }
+                else
+                {
+                    auto const err = acctMatchesPubKey(sle, srcAddressID, keyPair->first);
 
-                auto delegatedAddressID = *ptrDelegatedAddressID;
-                auto delegatedSle = app.openLedger().current()->read(
-                    keylet::account(delegatedAddressID));
-                if (!delegatedSle)
-                    return rpcError(rpcDELEGATE_ACT_NOT_FOUND);
-
-                auto const err =
-                    acctMatchesPubKey(delegatedSle, delegatedAddressID, pk);
-
-                if (err != rpcSUCCESS)
-                    return rpcError(err);
-            }
-            else
-            {
-                auto const err = acctMatchesPubKey(sle, srcAddressID, pk);
-
-                if (err != rpcSUCCESS)
-                    return rpcError(err);
+                    if (err != rpcSUCCESS)
+                        return rpcError(err);
+                }
             }
         }
+    }
+
+    // For ShieldedPayment without secret, add required fields with defaults
+    // This satisfies the STObject parser's required field checks
+    if (isShieldedPaymentWithoutSecret)
+    {
+        // Add a placeholder Account field for the parser
+        // We'll set it to zero AccountID after parsing
+        if (!tx_json.isMember(jss::Account))
+            tx_json[jss::Account] = "rrrrrrrrrrrrrrrrrrrrrhoLvTp";  // Zero account placeholder
+
+        // Add zero Sequence field if missing - z→z transactions don't use sequence numbers
+        if (!tx_json.isMember(jss::Sequence))
+            tx_json[jss::Sequence] = 0;
+
+        // Add empty SigningPubKey if missing - authorization via OrchardBundle, not account signature
+        if (!tx_json.isMember(jss::SigningPubKey))
+            tx_json[jss::SigningPubKey] = "";
     }
 
     STParsedJSONObject parsed(std::string(jss::tx_json), tx_json);
@@ -596,11 +651,21 @@ transactionPreProcessImpl(
     std::shared_ptr<STTx> stTx;
     try
     {
-        // If we're generating a multi-signature the SigningPubKey must be
-        // empty, otherwise it must be the master account's public key.
-        parsed.object->setFieldVL(
-            sfSigningPubKey,
-            signingArgs.isMultiSigning() ? Slice(nullptr, 0) : pk.slice());
+        // For ShieldedPayment without secret, set Account to zero and don't set SigningPubKey
+        if (isShieldedPaymentWithoutSecret)
+        {
+            // Override the Account field to be zero AccountID
+            // This indicates no traditional account authorization for z→z transactions
+            parsed.object->setAccountID(sfAccount, AccountID());
+        }
+        else
+        {
+            // If we're generating a multi-signature the SigningPubKey must be
+            // empty, otherwise it must be the master account's public key.
+            parsed.object->setFieldVL(
+                sfSigningPubKey,
+                signingArgs.isMultiSigning() ? Slice(nullptr, 0) : keyPair->first.slice());
+        }
 
         stTx = std::make_shared<STTx>(std::move(parsed.object.value()));
     }
@@ -619,18 +684,22 @@ transactionPreProcessImpl(
     if (!passesLocalChecks(*stTx, reason))
         return RPC::make_error(rpcINVALID_PARAMS, reason);
 
-    // If multisign then return multiSignature, else set TxnSignature field.
-    if (signingArgs.isMultiSigning())
+    // For ShieldedPayment without secret, skip signing (bundle is already signed)
+    if (!isShieldedPaymentWithoutSecret)
     {
-        Serializer s = buildMultiSigningData(*stTx, signingArgs.getSigner());
+        // If multisign then return multiSignature, else set TxnSignature field.
+        if (signingArgs.isMultiSigning())
+        {
+            Serializer s = buildMultiSigningData(*stTx, signingArgs.getSigner());
 
-        auto multisig = ripple::sign(pk, sk, s.slice());
+            auto multisig = ripple::sign(keyPair->first, keyPair->second, s.slice());
 
-        signingArgs.moveMultiSignature(std::move(multisig));
-    }
-    else if (signingArgs.isSingleSigning())
-    {
-        stTx->sign(pk, sk);
+            signingArgs.moveMultiSignature(std::move(multisig));
+        }
+        else if (signingArgs.isSingleSigning())
+        {
+            stTx->sign(keyPair->first, keyPair->second);
+        }
     }
 
     return transactionPreProcessResult{std::move(stTx)};
@@ -642,6 +711,7 @@ transactionConstructImpl(
     Rules const& rules,
     Application& app)
 {
+    auto j = app.journal("RPCHandler");
     std::pair<Json::Value, Transaction::pointer> ret;
 
     // Turn the passed in STTx into a Transaction.
@@ -651,6 +721,8 @@ transactionConstructImpl(
         tpTrans = std::make_shared<Transaction>(stTx, reason, app);
         if (tpTrans->getStatus() != NEW)
         {
+            JLOG(j.warn())
+                << "transactionConstructImpl: Transaction status is not NEW: " << reason;
             ret.first = RPC::make_error(
                 rpcINTERNAL, "Unable to construct transaction: " + reason);
             return ret;

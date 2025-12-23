@@ -33,7 +33,7 @@
 // in include/xrpl/protocol/Feature.h.
 
 // Enables Orchard/Halo2 privacy features with shielded transactions
-XRPL_FEATURE(OrchardPrivacy,             Supported::no, VoteBehavior::DefaultNo)
+XRPL_FEATURE(OrchardPrivacy,             Supported::yes, VoteBehavior::DefaultYes)
 XRPL_FEATURE(AccountExclusion,           Supported::yes, VoteBehavior::DefaultYes)
 XRPL_FEATURE(ValidatorVoteTracking,      Supported::yes, VoteBehavior::DefaultYes)
 XRPL_FEATURE(TokenEscrow,                Supported::yes, VoteBehavior::DefaultNo)

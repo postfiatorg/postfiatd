@@ -251,10 +251,18 @@ STTx::checkSign(
 {
     try
     {
+        // For ShieldedPayment with empty SigningPubKey, skip signature verification
+        // Authorization comes from OrchardBundle's RedPallas signatures
+        Blob const& signingPubKey = getFieldVL(sfSigningPubKey);
+        if (signingPubKey.empty() && getTxnType() == ttSHIELDED_PAYMENT)
+        {
+            // z→z ShieldedPayment - no account signature required
+            return {};
+        }
+
         // Determine whether we're single- or multi-signing by looking
         // at the SigningPubKey.  If it's empty we must be
         // multi-signing.  Otherwise we're single-signing.
-        Blob const& signingPubKey = getFieldVL(sfSigningPubKey);
         return signingPubKey.empty()
             ? checkMultiSign(requireCanonicalSig, rules)
             : checkSingleSign(requireCanonicalSig);
@@ -392,10 +400,20 @@ singleSignHelper(
     if (signer.isFieldPresent(sfSigners))
         return Unexpected("Cannot both single- and multi-sign.");
 
+    // For ShieldedPayment with empty SigningPubKey, skip signature verification
+    // Authorization comes from OrchardBundle's RedPallas signatures
+    auto const spk = signer.getFieldVL(sfSigningPubKey);
+    if (spk.empty() &&
+        signer.isFieldPresent(sfTransactionType) &&
+        signer.getFieldU16(sfTransactionType) == ttSHIELDED_PAYMENT)
+    {
+        // z→z ShieldedPayment - no account signature required
+        return {};
+    }
+
     bool validSig = false;
     try
     {
-        auto const spk = signer.getFieldVL(sfSigningPubKey);
         if (publicKeyType(makeSlice(spk)))
         {
             Blob const signature = signer.getFieldVL(sfTxnSignature);
@@ -697,11 +715,21 @@ isMemoOkay(STObject const& st, std::string& reason)
 static bool
 isAccountFieldOkay(STObject const& st)
 {
+    // For ShieldedPayment transactions, allow zero Account field (z->z case)
+    bool const isShieldedPayment =
+        st.isFieldPresent(sfTransactionType) &&
+        st.getFieldU16(sfTransactionType) == ttSHIELDED_PAYMENT;
+
     for (int i = 0; i < st.getCount(); ++i)
     {
         auto t = dynamic_cast<STAccount const*>(st.peekAtPIndex(i));
         if (t && t->isDefault())
+        {
+            // Allow zero Account field for ShieldedPayment (z->z transactions)
+            if (isShieldedPayment && t->getFName() == sfAccount)
+                continue;
             return false;
+        }
     }
 
     return true;

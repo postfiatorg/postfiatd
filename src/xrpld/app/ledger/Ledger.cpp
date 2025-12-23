@@ -185,10 +185,19 @@ Ledger::Ledger(
 
     // Select genesis account based on network type:
     // - PostFiat production networks (mainnet=2026, testnet=2025, devnet=2024)
-    //   use the PostFiat genesis account
-    // - Unit tests and other usage derive from "masterpassphrase"
+    //   use the PostFiat genesis account UNLESS running in standalone mode
+    // - Standalone mode and unit tests: derive from "masterpassphrase"
+    //   (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh / snoPBrXtMeMyMHUVTgbuqAfg1SUTb)
     AccountID id;
-    if (config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
+    if (config.standalone())
+    {
+        // Standalone mode: use masterpassphrase account for easier testing
+        auto const seed = generateSeed("masterpassphrase");
+        auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
+        id = calcAccountID(keypair.first);
+    }
+    else if (
+        config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
         config.NETWORK_ID == 2026)
     {
         // PostFiat production networks
@@ -196,7 +205,7 @@ Ledger::Ledger(
     }
     else
     {
-        // Unit tests and other usage: derive from masterpassphrase
+        // Other usage (unit tests, etc.): derive from masterpassphrase
         auto const seed = generateSeed("masterpassphrase");
         auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
         id = calcAccountID(keypair.first);
@@ -243,30 +252,18 @@ Ledger::Ledger(
         rawInsert(sle);
     }
 
-    std::cout << "DEBUG: Reached genesis anchor check point" << std::endl;
-
     // Initialize empty anchor for Orchard privacy (if feature is enabled)
     if (std::find(amendments.begin(), amendments.end(), featureOrchardPrivacy) !=
         amendments.end())
     {
-        std::cout << "DEBUG: OrchardPrivacy feature is enabled in genesis!" << std::endl;
-
         // Get the proper empty anchor from Orchard library
         auto emptyAnchorBytes = orchard_test_get_empty_anchor();
         uint256 emptyAnchor;
         std::memcpy(emptyAnchor.data(), emptyAnchorBytes.data(), 32);
 
-        std::cout << "GENESIS: Storing empty anchor: " << to_string(emptyAnchor) << std::endl;
-
         auto sle = std::make_shared<SLE>(keylet::orchardAnchor(emptyAnchor));
         sle->setFieldU32(sfLedgerSequence, 1);
         rawInsert(sle);
-
-        std::cout << "GENESIS: Empty anchor stored successfully" << std::endl;
-    }
-    else
-    {
-        std::cout << "DEBUG: OrchardPrivacy feature NOT enabled in genesis" << std::endl;
     }
 
     stateMap_.flushDirty(hotACCOUNT_NODE);

@@ -43,7 +43,7 @@ namespace ripple {
 //   // For z→z: (shielded to shielded)
 //   spending_key: <hex-string>           // 32 bytes (64 hex chars) - NOT STORED!
 //   spend_amount: <drops-string>         // Total amount available from shielded notes
-//   source_account: <address>            // Account for transaction format (pays fees)
+//   // NO source_account needed - authorization via OrchardBundle signatures
 //
 //   // For z→t: (shielded to transparent)
 //   spending_key: <hex-string>           // 32 bytes (64 hex chars) - NOT STORED!
@@ -264,14 +264,11 @@ doOrchardPreparePayment(RPC::JsonContext& context)
         }
         else if (payment_type == "z_to_z")
         {
-            // For z→z, we need a dummy account for the transaction format
-            // The actual source is the shielded pool, but we need Account field
-            // Use the spending key to derive an account (in production, this would be provided)
-            if (!context.params.isMember(jss::source_account))
-                return RPC::missing_field_error(jss::source_account);
-
-            tx_json[jss::Account] = context.params[jss::source_account].asString();
-            tx_json[jss::Amount] = "0";  // No transparent amount for z→z
+            // For z→z, there is NO Account field required
+            // Authorization comes from OrchardBundle cryptographic signatures (spend_auth_sig)
+            // The Account field defaults to the zero account (accountID == beast::zero)
+            // No Amount field needed - purely shielded transfer
+            // Fee is paid from the shielded pool (valueBalance)
         }
         else if (payment_type == "z_to_t")
         {

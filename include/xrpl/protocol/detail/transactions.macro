@@ -550,8 +550,6 @@ TRANSACTION(ttBATCH, 71, Batch, Delegation::notDelegatable, ({
     2. From shielded: Positive valueBalance includes fee amount
  */
 TRANSACTION(ttSHIELDED_PAYMENT, 72, ShieldedPayment, Delegation::notDelegatable, ({
-    {sfAccount, soeOPTIONAL},      // Optional for z->z: fully shielded transactions
-    {sfFee, soeOPTIONAL},          // Optional for z->z: fee paid from shielded pool
     {sfDestination, soeOPTIONAL},  // For z->t: transparent recipient
     {sfAmount, soeOPTIONAL},       // For t->z: amount to shield, or z->t: amount to unshield
     {sfOrchardBundle, soeOPTIONAL}, // The shielded operations (contains valueBalance)

@@ -27,8 +27,6 @@
 
 #include <orchard-postfiat/src/ffi/bridge.rs.h>
 
-#include <random>
-
 namespace ripple {
 
 // {
@@ -58,36 +56,33 @@ doOrchardGenerateKeys(RPC::JsonContext& context)
         }
     }
 
-    // Generate or parse spending key
-    std::uint8_t seed_byte;
-
-    if (context.params.isMember(jss::seed))
-    {
-        // User provided seed - use it for deterministic generation
-        if (!context.params[jss::seed].isString())
-            return RPC::expected_field_error(jss::seed, "string");
-
-        auto seed_str = context.params[jss::seed].asString();
-
-        // For simplicity, hash the seed string to get a single byte
-        // In production, you'd want more sophisticated key derivation
-        std::hash<std::string> hasher;
-        auto seed_hash = hasher(seed_str);
-        seed_byte = static_cast<std::uint8_t>(seed_hash & 0xFF);
-    }
-    else
-    {
-        // No seed provided - use crypto-secure random
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, 255);
-        seed_byte = static_cast<std::uint8_t>(dis(gen));
-    }
-
+    // Generate spending key
     try
     {
-        // Generate spending key (32 bytes)
-        auto sk_vec = ::orchard_test_generate_spending_key(seed_byte);
+        rust::Vec<std::uint8_t> sk_vec;
+
+        if (context.params.isMember(jss::seed))
+        {
+            // User provided seed - use it for deterministic TEST generation
+            // WARNING: This is only for testing! Uses weak key derivation!
+            if (!context.params[jss::seed].isString())
+                return RPC::expected_field_error(jss::seed, "string");
+
+            auto seed_str = context.params[jss::seed].asString();
+
+            // For simplicity, hash the seed string to get a single byte
+            // In production, you'd want more sophisticated key derivation
+            std::hash<std::string> hasher;
+            auto seed_hash = hasher(seed_str);
+            std::uint8_t seed_byte = static_cast<std::uint8_t>(seed_hash & 0xFF);
+
+            sk_vec = ::orchard_test_generate_spending_key(seed_byte);
+        }
+        else
+        {
+            // No seed provided - use cryptographically secure random generation
+            sk_vec = ::orchard_generate_random_spending_key();
+        }
 
         if (sk_vec.size() != 32)
         {
