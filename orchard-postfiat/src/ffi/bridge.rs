@@ -108,6 +108,11 @@ pub mod ffi {
             ephemeral_key_bytes: &[u8; 32],
             fvk_bytes: &[u8]
         ) -> Result<u64>;
+        fn orchard_test_compute_note_nullifier(
+            bundle: &OrchardBundle,
+            action_index: usize,
+            fvk_bytes: &[u8]
+        ) -> Result<Vec<u8>>;
 
         // Production note management and z->z transactions
         type NoteManager;
@@ -193,12 +198,14 @@ pub mod ffi {
             wallet: &OrchardWalletState,
             sk_bytes: &[u8],
             recipient_addr_bytes: &[u8],
-            send_amount: u64
+            send_amount: u64,
+            fee: u64
         ) -> Result<Vec<u8>>;
         fn orchard_wallet_build_z_to_t(
             wallet: &OrchardWalletState,
             sk_bytes: &[u8],
-            unshield_amount: u64
+            unshield_amount: u64,
+            fee: u64
         ) -> Result<Vec<u8>>;
     }
 }
@@ -471,6 +478,52 @@ pub fn orchard_test_try_decrypt_note_from_ciphertext(
         &fvk,
     )
     .ok_or_else(|| anyhow::anyhow!("Failed to decrypt note - may not be for this viewing key"))
+}
+
+/// Compute the nullifier for a decrypted note
+///
+/// This function decrypts a note and returns its nullifier.
+/// The nullifier is what gets revealed when spending a note.
+///
+/// # Arguments
+/// * `bundle` - The Orchard bundle containing the action
+/// * `action_index` - Index of the action in the bundle
+/// * `fvk_bytes` - Full viewing key bytes (96 bytes)
+///
+/// # Returns
+/// 32-byte nullifier if decryption succeeds
+pub fn orchard_test_compute_note_nullifier(
+    bundle: &OrchardBundle,
+    action_index: usize,
+    fvk_bytes: &[u8],
+) -> anyhow::Result<Vec<u8>> {
+    use orchard::keys::{FullViewingKey, PreparedIncomingViewingKey, Scope};
+    use zcash_note_encryption::try_note_decryption;
+
+    let fvk_array: [u8; 96] = fvk_bytes
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("Invalid full viewing key length, expected 96 bytes"))?;
+
+    let fvk = FullViewingKey::from_bytes(&fvk_array)
+        .ok_or_else(|| anyhow::anyhow!("Invalid full viewing key"))?;
+
+    // Get the inner bundle and action
+    let inner = bundle.inner()
+        .ok_or_else(|| anyhow::anyhow!("Bundle is empty"))?;
+    let action = inner.actions().get(action_index)
+        .ok_or_else(|| anyhow::anyhow!("Action index out of bounds"))?;
+
+    // Prepare the incoming viewing key for trial decryption
+    let ivk = PreparedIncomingViewingKey::new(&fvk.to_ivk(Scope::External));
+
+    // Try to decrypt the note
+    let domain = orchard::note_encryption::OrchardDomain::for_action(action);
+    let (note, _addr, _memo) = try_note_decryption(&domain, &ivk, action)
+        .ok_or_else(|| anyhow::anyhow!("Failed to decrypt note - not ours"))?;
+
+    // Compute and return the nullifier
+    let nullifier = note.nullifier(&fvk).to_bytes();
+    Ok(nullifier.to_vec())
 }
 
 /// Build a shielded-to-shielded (z→z) bundle for testing
@@ -868,6 +921,7 @@ pub fn orchard_wallet_build_z_to_z(
     sk_bytes: &[u8],
     recipient_addr_bytes: &[u8],
     send_amount: u64,
+    fee: u64,
 ) -> anyhow::Result<Vec<u8>> {
     use orchard::Address;
 
@@ -888,6 +942,7 @@ pub fn orchard_wallet_build_z_to_z(
         &sk_array,
         recipient,
         send_amount,
+        fee,
     )
     .map_err(|e| anyhow::anyhow!("Failed to build z→z bundle: {}", e))
 }
@@ -916,6 +971,7 @@ pub fn orchard_wallet_build_z_to_t(
     wallet: &OrchardWalletState,
     sk_bytes: &[u8],
     unshield_amount: u64,
+    fee: u64,
 ) -> anyhow::Result<Vec<u8>> {
     // Parse spending key
     let sk_array: [u8; 32] = sk_bytes.try_into()
@@ -926,6 +982,7 @@ pub fn orchard_wallet_build_z_to_t(
         &wallet.inner,
         &sk_array,
         unshield_amount,
+        fee,
     )
     .map_err(|e| anyhow::anyhow!("Failed to build z→t bundle: {}", e))
 }

@@ -23,7 +23,7 @@ port_ws_admin_local
 port = 5005
 ip = 127.0.0.1
 admin = 127.0.0.1
-protocol = http
+protocol = https
 
 [port_ws_admin_local]
 port = 6006
@@ -73,10 +73,10 @@ The amendment must be enabled for Orchard features to work. In standalone mode, 
 
 ```bash
 # From postfiatd directory
-./.build/postfiatd --conf ~/postfiat-test.cfg --standalone -a
+./.build/postfiatd --conf ~/postfiat-test.cfg --a
 ```
 
-The `-a` flag starts with a genesis ledger where all configured amendments are enabled.
+The `-a` flag starts in standalone mode with a genesis ledger where all configured amendments are enabled.
 
 Keep this terminal open - it's your running node.
 
@@ -384,8 +384,7 @@ curl -k -X POST https://localhost:5005/ \
       "payment_type": "z_to_z",
       "spending_key": "D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99",
       "recipient": "C19558DB8066177BF73AAD65280FC53378A082A3FA5CEE57218D3A5F846E24201CC6978222B9AE2B4F1D95",
-      "amount": "500000000",
-      "spend_amount": "1000000000"
+      "amount": "500000000"
     }]
   }' | jq
 ```
@@ -444,7 +443,7 @@ curl -k -X POST https://localhost:5005/ \
 
 ## Step 5: Test z→t (Shielded to Transparent)
 
-Unshield 300 XRP back to a transparent account.
+Unshield 200 XRP from the second account back to a transparent account.
 
 ### Prepare z→t Payment
 
@@ -455,10 +454,9 @@ curl -k -X POST https://localhost:5005/ \
     "method": "orchard_prepare_payment",
     "params": [{
       "payment_type": "z_to_t",
-      "spending_key": "D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99",
+      "spending_key": "E47A50F38ACBADB0B839AE3A089E9988665B4E13819B64A4A4D3B3F5CB7FA0B3",
       "destination_account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
-      "amount": "300000000",
-      "source_account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
+      "amount": "200000000"
     }]
   }' | jq
 ```
@@ -471,7 +469,7 @@ curl -k -X POST https://localhost:5005/ \
       "TransactionType": "ShieldedPayment",
       "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
       "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
-      "Amount": "300000000",
+      "Amount": "200000000",
       "OrchardBundle": "...hex..."
     }
   }
@@ -490,7 +488,7 @@ curl -k -X POST https://localhost:5005/ \
         "TransactionType": "ShieldedPayment",
         "Account": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
         "Destination": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
-        "Amount": "300000000",
+        "Amount": "200000000",
         "OrchardBundle": "...paste hex...",
         "Fee": "10"
       },
@@ -514,7 +512,7 @@ curl -k -X POST https://localhost:5005/ \
   }' | jq '.result.account_data.Balance'
 ```
 
-Balance should increase by ~300,000,000 drops.
+Balance should increase by ~200,000,000 drops.
 
 Check shielded balance decreased:
 
@@ -527,18 +525,118 @@ curl -k -X POST https://localhost:5005/ \
   }' | jq
 ```
 
-Should show ~200 XRP remaining (500 - 300).
+Should show ~300 XRP remaining in second account (500 - 200).
+
+---
+
+## Step 6: Test Double-Spend Detection
+
+This test verifies that the ledger correctly rejects transactions that attempt to reveal the same nullifier twice (double-spend attempt).
+
+### The Concept
+
+In Orchard, each note can only be spent once. When a note is spent, its nullifier is revealed and recorded on-chain. If someone tries to spend the same note again, the transaction should be rejected because the nullifier was already revealed.
+
+**Important**: Notes are NOT marked as spent during transaction preparation - they're only marked as spent when the transaction is included in a ledger during consensus. This means you can prepare multiple conflicting transactions, but only the first one submitted will succeed.
+
+### Prepare First z→z Transaction
+
+This is the same as Step 4. Prepare a z→z payment:
+
+```bash
+curl -k -X POST https://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "method": "orchard_prepare_payment",
+    "params": [{
+      "payment_type": "z_to_z",
+      "amount": "500000000",
+      "spending_key": "D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99",
+      "recipient": "C19558DB8066177BF73AAD65280FC53378A082A3FA5CEE57218D3A5F846E24201CC6978222B9AE2B4F1D95"
+    }]
+  }' | jq -r '.result.tx_json' > first_tx.json
+```
+
+### Prepare Second z→z Transaction (Double-Spend Attempt)
+
+**Before submitting the first transaction**, prepare a SECOND transaction using the SAME spending key. This will spend the same notes:
+
+```bash
+curl -k -X POST https://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "method": "orchard_prepare_payment",
+    "params": [{
+      "payment_type": "z_to_z",
+      "amount": "100000000",
+      "spending_key": "D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99",
+      "recipient": "C19558DB8066177BF73AAD65280FC53378A082A3FA5CEE57218D3A5F846E24201CC6978222B9AE2B4F1D95"
+    }]
+  }' | jq -r '.result.tx_json' > double_spend_tx.json
+```
+
+**This should succeed!** Even though it's spending the same notes, preparation doesn't mark notes as spent.
+
+### Submit First Transaction
+
+```bash
+curl -k -X POST https://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"method\": \"submit\",
+    \"params\": [{
+      \"tx_json\": $(cat first_tx.json)
+    }]
+  }" | jq
+```
+
+Expected result: `"engine_result": "tesSUCCESS"`
+
+Accept the ledger:
+
+```bash
+curl -k -X POST https://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d '{"method": "ledger_accept", "params": [{}]}' | jq
+```
+
+### Attempt Double-Spend (Should FAIL)
+
+Now try to submit the second transaction:
+
+```bash
+curl -k -X POST https://localhost:5005/ \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"method\": \"submit\",
+    \"params\": [{
+      \"tx_json\": $(cat double_spend_tx.json)
+    }]
+  }" | jq
+```
+
+**Expected result**: `"engine_result": "tefORCHARD_DUPLICATE_NULLIFIER"`
+
+This confirms that the ledger correctly detected and rejected the double-spend attempt because the nullifier from the same note was already revealed in the first transaction.
+
+### What This Tests
+
+- ✅ Multiple conflicting transactions can be prepared (notes aren't marked as spent during preparation)
+- ✅ Only the first transaction can be successfully submitted
+- ✅ The second transaction is rejected with `tefORCHARD_DUPLICATE_NULLIFIER`
+- ✅ Double-spend protection is working correctly
 
 ---
 
 ## Expected Flow Summary
 
-| Step | Action | Transparent Balance | Shielded Balance |
-|------|--------|---------------------|------------------|
-| 0 | Initial | 100,000 XRP | 0 XRP |
-| 1 | t→z (shield 1000 XRP) | 99,000 XRP | 1,000 XRP |
-| 2 | z→z (transfer 500 XRP) | 99,000 XRP | 1,000 XRP (split) |
-| 3 | z→t (unshield 300 XRP) | 99,300 XRP | 700 XRP |
+| Step | Action | Transparent Balance | Shielded Balance | Result |
+|------|--------|---------------------|------------------|--------|
+| 0 | Initial | 100,000 XRP | 0 XRP | - |
+| 1 | t→z (shield 1000 XRP) | 99,000 XRP | 1,000 XRP | ✅ tesSUCCESS |
+| 2 | z→z (transfer 500 XRP) | 99,000 XRP | 1,000 XRP (split) | ✅ tesSUCCESS |
+| 3 | z→t (unshield 300 XRP) | 99,300 XRP | 700 XRP | ✅ tesSUCCESS |
+| 4 | Double-spend attempt | 99,300 XRP | 700 XRP | ❌ tefORCHARD_DUPLICATE_NULLIFIER |
 
 ---
 
@@ -630,6 +728,87 @@ rm /tmp/postfiat_test_debug.log
 
 ---
 
+## Automated Testing Script
+
+For convenience, all the manual testing steps described above have been automated in a Python script located at:
+
+```
+scripts/orchard_full.py
+```
+
+### What the Script Does
+
+The script automatically performs all the test steps described in this document:
+
+1. **Step 1-2**: Adds two full viewing keys to the wallet
+2. **Step 3**: Prepares and submits a t→z transaction (shield 1000 XRP)
+3. **Step 4**: Prepares and submits a z→z transaction (transfer 500 XRP)
+4. **Step 5**: Prepares and submits a z→t transaction (unshield 200 XRP)
+5. **Step 6**: Tests double-spend detection:
+   - Prepares first z→z transaction
+   - Prepares second z→z transaction with same spending key (double-spend attempt)
+   - Submits first transaction (should succeed)
+   - Submits second transaction (should fail with `tefORCHARD_DUPLICATE_NULLIFIER`)
+
+### Prerequisites
+
+Install Python dependencies:
+
+```bash
+pip install requests urllib3
+```
+
+### Running the Script
+
+1. Start the standalone node as described in the Setup section above
+
+2. Run the script:
+
+```bash
+cd /home/korisnik/postfiatd
+python3 scripts/orchard_full.py
+```
+
+### Expected Output
+
+The script will output JSON responses for each step and print summaries like:
+
+```
+=== Step 1: Adding FIRST viewing key to wallet ===
+First viewing key added! Balance: 0, Notes found: 0, Tracked keys: 1
+
+=== Step 8b: Preparing double-spend z→z payment ===
+Step 8b: Prepared double-spend z→z payment (will test later)
+
+=== Step 17: Testing double-spend detection ===
+Step 17: Submitting the double-spend transaction prepared in Step 8b...
+Step 17: Double-spend attempt result: tefORCHARD_DUPLICATE_NULLIFIER
+SUCCESS: Double-spend correctly rejected with tefORCHARD_DUPLICATE_NULLIFIER
+
+=== All tests completed successfully! ===
+Summary:
+  - t→z: 1000 XRP shielded to first account
+  - z→z: 500 XRP transferred from first to second account
+  - z→t: 200 XRP unshielded from second account to transparent
+  - Double-spend: Correctly rejected with duplicate nullifier detection
+```
+
+### When to Use Manual vs Automated Testing
+
+**Use Manual Testing When:**
+- Learning how Orchard transactions work
+- Debugging specific issues
+- Testing edge cases not covered by the script
+- Verifying individual RPC endpoints
+
+**Use Automated Script When:**
+- Quick regression testing after code changes
+- Verifying the complete flow works end-to-end
+- Testing in CI/CD pipelines
+- Demonstrating Orchard functionality
+
+---
+
 ## Next Steps
 
 After manual testing succeeds:
@@ -641,7 +820,7 @@ After manual testing succeeds:
 
 ---
 
-**Last Updated**: 2025-12-22
+**Last Updated**: 2025-12-24
 **Related Docs**:
 - [Orchard Implementation Status](./OrchardImplementationStatus.md)
 - [Orchard Wallet Integration](./ORCHARD_WALLET_INTEGRATION.md)

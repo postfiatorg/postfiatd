@@ -42,7 +42,7 @@ namespace ripple {
 //
 //   // For z→z: (shielded to shielded)
 //   spending_key: <hex-string>           // 32 bytes (64 hex chars) - NOT STORED!
-//   spend_amount: <drops-string>         // Total amount available from shielded notes
+//   // Notes are automatically selected from wallet to cover amount + fee
 //   // NO source_account needed - authorization via OrchardBundle signatures
 //
 //   // For z→t: (shielded to transparent)
@@ -95,21 +95,26 @@ doOrchardPreparePayment(RPC::JsonContext& context)
         return result;
     }
 
-    // Recipient is required (Orchard address)
-    if (!context.params.isMember(jss::recipient))
-        return RPC::missing_field_error(jss::recipient);
-
-    if (!context.params[jss::recipient].isString())
-        return RPC::expected_field_error(jss::recipient, "string");
-
-    auto recipient_hex = context.params[jss::recipient].asString();
-    auto recipient_blob = strUnHex(recipient_hex);
-
-    if (!recipient_blob || recipient_blob->size() != 43)
+    // Recipient is required for t→z and z→z (Orchard address)
+    // For z→t, destination_account is used instead
+    std::optional<Blob> recipient_blob;
+    if (payment_type == "t_to_z" || payment_type == "z_to_z")
     {
-        result[jss::error] = "invalidParams";
-        result[jss::error_message] = "recipient must be 43 bytes (86 hex characters)";
-        return result;
+        if (!context.params.isMember(jss::recipient))
+            return RPC::missing_field_error(jss::recipient);
+
+        if (!context.params[jss::recipient].isString())
+            return RPC::expected_field_error(jss::recipient, "string");
+
+        auto recipient_hex = context.params[jss::recipient].asString();
+        recipient_blob = strUnHex(recipient_hex);
+
+        if (!recipient_blob || recipient_blob->size() != 43)
+        {
+            result[jss::error] = "invalidParams";
+            result[jss::error_message] = "recipient must be 43 bytes (86 hex characters)";
+            return result;
+        }
     }
 
     // Get current ledger for anchor
@@ -124,7 +129,6 @@ doOrchardPreparePayment(RPC::JsonContext& context)
     // Build transaction based on payment type
     try
     {
-        rust::Slice<const uint8_t> recipient_slice{recipient_blob->data(), recipient_blob->size()};
         rust::Vec<uint8_t> bundle_bytes;
 
         if (payment_type == "t_to_z")
@@ -133,6 +137,7 @@ doOrchardPreparePayment(RPC::JsonContext& context)
             if (!context.params.isMember(jss::source_account))
                 return RPC::missing_field_error(jss::source_account);
 
+            rust::Slice<const uint8_t> recipient_slice{recipient_blob->data(), recipient_blob->size()};
             auto bundle_bytes_result = ::orchard_test_build_transparent_to_shielded(
                 amount_drops,
                 recipient_slice,
@@ -141,7 +146,7 @@ doOrchardPreparePayment(RPC::JsonContext& context)
         }
         else if (payment_type == "z_to_z")
         {
-            // Shielded to shielded - requires spending key and spend amount
+            // Shielded to shielded - requires spending key
             if (!context.params.isMember(jss::spending_key))
                 return RPC::missing_field_error(jss::spending_key);
 
@@ -158,34 +163,8 @@ doOrchardPreparePayment(RPC::JsonContext& context)
                 return result;
             }
 
-            // For z→z, we need the total amount available to spend
-            if (!context.params.isMember(jss::spend_amount))
-                return RPC::missing_field_error(jss::spend_amount);
-
-            if (!context.params[jss::spend_amount].isString())
-                return RPC::expected_field_error(jss::spend_amount, "string");
-
-            std::uint64_t spend_amount_drops = 0;
-            try
-            {
-                spend_amount_drops = std::stoull(context.params[jss::spend_amount].asString());
-            }
-            catch (...)
-            {
-                result[jss::error] = "invalidParams";
-                result[jss::error_message] = "Invalid spend_amount format";
-                return result;
-            }
-
-            // Validate that spend_amount >= amount (send amount)
-            if (spend_amount_drops < amount_drops)
-            {
-                result[jss::error] = "invalidParams";
-                result[jss::error_message] = "spend_amount must be >= amount (insufficient balance)";
-                return result;
-            }
-
             // Get global OrchardWallet instance
+            // Note: The wallet automatically selects notes to cover amount + fee
             auto& wallet = context.app.getOrchardWallet();
 
             // Check if wallet has sufficient balance
@@ -199,19 +178,53 @@ doOrchardPreparePayment(RPC::JsonContext& context)
                 return result;
             }
 
-            // Build z→z bundle using wallet state
+            // Determine fee for z→z transaction
+            std::uint64_t fee_drops;
+            if (context.params.isMember(jss::fee))
+            {
+                try
+                {
+                    fee_drops = std::stoull(context.params[jss::fee].asString());
+                }
+                catch (...)
+                {
+                    result[jss::error] = "invalidParams";
+                    result[jss::error_message] = "Invalid fee format";
+                    return result;
+                }
+            }
+            else
+            {
+                // Use base fee from current ledger
+                fee_drops = ledger->fees().base.drops();
+            }
+
+            // Check wallet has enough for amount + fee
+            if (wallet_balance < amount_drops + fee_drops)
+            {
+                result[jss::error] = "invalidParams";
+                result[jss::error_message] = "Insufficient wallet balance: have " +
+                                              std::to_string(wallet_balance) +
+                                              " drops, need " + std::to_string(amount_drops + fee_drops) +
+                                              " (amount + fee)";
+                return result;
+            }
+
+            // Build z→z bundle using wallet state (includes fee in valueBalance)
             rust::Slice<const uint8_t> sk_slice{sk_blob->data(), sk_blob->size()};
+            rust::Slice<const uint8_t> recipient_slice{recipient_blob->data(), recipient_blob->size()};
 
             auto bundle_bytes_result = ::orchard_wallet_build_z_to_z(
                 *wallet.getRustState(),
                 sk_slice,
                 recipient_slice,
-                amount_drops);
+                amount_drops,
+                fee_drops);
             bundle_bytes = std::move(bundle_bytes_result);
         }
         else if (payment_type == "z_to_t")
         {
-            // Shielded to transparent - requires spending key
+            // Shielded to transparent - requires spending key and destination account
             if (!context.params.isMember(jss::spending_key))
                 return RPC::missing_field_error(jss::spending_key);
 
@@ -228,27 +241,56 @@ doOrchardPreparePayment(RPC::JsonContext& context)
                 return result;
             }
 
+            // destination_account is required for z→t
+            if (!context.params.isMember(jss::destination_account))
+                return RPC::missing_field_error(jss::destination_account);
+
             // Get global OrchardWallet instance
             auto& wallet = context.app.getOrchardWallet();
 
             // Check if wallet has sufficient balance
             auto wallet_balance = wallet.getBalance();
-            if (wallet_balance < amount_drops)
+
+            // Determine fee for z→t transaction
+            std::uint64_t fee_drops;
+            if (context.params.isMember(jss::fee))
+            {
+                try
+                {
+                    fee_drops = std::stoull(context.params[jss::fee].asString());
+                }
+                catch (...)
+                {
+                    result[jss::error] = "invalidParams";
+                    result[jss::error_message] = "Invalid fee format";
+                    return result;
+                }
+            }
+            else
+            {
+                // Use base fee from current ledger
+                fee_drops = ledger->fees().base.drops();
+            }
+
+            // Check wallet has enough for amount + fee
+            if (wallet_balance < amount_drops + fee_drops)
             {
                 result[jss::error] = "invalidParams";
                 result[jss::error_message] = "Insufficient wallet balance: have " +
                                               std::to_string(wallet_balance) +
-                                              " drops, need " + std::to_string(amount_drops);
+                                              " drops, need " + std::to_string(amount_drops + fee_drops) +
+                                              " (amount + fee)";
                 return result;
             }
 
-            // Build z→t bundle using wallet state
+            // Build z→t bundle using wallet state (includes fee in valueBalance)
             rust::Slice<const uint8_t> sk_slice{sk_blob->data(), sk_blob->size()};
 
             auto bundle_bytes_result = ::orchard_wallet_build_z_to_t(
                 *wallet.getRustState(),
                 sk_slice,
-                amount_drops);
+                amount_drops,
+                fee_drops);
             bundle_bytes = std::move(bundle_bytes_result);
         }
 
@@ -272,14 +314,10 @@ doOrchardPreparePayment(RPC::JsonContext& context)
         }
         else if (payment_type == "z_to_t")
         {
-            // For z→t, we need a source account (for signing) and destination account
-            if (!context.params.isMember(jss::source_account))
-                return RPC::missing_field_error(jss::source_account);
-
-            if (!context.params.isMember(jss::destination_account))
-                return RPC::missing_field_error(jss::destination_account);
-
-            tx_json[jss::Account] = context.params[jss::source_account].asString();
+            // For z→t: Like z→z, NO Account field required
+            // Authorization comes from OrchardBundle cryptographic signatures
+            // Destination and Amount specify where funds are unshielded to
+            // Fee is paid from the shielded pool (valueBalance)
             tx_json[jss::Destination] = context.params[jss::destination_account].asString();
             tx_json[jss::Amount] = std::to_string(amount_drops);
         }

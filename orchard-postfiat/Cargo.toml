@@ -40,6 +40,7 @@ hex = "0.4"
 blake2b_simd = "1.0"
 rand = "0.8"  # For bundle generation in tests
 incrementalmerkletree = "0.8"  # For Merkle tree operations
+bridgetree = "0.7"  # BridgeTree for automatic witness management (Zcash approach)
 
 [build-dependencies]
 cxx-build = "1.0"

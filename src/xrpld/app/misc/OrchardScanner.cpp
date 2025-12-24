@@ -41,6 +41,9 @@ scanForOrchardNotes(
     ::NoteManager* note_manager)
 {
     std::vector<OrchardNote> result;
+    // Map from nullifier to note index in result vector
+    // This allows us to mark notes as spent when we encounter their nullifiers
+    std::map<uint256, size_t> nullifierToNoteIdx;
 
     // Validate FVK length
     if (fvk_bytes.size() != 96)
@@ -54,7 +57,7 @@ scanForOrchardNotes(
     // For scanning multiple ledgers (min_ledger to max_ledger),
     // the caller would need to call this function for each ledger in the range
 
-    // Iterate through all transactions in this ledger
+    // FIRST PASS: Collect all notes that belong to us with their nullifiers
     for (auto const& item : ledger.txs)
     {
         // Check if we've reached the limit
@@ -159,24 +162,38 @@ scanForOrchardNotes(
                         }
                     }
 
-                    // Get nullifier to check if spent
-                    auto nullifiers_blob = ::orchard_bundle_get_nullifiers(*bundle);
-                    if (nullifiers_blob.size() < (action_idx + 1) * 32)
-                        continue;
+                    // Compute the nullifier for this OUTPUT note
+                    // Following Zcash's approach: we need this nullifier to later check
+                    // if it's revealed in any transaction (which would mean the note is spent)
+                    uint256 note_nullifier;
+                    try {
+                        rust::Slice<const uint8_t> fvk_slice{fvk_bytes.data(), fvk_bytes.size()};
+                        auto nullifier_bytes = ::orchard_test_compute_note_nullifier(*bundle, action_idx, fvk_slice);
 
-                    // TODO: Check if nullifier exists in ledger to determine if spent
-                    // For now, assume unspent
-                    bool spent = false;
+                        if (nullifier_bytes.size() == 32) {
+                            std::memcpy(note_nullifier.data(), nullifier_bytes.data(), 32);
+                        } else {
+                            // Failed to compute nullifier, skip this note
+                            continue;
+                        }
+                    } catch (...) {
+                        // Failed to compute nullifier, skip this note
+                        continue;
+                    }
 
                     // Create OrchardNote metadata for result
+                    // Initially marked as unspent; will be updated in second pass
                     OrchardNote note;
                     note.cmx = cmx;
                     note.amount = amount;
                     note.ledger_seq = ledger.seq();
                     note.tx_hash = tx_hash;
-                    note.spent = spent;
+                    note.spent = false;
 
+                    // Store the note and track its nullifier
+                    size_t note_idx = result.size();
                     result.push_back(note);
+                    nullifierToNoteIdx[note_nullifier] = note_idx;
                 }
                 catch (...)
                 {
@@ -188,6 +205,62 @@ scanForOrchardNotes(
         catch (...)
         {
             // Failed to parse bundle or decrypt notes
+            continue;
+        }
+    }
+
+    // SECOND PASS: Check all revealed nullifiers across all transactions
+    // to see if any of our notes have been spent
+    for (auto const& item : ledger.txs)
+    {
+        auto const& [sttx, stmeta] = item;
+        if (!sttx)
+            continue;
+
+        // Check if this is a ShieldedPayment transaction
+        if (sttx->getTxnType() != ttSHIELDED_PAYMENT)
+            continue;
+
+        // Extract OrchardBundle if present
+        if (!sttx->isFieldPresent(sfOrchardBundle))
+            continue;
+
+        auto const& bundle_blob = sttx->getFieldVL(sfOrchardBundle);
+        if (bundle_blob.empty())
+            continue;
+
+        try
+        {
+            // Parse the bundle
+            rust::Slice<const uint8_t> bundle_slice{bundle_blob.data(), bundle_blob.size()};
+            auto bundle = ::orchard_bundle_parse(bundle_slice);
+
+            // Check all revealed nullifiers in this bundle
+            // Following Zcash's approach: if any revealed nullifier matches
+            // a nullifier from our notes, that note has been spent
+            auto nullifiers_blob = ::orchard_bundle_get_nullifiers(*bundle);
+            size_t num_nullifiers = nullifiers_blob.size() / 32;
+
+            for (size_t i = 0; i < num_nullifiers; ++i)
+            {
+                uint256 revealed_nullifier;
+                std::memcpy(
+                    revealed_nullifier.data(),
+                    nullifiers_blob.data() + (i * 32),
+                    32);
+
+                // Check if this revealed nullifier matches any of our notes
+                auto it = nullifierToNoteIdx.find(revealed_nullifier);
+                if (it != nullifierToNoteIdx.end())
+                {
+                    // This nullifier matches one of our notes - mark it as spent
+                    result[it->second].spent = true;
+                }
+            }
+        }
+        catch (...)
+        {
+            // Failed to parse bundle
             continue;
         }
     }

@@ -499,9 +499,32 @@ ShieldedPayment::doApply()
     auto encryptedNotes = bundle->getEncryptedNotes();
 
     // Update wallet with new notes
-    // This happens during ledger processing so wallets automatically track incoming funds
+    // CRITICAL: Only update wallet tree during CONSENSUS, not during OpenView validation
+    // This prevents double-updating the tree which causes anchor mismatches
+    // Following XRP Ledger pattern (see Transactor.cpp:1346):
+    //   - view().open() == true during OpenView (validation phase)
+    //   - view().open() == false during LedgerConsensus (final ledger building)
+    // The commitment tree should only grow during consensus to match Zcash's approach
     auto& wallet = ctx_.app.getOrchardWallet();
 
+    // CRITICAL: Mark notes as spent in wallet (only during consensus)
+    // This keeps the wallet's in-memory spent_notes set synchronized with on-chain nullifier set
+    // Following Zcash's approach: when a nullifier is revealed, the corresponding note is spent
+    if (!view().open())
+    {
+        for (auto const& nf : nullifiers)
+        {
+            wallet.markSpent(nf);
+            JLOG(j_.warn()) << "ShieldedPayment::doApply: [CONSENSUS] Marked note as spent, nullifier: "
+                            << to_string(nf);
+        }
+    }
+
+    // NOTE: Checkpoint is now done at the LEDGER level in BuildLedger.cpp
+    // Following Zcash's approach: checkpoint once per ledger (block), not per transaction
+    // This ensures the tree state is checkpointed before ANY transactions are applied
+
+    size_t commitment_idx = 0;
     for (auto const& noteData : encryptedNotes)
     {
         auto sleCommitment =
@@ -517,20 +540,51 @@ ShieldedPayment::doApply()
         JLOG(j_.trace()) << "ShieldedPayment: Stored note commitment "
                          << to_string(noteData.cmx) << " at ledger " << view().seq();
 
-        // Add commitment to wallet tree
-        wallet.appendCommitment(noteData.cmx);
+        // Only update wallet tree during consensus, NOT during OpenView
+        if (!view().open())
+        {
+            // Log wallet anchor BEFORE adding this commitment
+            auto anchor_before_commitment = wallet.getAnchor();
 
-        JLOG(j_.trace()) << "ShieldedPayment: Added commitment to wallet tree";
+            JLOG(j_.warn()) << "ShieldedPayment::doApply: [CONSENSUS] BEFORE adding commitment #" << commitment_idx
+                            << " (cmx=" << to_string(noteData.cmx) << "), wallet anchor: "
+                            << (anchor_before_commitment ? to_string(*anchor_before_commitment) : "EMPTY");
+
+            // Add commitment to wallet tree
+            wallet.appendCommitment(noteData.cmx);
+
+            // Log wallet anchor AFTER adding this commitment
+            auto anchor_after_commitment = wallet.getAnchor();
+
+            JLOG(j_.warn()) << "ShieldedPayment::doApply: [CONSENSUS] AFTER adding commitment #" << commitment_idx
+                            << ", wallet anchor: "
+                            << (anchor_after_commitment ? to_string(*anchor_after_commitment) : "EMPTY");
+        }
+        else
+        {
+            JLOG(j_.trace()) << "ShieldedPayment::doApply: [OPENVIEW] Skipping wallet tree update for commitment #" << commitment_idx
+                             << " (cmx=" << to_string(noteData.cmx) << ")";
+        }
+
+        commitment_idx++;
     }
 
-    // Try to decrypt notes with registered IVKs
+    // Try to decrypt notes with registered IVKs (only during consensus)
     // This is the key step for automatic note detection!
-    JLOG(j_.warn()) << "ShieldedPayment::doApply: About to call wallet.tryDecryptNotes, tracked_keys="
-                    << wallet.getIncomingViewingKeyCount();
+    size_t decryptedCount = 0;
+    if (!view().open())
+    {
+        JLOG(j_.warn()) << "ShieldedPayment::doApply: [CONSENSUS] About to call wallet.tryDecryptNotes, tracked_keys="
+                        << wallet.getIncomingViewingKeyCount();
 
-    auto decryptedCount = wallet.tryDecryptNotes(*bundle, ctx_.tx.getTransactionID(), view().seq());
+        decryptedCount = wallet.tryDecryptNotes(*bundle, ctx_.tx.getTransactionID(), view().seq());
 
-    JLOG(j_.warn()) << "ShieldedPayment::doApply: Decrypted " << decryptedCount << " notes";
+        JLOG(j_.warn()) << "ShieldedPayment::doApply: [CONSENSUS] Decrypted " << decryptedCount << " notes";
+    }
+    else
+    {
+        JLOG(j_.trace()) << "ShieldedPayment::doApply: [OPENVIEW] Skipping wallet.tryDecryptNotes";
+    }
 
     if (decryptedCount > 0)
     {
@@ -539,29 +593,53 @@ ShieldedPayment::doApply()
                         << to_string(ctx_.tx.getTransactionID());
     }
 
-    // Checkpoint wallet at this ledger sequence
-    // This allows wallet to track which ledgers have been processed
-    wallet.checkpoint(view().seq());
-    JLOG(j_.trace()) << "ShieldedPayment: Wallet checkpointed at ledger " << view().seq();
+    // CRITICAL: Store anchors following Zcash's approach
+    // Zcash stores the tree root AFTER appending bundle commitments (main.cpp:3516-3518)
+    // We need to store BOTH:
+    // 1. The bundle's anchor (for validation) - t→z uses empty anchor, z→z uses historical
+    // 2. The wallet's current anchor (for future transactions) - this is what next tx will reference
 
-    // Store anchor (for future transactions to reference)
-    auto anchor = bundle->getAnchor();
-    auto sleAnchor = view().peek(keylet::orchardAnchor(anchor));
-    if (!sleAnchor)
+    auto bundle_anchor = bundle->getAnchor();
+    JLOG(j_.warn()) << "ShieldedPayment::doApply: Bundle anchor (from bundle): " << to_string(bundle_anchor);
+
+    // Store the bundle's anchor (this validates that the spend was against a known tree state)
+    auto sleAnchorBundle = view().peek(keylet::orchardAnchor(bundle_anchor));
+    if (!sleAnchorBundle)
     {
-        // Create new anchor entry with current ledger sequence
-        sleAnchor = std::make_shared<SLE>(keylet::orchardAnchor(anchor));
-        (*sleAnchor)[sfLedgerSequence] = view().seq();
-        view().insert(sleAnchor);
+        sleAnchorBundle = std::make_shared<SLE>(keylet::orchardAnchor(bundle_anchor));
+        (*sleAnchorBundle)[sfLedgerSequence] = view().seq();
+        view().insert(sleAnchorBundle);
 
-        JLOG(j_.trace()) << "ShieldedPayment: Stored new anchor "
-                         << to_string(anchor) << " at ledger "
-                         << view().seq();
+        JLOG(j_.warn()) << "ShieldedPayment: Stored bundle anchor "
+                        << to_string(bundle_anchor) << " at ledger "
+                        << view().seq();
     }
-    else
+
+    // Get wallet's current anchor AFTER adding this bundle's commitments
+    // This is the tree root that FUTURE transactions will use when spending notes created by this tx
+    auto wallet_anchor_opt = wallet.getAnchor();
+    if (wallet_anchor_opt)
     {
-        JLOG(j_.trace()) << "ShieldedPayment: Anchor " << to_string(anchor)
-                         << " already exists";
+        auto wallet_anchor = *wallet_anchor_opt;
+        JLOG(j_.warn()) << "ShieldedPayment::doApply: Wallet anchor after adding commitments: "
+                        << to_string(wallet_anchor);
+
+        // Store the wallet's current anchor (matching Zcash's PushAnchor after processing tx)
+        // Only store if different from bundle anchor
+        if (wallet_anchor != bundle_anchor)
+        {
+            auto sleAnchorWallet = view().peek(keylet::orchardAnchor(wallet_anchor));
+            if (!sleAnchorWallet)
+            {
+                sleAnchorWallet = std::make_shared<SLE>(keylet::orchardAnchor(wallet_anchor));
+                (*sleAnchorWallet)[sfLedgerSequence] = view().seq();
+                view().insert(sleAnchorWallet);
+
+                JLOG(j_.warn()) << "ShieldedPayment: Stored wallet anchor (for future txs) "
+                                << to_string(wallet_anchor) << " at ledger "
+                                << view().seq();
+            }
+        }
     }
 
     JLOG(j_.info()) << "ShieldedPayment: Successfully applied transaction";
