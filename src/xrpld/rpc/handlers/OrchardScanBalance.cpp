@@ -27,6 +27,8 @@
 #include <xrpl/protocol/RPCErr.h>
 #include <xrpl/protocol/jss.h>
 
+#include <orchard-postfiat/src/ffi/bridge.rs.h>
+
 namespace ripple {
 
 // {
@@ -139,7 +141,9 @@ doOrchardScanBalance(RPC::JsonContext& context)
     {
         // Scan ledgers in the specified range for notes
         std::vector<OrchardNote> notes;
+        std::map<uint256, size_t> nullifierToNoteIdx;
 
+        // FIRST PASS: Collect all notes and their nullifiers across all ledgers
         for (LedgerIndex seq = min_ledger; seq <= max_ledger && notes.size() < limit; ++seq)
         {
             // Get the ledger at this sequence
@@ -156,8 +160,107 @@ doOrchardScanBalance(RPC::JsonContext& context)
                 marker,
                 limit - notes.size());  // Remaining limit
 
-            // Add found notes to result
-            notes.insert(notes.end(), ledger_notes.begin(), ledger_notes.end());
+            // Add found notes to result and track their nullifiers
+            for (auto& note : ledger_notes)
+            {
+                // Compute nullifier for this note so we can check if it's spent later
+                // We need to find the transaction and bundle again to compute the nullifier
+                for (auto const& item : scan_ledger->txs)
+                {
+                    auto const& [sttx, stmeta] = item;
+                    if (!sttx || sttx->getTransactionID() != note.tx_hash)
+                        continue;
+
+                    if (!sttx->isFieldPresent(sfOrchardBundle))
+                        continue;
+
+                    auto const& bundle_blob = sttx->getFieldVL(sfOrchardBundle);
+                    if (bundle_blob.empty())
+                        continue;
+
+                    try
+                    {
+                        rust::Slice<const uint8_t> bundle_slice{bundle_blob.data(), bundle_blob.size()};
+                        auto bundle = ::orchard_bundle_parse(bundle_slice);
+                        size_t num_actions = ::orchard_bundle_num_actions(*bundle);
+
+                        // Find the action that matches this note's cmx
+                        auto cmx_blob = ::orchard_bundle_get_note_commitments(*bundle);
+                        for (size_t action_idx = 0; action_idx < num_actions; ++action_idx)
+                        {
+                            if (cmx_blob.size() < (action_idx + 1) * 32)
+                                continue;
+
+                            uint256 cmx;
+                            std::memcpy(cmx.data(), cmx_blob.data() + (action_idx * 32), 32);
+
+                            if (cmx == note.cmx)
+                            {
+                                // Found the matching action, compute its nullifier
+                                rust::Slice<const uint8_t> fvk_slice{fvk_blob->data(), fvk_blob->size()};
+                                auto nullifier_bytes = ::orchard_test_compute_note_nullifier(*bundle, action_idx, fvk_slice);
+
+                                if (nullifier_bytes.size() == 32)
+                                {
+                                    uint256 note_nullifier;
+                                    std::memcpy(note_nullifier.data(), nullifier_bytes.data(), 32);
+                                    size_t note_idx = notes.size();
+                                    nullifierToNoteIdx[note_nullifier] = note_idx;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    catch (...) {}
+                    break;
+                }
+
+                notes.push_back(note);
+            }
+        }
+
+        // SECOND PASS: Check all revealed nullifiers across all ledgers in the range
+        for (LedgerIndex seq = min_ledger; seq <= max_ledger; ++seq)
+        {
+            auto scan_ledger = context.ledgerMaster.getLedgerBySeq(seq);
+            if (!scan_ledger)
+                continue;
+
+            for (auto const& item : scan_ledger->txs)
+            {
+                auto const& [sttx, stmeta] = item;
+                if (!sttx || sttx->getTxnType() != ttSHIELDED_PAYMENT)
+                    continue;
+
+                if (!sttx->isFieldPresent(sfOrchardBundle))
+                    continue;
+
+                auto const& bundle_blob = sttx->getFieldVL(sfOrchardBundle);
+                if (bundle_blob.empty())
+                    continue;
+
+                try
+                {
+                    rust::Slice<const uint8_t> bundle_slice{bundle_blob.data(), bundle_blob.size()};
+                    auto bundle = ::orchard_bundle_parse(bundle_slice);
+
+                    auto nullifiers_blob = ::orchard_bundle_get_nullifiers(*bundle);
+                    size_t num_nullifiers = nullifiers_blob.size() / 32;
+
+                    for (size_t i = 0; i < num_nullifiers; ++i)
+                    {
+                        uint256 revealed_nullifier;
+                        std::memcpy(revealed_nullifier.data(), nullifiers_blob.data() + (i * 32), 32);
+
+                        auto it = nullifierToNoteIdx.find(revealed_nullifier);
+                        if (it != nullifierToNoteIdx.end())
+                        {
+                            notes[it->second].spent = true;
+                        }
+                    }
+                }
+                catch (...) {}
+            }
         }
 
         // Calculate balance

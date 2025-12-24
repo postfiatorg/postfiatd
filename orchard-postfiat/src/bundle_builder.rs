@@ -469,6 +469,7 @@ pub fn build_shielded_to_shielded_production(
 /// * `sk_bytes` - Spending key (32 bytes)
 /// * `recipient` - Recipient address
 /// * `send_amount` - Amount to send
+/// * `fee` - Transaction fee (paid from shielded pool)
 ///
 /// # Returns
 /// Serialized bundle ready for inclusion in transaction
@@ -477,6 +478,7 @@ pub fn build_shielded_to_shielded_from_wallet(
     sk_bytes: &[u8; 32],
     recipient: Address,
     send_amount: u64,
+    fee: u64,
 ) -> Result<Vec<u8>, String> {
     // Parse spending key
     let sk = SpendingKey::from_bytes(*sk_bytes)
@@ -485,11 +487,49 @@ pub fn build_shielded_to_shielded_from_wallet(
 
     let fvk = FullViewingKey::from(&sk);
 
-    // Get anchor from wallet state
-    let anchor = wallet_state.get_anchor()?;
+    // For z→z transactions, we need to cover send_amount + fee
+    // The fee comes out of the shielded pool as valueBalance
+    let total_needed = send_amount.checked_add(fee)
+        .ok_or_else(|| "Amount + fee overflow".to_string())?;
 
-    // Select notes to spend
-    let selected_notes = wallet_state.select_notes(send_amount)?;
+    // Select notes to spend (must cover send_amount + fee)
+    // Pass the FVK to only select notes belonging to this key
+    let selected_notes = wallet_state.select_notes(total_needed, Some(&fvk))?;
+
+    if selected_notes.is_empty() {
+        return Err("No notes available to spend".to_string());
+    }
+
+    eprintln!("bundle_builder::build_z_to_z_bundle: Selected {} notes for spending", selected_notes.len());
+    eprintln!("bundle_builder::build_z_to_z_bundle: Getting anchor from FIRST selected note...");
+
+    // CRITICAL FIX: Get the anchor from the FIRST note's witness
+    // This is the historical anchor from when the note was received.
+    // All spends in the bundle must use the same anchor.
+    // In Zcash, this matches the behavior where the anchor comes from
+    // the witness, not from the current tree state.
+    let anchor = wallet_state.get_note_anchor(selected_notes[0])?;
+
+    eprintln!("bundle_builder::build_z_to_z_bundle: Will use anchor {:?} for all spends in this bundle",
+              anchor.to_bytes());
+    eprintln!("bundle_builder::build_z_to_z_bundle: This anchor MUST exist in the ledger's anchor table");
+    eprintln!("bundle_builder::build_z_to_z_bundle:   or the transaction will fail with tefORCHARD_INVALID_ANCHOR");
+
+    // Verify all selected notes authenticate to the same anchor
+    // This is required by Orchard - all spends must use the same anchor
+    for (idx, note) in selected_notes.iter().enumerate() {
+        let note_anchor = wallet_state.get_note_anchor(note)?;
+        eprintln!("bundle_builder::build_z_to_z_bundle: Note {} anchor: {:?}", idx, note_anchor.to_bytes());
+        if note_anchor != anchor {
+            return Err(format!(
+                "Note anchor mismatch: expected {:?}, got {:?}",
+                anchor.to_bytes(),
+                note_anchor.to_bytes()
+            ));
+        }
+    }
+
+    eprintln!("bundle_builder::build_z_to_z_bundle: ✓ All selected notes use the same anchor");
 
     // Calculate total and change
     let mut total_input = 0u64;
@@ -498,10 +538,18 @@ pub fn build_shielded_to_shielded_from_wallet(
             .ok_or_else(|| "Amount overflow".to_string())?;
     }
 
-    let change_amount = total_input.checked_sub(send_amount)
-        .ok_or_else(|| "Insufficient balance".to_string())?;
+    // Change = total_input - send_amount - fee
+    // The fee will be the valueBalance (money leaving shielded pool)
+    let change_amount = total_input
+        .checked_sub(send_amount)
+        .and_then(|v| v.checked_sub(fee))
+        .ok_or_else(|| "Insufficient balance for amount + fee".to_string())?;
 
-    // Create builder
+    eprintln!("bundle_builder::build_z_to_z_bundle: Input={}, Send={}, Fee={}, Change={}",
+              total_input, send_amount, fee, change_amount);
+    eprintln!("bundle_builder::build_z_to_z_bundle: Expected valueBalance={} (fee)", fee);
+
+    // Create builder with the HISTORICAL anchor from the notes' witnesses
     let mut builder = Builder::new(
         BundleType::Transactional {
             flags: orchard::bundle::Flags::ENABLED,
@@ -606,11 +654,12 @@ pub fn build_shielded_to_shielded_from_wallet(
 ///
 /// # Note
 /// This function is EXPENSIVE - takes ~5-10 seconds due to proof generation!
-/// The returned bundle will have a POSITIVE value_balance equal to unshield_amount.
+/// The returned bundle will have a POSITIVE value_balance equal to unshield_amount + fee.
 pub fn build_shielded_to_transparent(
     wallet_state: &crate::wallet_state::OrchardWalletState,
     sk_bytes: &[u8; 32],
     unshield_amount: u64,
+    fee: u64,
 ) -> Result<Vec<u8>, String> {
     // Parse spending key
     let sk = SpendingKey::from_bytes(*sk_bytes)
@@ -619,11 +668,49 @@ pub fn build_shielded_to_transparent(
 
     let fvk = FullViewingKey::from(&sk);
 
-    // Get anchor from wallet state
-    let anchor = wallet_state.get_anchor()?;
+    eprintln!("bundle_builder::build_z_to_t: Derived FVK from SK");
+    eprintln!("bundle_builder::build_z_to_t: FVK address: {:?}", fvk.address_at(0u32, orchard::keys::Scope::External).to_raw_address_bytes());
 
-    // Select notes to spend (need to cover unshield_amount)
-    let selected_notes = wallet_state.select_notes(unshield_amount)?;
+    // Total amount needed from shielded pool: unshield_amount + fee
+    let total_needed = unshield_amount.checked_add(fee)
+        .ok_or_else(|| "Amount overflow".to_string())?;
+
+    eprintln!("bundle_builder::build_z_to_t: Unshield amount: {}, Fee: {}, Total needed: {}",
+              unshield_amount, fee, total_needed);
+
+    // Select notes to spend (need to cover unshield_amount + fee)
+    // Pass the FVK to only select notes belonging to this key
+    let selected_notes = wallet_state.select_notes(total_needed, Some(&fvk))?;
+
+    eprintln!("bundle_builder::build_z_to_t: wallet_state.select_notes() returned {} notes", selected_notes.len());
+
+    if selected_notes.is_empty() {
+        return Err("No notes available to spend".to_string());
+    }
+
+    eprintln!("bundle_builder::build_z_to_t_bundle: Selected {} notes for unshielding", selected_notes.len());
+    eprintln!("bundle_builder::build_z_to_t_bundle: Getting anchor from FIRST selected note...");
+
+    // CRITICAL FIX: Get the anchor from the FIRST note's witness
+    // This is the historical anchor from when the note was received.
+    // All spends in the bundle must use the same anchor.
+    let anchor = wallet_state.get_note_anchor(selected_notes[0])?;
+
+    eprintln!("bundle_builder::build_z_to_t_bundle: Will use anchor {:?} for all spends in this bundle",
+              anchor.to_bytes());
+
+    // Verify all selected notes authenticate to the same anchor
+    for (idx, note) in selected_notes.iter().enumerate() {
+        let note_anchor = wallet_state.get_note_anchor(note)?;
+        eprintln!("bundle_builder::build_z_to_t_bundle: Note {} anchor: {:?}", idx, note_anchor.to_bytes());
+        if note_anchor != anchor {
+            return Err(format!(
+                "Note anchor mismatch: expected {:?}, got {:?}",
+                anchor.to_bytes(),
+                note_anchor.to_bytes()
+            ));
+        }
+    }
 
     // Calculate total and change
     let mut total_input = 0u64;
@@ -633,10 +720,15 @@ pub fn build_shielded_to_transparent(
     }
 
     // Change stays in shielded pool
-    let change_amount = total_input.checked_sub(unshield_amount)
+    // total_input - (unshield_amount + fee) = change
+    let change_amount = total_input.checked_sub(total_needed)
         .ok_or_else(|| "Insufficient balance".to_string())?;
 
-    // Create builder with Transactional type
+    eprintln!("\n=== Creating Bundle Builder ===");
+    eprintln!("Anchor that will be used for this bundle: {:?}", anchor.to_bytes());
+    eprintln!("This anchor MUST match what the witnesses authenticate to!");
+
+    // Create builder with the HISTORICAL anchor from the notes' witnesses
     let mut builder = Builder::new(
         BundleType::Transactional {
             flags: orchard::bundle::Flags::ENABLED,
@@ -646,14 +738,30 @@ pub fn build_shielded_to_transparent(
     );
 
     // Add spends for selected notes
-    for note in &selected_notes {
-        let merkle_path = wallet_state.get_merkle_path(note)?;
+    for (idx, note) in selected_notes.iter().enumerate() {
+        eprintln!("\n=== Processing note {} for spending ===", idx);
+        eprintln!("Note amount: {}, cmx: {:?}", note.amount, note.cmx);
+        eprintln!("Note position: {:?}", note.position);
+        eprintln!("Note's stored anchor: {:?}", note.anchor.to_bytes());
 
-        builder.add_spend(
-            fvk.clone(),
-            note.note.clone(),
-            merkle_path,
-        ).map_err(|e| format!("Failed to add spend: {:?}", e))?;
+        let merkle_path = wallet_state.get_merkle_path(note)?;
+        eprintln!("Got merkle path for note {}", idx);
+
+        eprintln!("Calling builder.add_spend() with:");
+        eprintln!("  - Builder anchor: {:?}", anchor.to_bytes());
+        eprintln!("  - Note: {:?}", note.note);
+        eprintln!("  - Merkle path from position: {:?}", note.position);
+
+        match builder.add_spend(fvk.clone(), note.note.clone(), merkle_path) {
+            Ok(_) => {
+                eprintln!("✓ Successfully added spend for note {}", idx);
+            }
+            Err(e) => {
+                eprintln!("✗ FAILED to add spend for note {}: {:?}", idx, e);
+                eprintln!("This likely means the merkle path doesn't authenticate to the builder's anchor!");
+                return Err(format!("Failed to add spend: {:?}", e));
+            }
+        }
     }
 
     let memo = [0u8; 512];

@@ -716,8 +716,11 @@ Transactor::ticketDelete(
 void
 Transactor::preCompute()
 {
+    // Allow zero account for z→z ShieldedPayment transactions
+    // These are authorized by OrchardBundle signatures, not account signatures
     XRPL_ASSERT(
-        account_ != beast::zero,
+        account_ != beast::zero ||
+        ctx_.tx.getTxnType() == ttSHIELDED_PAYMENT,
         "ripple::Transactor::preCompute : nonzero account");
 }
 
