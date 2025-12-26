@@ -333,7 +333,7 @@ Examples:
             print("Failed to scan balance for first key!")
             return
 
-        print(f"First key scan complete! Balance: {scan_result1['result']['total_balance_xrp']} XRP, "
+        print(f"First key scan complete! Balance: {scan_result1['result']['total_balance_xrp']} PFT, "
               f"Notes: {scan_result1['result']['note_count']}, "
               f"Spent: {scan_result1['result']['spent_count']}")
 
@@ -349,7 +349,7 @@ Examples:
             print("Failed to scan balance for second key!")
             return
 
-        print(f"Second key scan complete! Balance: {scan_result2['result']['total_balance_xrp']} XRP, "
+        print(f"Second key scan complete! Balance: {scan_result2['result']['total_balance_xrp']} PFT, "
               f"Notes: {scan_result2['result']['note_count']}, "
               f"Spent: {scan_result2['result']['spent_count']}")
 
@@ -374,7 +374,7 @@ Examples:
         print("\n=== Step 8b: Preparing double-spend z→z payment ===")
         double_spend_prepare = client.orchard_prepare_payment(
             payment_type="z_to_z",
-            amount="100000000",  # Different amount (100 XRP)
+            amount="100000000",  # Different amount (100 PFT)
             spending_key="D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99",  # SAME spending key!
             recipient="C19558DB8066177BF73AAD65280FC53378A082A3FA5CEE57218D3A5F846E24201CC6978222B9AE2B4F1D95"
         )
@@ -416,7 +416,7 @@ Examples:
             print("Failed to scan balance for first key!")
             return
         
-        print(f"First key scan complete! Balance: {scan_result3['result']['total_balance_xrp']} XRP, "
+        print(f"First key scan complete! Balance: {scan_result3['result']['total_balance_xrp']} PFT, "
               f"Notes: {scan_result3['result']['note_count']}, "
               f"Spent: {scan_result3['result']['spent_count']}")
         
@@ -432,11 +432,11 @@ Examples:
             print("Failed to scan balance for second key!")
             return
         
-        print(f"Second key scan complete! Balance: {scan_result4['result']['total_balance_xrp']} XRP, "
+        print(f"Second key scan complete! Balance: {scan_result4['result']['total_balance_xrp']} PFT, "
               f"Notes: {scan_result4['result']['note_count']}, "
               f"Spent: {scan_result4['result']['spent_count']}")
 
-        # Step 13: Prepare z→t payment (unshield 200 XRP from second account to transparent)
+        # Step 13: Prepare z→t payment (unshield 200 PFT from second account to transparent)
         print("\n=== Step 13: Preparing z→t payment ===")
         prepare_result3 = client.orchard_prepare_payment(
             payment_type="z_to_t",
@@ -479,7 +479,7 @@ Examples:
             print("Failed to scan balance for second key!")
             return
 
-        print(f"Second key scan complete! Balance: {scan_result5['result']['total_balance_xrp']} XRP, "
+        print(f"Second key scan complete! Balance: {scan_result5['result']['total_balance_xrp']} PFT, "
               f"Notes: {scan_result5['result']['note_count']}, "
               f"Spent: {scan_result5['result']['spent_count']}")
 
@@ -510,9 +510,9 @@ Examples:
 
         print("\n=== All tests completed successfully! ===")
         print("Summary:")
-        print("  - t→z: 1000 XRP shielded to first account")
-        print("  - z→z: 500 XRP transferred from first to second account")
-        print("  - z→t: 200 XRP unshielded from second account to transparent")
+        print("  - t→z: 1000 PFT shielded to first account")
+        print("  - z→z: 500 PFT transferred from first to second account")
+        print("  - z→t: 200 PFT unshielded from second account to transparent")
         print("  - Double-spend: Correctly rejected with duplicate nullifier detection")
 
     except requests.exceptions.RequestException as e:
