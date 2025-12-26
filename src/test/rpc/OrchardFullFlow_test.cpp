@@ -401,9 +401,198 @@ public:
     }
 
     void
+    testOrchardDoubleTransactions()
+    {
+        testcase("orchard_double_transactions");
+
+        using namespace jtx;
+        // Enable OrchardPrivacy feature for ShieldedPayment transactions
+        Env env(*this, envconfig(), supported_amendments() | featureOrchardPrivacy, nullptr, beast::severities::kWarning);
+
+        // Use the EXACT same keys as the Python script
+        // FIRST account
+        std::string const firstFvk = "935993F09041BB701B12FF053AD9D9F4F9051C8BDD70B39D62F4765B4E71F812BA38D514E952E84654C55F276BAC3986B5BCC4B2A21E253FA16EFF658394AD1B0924F4F8C86C42C9ECC983F135BA3C9D4D9493F51DCCE7ACDCF5A6C7E26D1923";
+        std::string const firstSk = "D8710D7D8D4717F313C1B1F49CA82AA5FA64B7AAD0D51BC671B8EB0E06E3DC99";
+        std::string const firstAddr = "62B565D0A77917E0CBE360A30D081259A35DB3186AC533278632BFA6003E09576EC955B72EC71FDA33E39D";
+
+        // SECOND account
+        std::string const secondFvk = "32962E110407C099A57D577C7750BE7078A4729F08ED908727181DC0D4A2BD27DA4ED74993A50179C45BD63FDD0CC381058BB0DE6847B17FA3FF4B459C06562E925A5F23BA4DCC23A279220F887F46F31BEAA0CD63E6DD87790F4C4071627F08";
+        std::string const secondSk = "E47A50F38ACBADB0B839AE3A089E9988665B4E13819B64A4A4D3B3F5CB7FA0B3";
+        std::string const secondAddr = "C19558DB8066177BF73AAD65280FC53378A082A3FA5CEE57218D3A5F846E24201CC6978222B9AE2B4F1D95";
+
+        // Helper lambda to submit a transaction
+        auto submitTx = [&](std::string const& type, std::string const& amount,
+                           std::string const& from, std::string const& to,
+                           std::string const& sk = "", std::string const& secret = "") {
+            Json::Value params;
+            params[jss::payment_type] = type;
+            params[jss::amount] = amount;
+
+            if (type == "t_to_z") {
+                params[jss::source_account] = from;
+                params[jss::recipient] = to;
+            } else if (type == "z_to_z") {
+                params[jss::spending_key] = sk;
+                params[jss::recipient] = to;
+            } else if (type == "z_to_t") {
+                params[jss::spending_key] = sk;
+                params[jss::destination_account] = to;
+            }
+
+            auto const result = env.rpc("json", "orchard_prepare_payment", to_string(params));
+            BEAST_EXPECT(!contains_error(result[jss::result]));
+
+            Json::Value submitParams;
+            submitParams[jss::tx_json] = result[jss::result][jss::tx_json];
+            if (!secret.empty()) {
+                submitParams[jss::secret] = secret;
+            }
+
+            auto const submitResult = env.rpc("json", "submit", to_string(submitParams));
+            std::string const engineResult = submitResult[jss::result]["engine_result"].asString();
+            log << "  Transaction result: " << engineResult << std::endl;
+
+            return engineResult == "tesSUCCESS";
+        };
+
+        // Helper lambda to scan and verify balance
+        auto scanBalance = [&](std::string const& fvk, double expectedMin, double expectedMax, std::string const& label) {
+            Json::Value scanParams;
+            scanParams[jss::full_viewing_key] = fvk;
+            scanParams[jss::ledger_index_min] = 1;
+            scanParams[jss::ledger_index_max] = env.current()->seq();
+
+            auto const scanResult = env.rpc("json", "orchard_scan_balance", to_string(scanParams));
+            BEAST_EXPECT(!contains_error(scanResult[jss::result]));
+
+            std::string const balance = scanResult[jss::result]["total_balance_xrp"].asString();
+            double balanceValue = std::stod(balance);
+
+            log << label << ": " << balance << " XRP" << std::endl;
+            BEAST_EXPECT(balanceValue >= expectedMin && balanceValue <= expectedMax);
+
+            return balanceValue;
+        };
+
+        // Step 1: Add viewing keys
+        {
+            Json::Value params;
+            params[jss::full_viewing_key] = secondFvk;
+            auto const result = env.rpc("json", "orchard_wallet_add_key", to_string(params));
+            BEAST_EXPECT(!contains_error(result[jss::result]));
+            log << "Step 1: First viewing key added" << std::endl;
+        }
+
+        {
+            Json::Value params;
+            params[jss::full_viewing_key] = firstFvk;
+            auto const result = env.rpc("json", "orchard_wallet_add_key", to_string(params));
+            BEAST_EXPECT(!contains_error(result[jss::result]));
+            log << "Step 2: Second viewing key added" << std::endl;
+        }
+
+        // Step 3: Create transparent account
+        Account alice("alice");
+        env.fund(XRP(10000), alice);
+        env.close();
+
+        // ========== LEDGER 1: 4 transactions (2 t→z, 2 t→z) ==========
+        log << "\n=== LEDGER 1: 4 t→z transactions ===" << std::endl;
+
+        log << "Ledger 1, Tx 1: t→z 1000 XRP to first account" << std::endl;
+        bool tx1 = submitTx("t_to_z", "1000000000", alice.human(), firstAddr, "", alice.name());
+        BEAST_EXPECT(tx1);
+
+        log << "Ledger 1, Tx 2: t→z 800 XRP to second account" << std::endl;
+        bool tx2 = submitTx("t_to_z", "800000000", alice.human(), secondAddr, "", alice.name());
+        BEAST_EXPECT(tx2);
+
+        log << "Ledger 1, Tx 3: t→z 500 XRP to first account" << std::endl;
+        bool tx3 = submitTx("t_to_z", "500000000", alice.human(), firstAddr, "", alice.name());
+        BEAST_EXPECT(tx3);
+
+        log << "Ledger 1, Tx 4: t→z 300 XRP to second account" << std::endl;
+        bool tx4 = submitTx("t_to_z", "300000000", alice.human(), secondAddr, "", alice.name());
+        BEAST_EXPECT(tx4);
+
+        env.close();
+        log << "Ledger 1 closed" << std::endl;
+
+        // Verify balances after Ledger 1
+        // First: 1000 + 500 = 1500 XRP
+        // Second: 800 + 300 = 1100 XRP
+        double bal1 = scanBalance(firstFvk, 1499.9, 1500.1, "After Ledger 1, First account");
+        double bal2 = scanBalance(secondFvk, 1099.9, 1100.1, "After Ledger 1, Second account");
+
+        // ========== LEDGER 2: 4 transactions (2 t→z, 1 z→z, 1 z→t) ==========
+        log << "\n=== LEDGER 2: 4 transactions (2 t→z, 1 z→z, 1 z→t) ===" << std::endl;
+
+        log << "Ledger 2, Tx 1: t→z 200 XRP to first account" << std::endl;
+        bool tx5 = submitTx("t_to_z", "200000000", alice.human(), firstAddr, "", alice.name());
+        BEAST_EXPECT(tx5);
+
+        log << "Ledger 2, Tx 2: t→z 150 XRP to second account" << std::endl;
+        bool tx6 = submitTx("t_to_z", "150000000", alice.human(), secondAddr, "", alice.name());
+        BEAST_EXPECT(tx6);
+
+        log << "Ledger 2, Tx 3: z→z 400 XRP from first to second" << std::endl;
+        bool tx7 = submitTx("z_to_z", "400000000", "", secondAddr, firstSk);
+        BEAST_EXPECT(tx7);
+
+        log << "Ledger 2, Tx 4: z→t 100 XRP from second to alice" << std::endl;
+        bool tx8 = submitTx("z_to_t", "100000000", "", alice.human(), secondSk);
+        BEAST_EXPECT(tx8);
+
+        env.close();
+        log << "Ledger 2 closed" << std::endl;
+
+        // Verify balances after Ledger 2
+        // First: 1500 + 200 - 400 - fees = ~1300 XRP
+        // Second: 1100 + 150 + 400 - 100 - fees = ~1550 XRP
+        bal1 = scanBalance(firstFvk, 1299.0, 1301.0, "After Ledger 2, First account");
+        bal2 = scanBalance(secondFvk, 1549.0, 1551.0, "After Ledger 2, Second account");
+
+        // ========== LEDGER 3: 4 transactions (2 t→z, 1 z→z, 1 z→t) ==========
+        log << "\n=== LEDGER 3: 4 transactions (2 t→z, 1 z→z, 1 z→t) ===" << std::endl;
+
+        log << "Ledger 3, Tx 1: t→z 350 XRP to first account" << std::endl;
+        bool tx9 = submitTx("t_to_z", "350000000", alice.human(), firstAddr, "", alice.name());
+        BEAST_EXPECT(tx9);
+
+        log << "Ledger 3, Tx 2: t→z 450 XRP to second account" << std::endl;
+        bool tx10 = submitTx("t_to_z", "450000000", alice.human(), secondAddr, "", alice.name());
+        BEAST_EXPECT(tx10);
+
+        log << "Ledger 3, Tx 3: z→z 300 XRP from second to first" << std::endl;
+        bool tx11 = submitTx("z_to_z", "300000000", "", firstAddr, secondSk);
+        BEAST_EXPECT(tx11);
+
+        log << "Ledger 3, Tx 4: z→t 200 XRP from first to alice" << std::endl;
+        bool tx12 = submitTx("z_to_t", "200000000", "", alice.human(), firstSk);
+        BEAST_EXPECT(tx12);
+
+        env.close();
+        log << "Ledger 3 closed" << std::endl;
+
+        // Verify final balances after Ledger 3
+        // First: ~1300 + 350 + 300 - 200 - fees = ~1750 XRP
+        // Second: ~1550 + 450 - 300 - fees = ~1700 XRP
+        bal1 = scanBalance(firstFvk, 1749.0, 1751.0, "After Ledger 3, First account (FINAL)");
+        bal2 = scanBalance(secondFvk, 1699.0, 1701.0, "After Ledger 3, Second account (FINAL)");
+
+        log << "\n=== Test Summary ===" << std::endl;
+        log << "Successfully processed 12 transactions across 3 ledgers:" << std::endl;
+        log << "  Ledger 1: 4 transactions (4 t→z)" << std::endl;
+        log << "  Ledger 2: 4 transactions (2 t→z, 1 z→z, 1 z→t)" << std::endl;
+        log << "  Ledger 3: 4 transactions (2 t→z, 1 z→z, 1 z→t)" << std::endl;
+        log << "Total: 8 t→z, 2 z→z, 2 z→t = 12 transactions" << std::endl;
+    }
+
+    void
     run() override
     {
         testOrchardFullFlowWithStaticKeys();
+        testOrchardDoubleTransactions();
     }
 };
 
