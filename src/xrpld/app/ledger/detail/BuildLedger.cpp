@@ -22,6 +22,7 @@
 #include <xrpld/app/ledger/LedgerReplay.h>
 #include <xrpld/app/ledger/OpenLedger.h>
 #include <xrpld/app/misc/CanonicalTXSet.h>
+#include <xrpld/app/misc/UNLHashWatcher.h>
 #include <xrpld/app/tx/apply.h>
 
 #include <xrpl/protocol/Feature.h>
@@ -50,6 +51,18 @@ buildLedgerImpl(
     if (built->isFlagLedger() && built->rules().enabled(featureNegativeUNL))
     {
         built->updateNegativeUNL();
+    }
+
+    // Apply pending UNL hash update at flag ledgers if DynamicUNL is enabled
+    if (built->isFlagLedger() && built->rules().enabled(featureDynamicUNL))
+    {
+        auto& unlHashWatcher = app.getUNLHashWatcher();
+        if (unlHashWatcher.shouldApplyPendingUpdate(built->seq()))
+        {
+            unlHashWatcher.applyPendingUpdate();
+            JLOG(j.info()) << "Applied pending UNL hash update at flag ledger "
+                           << built->seq();
+        }
     }
 
     // Set up to write SHAMap changes to our database,

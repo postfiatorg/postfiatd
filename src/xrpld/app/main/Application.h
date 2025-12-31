@@ -53,6 +53,7 @@ class AmendmentTable;
 class ValidatorVoteTracker;
 class ExclusionManager;
 class ValidatorExclusionManager;
+class UNLHashWatcher;
 
 template <
     class Key,
@@ -188,6 +189,8 @@ public:
     getExclusionManager() = 0;
     virtual ValidatorExclusionManager&
     getValidatorExclusionManager() = 0;
+    virtual UNLHashWatcher&
+    getUNLHashWatcher() = 0;
     virtual HashRouter&
     getHashRouter() = 0;
     virtual LoadFeeTrack&

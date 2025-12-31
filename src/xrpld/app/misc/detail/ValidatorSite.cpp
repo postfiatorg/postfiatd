@@ -17,6 +17,7 @@
 */
 //==============================================================================
 
+#include <xrpld/app/misc/UNLHashWatcher.h>
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/misc/ValidatorSite.h>
 #include <xrpld/app/misc/detail/WorkFile.h>
@@ -26,8 +27,6 @@
 #include <xrpl/json/json_reader.h>
 #include <xrpl/protocol/digest.h>
 #include <xrpl/protocol/jss.h>
-
-#include <algorithm>
 
 namespace ripple {
 
@@ -416,6 +415,26 @@ ValidatorSite::parseJsonResponse(
         "ripple::ValidatorSite::parseJsonResponse : version match");
     auto const& uri = sites_[siteIdx].activeResource->uri;
     auto const hash = sha512Half(manifest, blobs, version);
+
+    // If DynamicUNL is configured, verify the fetched list hash matches the
+    // on-chain hash This ensures the fetched UNL is the one authorized by the
+    // on-chain publisher
+    auto& unlHashWatcher = app_.getUNLHashWatcher();
+    if (unlHashWatcher.isConfigured())
+    {
+        if (!unlHashWatcher.verifyHash(hash))
+        {
+            JLOG(j_.warn()) << "ValidatorSite: Fetched UNL hash does not match "
+                               "on-chain hash"
+                            << " from " << uri << " - rejecting list";
+            sites_[siteIdx].lastRefreshStatus.emplace(Site::Status{
+                clock_type::now(), ListDisposition::invalid, "hash mismatch"});
+            throw std::runtime_error{"on-chain hash mismatch"};
+        }
+        JLOG(j_.info())
+            << "ValidatorSite: On-chain hash verification passed for " << uri;
+    }
+
     auto const applyResult = app_.validators().applyListsAndBroadcast(
         manifest,
         version,

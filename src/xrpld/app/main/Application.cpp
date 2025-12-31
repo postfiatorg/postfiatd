@@ -37,16 +37,17 @@
 #include <xrpld/app/main/NodeStoreScheduler.h>
 #include <xrpld/app/misc/AmendmentTable.h>
 #include <xrpld/app/misc/ExclusionManager.h>
-#include <xrpld/app/misc/ValidatorExclusionManager.h>
-#include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/misc/NetworkValidators.h>
 #include <xrpld/app/misc/SHAMapStore.h>
 #include <xrpld/app/misc/TxQ.h>
+#include <xrpld/app/misc/UNLHashWatcher.h>
+#include <xrpld/app/misc/ValidatorExclusionManager.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
 #include <xrpld/app/misc/ValidatorSite.h>
+#include <xrpld/app/misc/ValidatorVoteTracker.h>
 #include <xrpld/app/paths/PathRequests.h>
 #include <xrpld/app/rdb/RelationalDatabase.h>
 #include <xrpld/app/rdb/Wallet.h>
@@ -63,6 +64,7 @@
 
 #include <xrpl/basics/ByteUtilities.h>
 #include <xrpl/basics/ResolverAsio.h>
+#include <xrpl/basics/StringUtilities.h>
 #include <xrpl/basics/random.h>
 #include <xrpl/beast/asio/io_latency_probe.h>
 #include <xrpl/beast/core/LexicalCast.h>
@@ -71,6 +73,7 @@
 #include <xrpl/protocol/BuildInfo.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Protocol.h>
+#include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/STParsedJSON.h>
 #include <xrpl/resource/Fees.h>
 
@@ -214,6 +217,7 @@ public:
     std::unique_ptr<ValidatorVoteTracker> m_validatorVoteTracker;
     std::unique_ptr<ExclusionManager> m_exclusionManager;
     std::unique_ptr<ValidatorExclusionManager> m_validatorExclusionManager;
+    std::unique_ptr<UNLHashWatcher> m_unlHashWatcher;
     std::unique_ptr<LoadFeeTrack> mFeeTrack;
     std::unique_ptr<HashRouter> hashRouter_;
     RCLValidations mValidations;
@@ -738,6 +742,12 @@ public:
     getValidatorExclusionManager() override
     {
         return *m_validatorExclusionManager;
+    }
+
+    UNLHashWatcher&
+    getUNLHashWatcher() override
+    {
+        return *m_unlHashWatcher;
     }
 
     LoadFeeTrack&
@@ -1292,8 +1302,7 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
 
     // Initialize ValidatorVoteTracker
     m_validatorVoteTracker = std::make_unique<ValidatorVoteTracker>(
-        *this,
-        logs_->journal("ValidatorVoteTracker"));
+        *this, logs_->journal("ValidatorVoteTracker"));
 
     // Initialize ExclusionManager
     m_exclusionManager = std::make_unique<ExclusionManager>(*this);
@@ -1301,6 +1310,10 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     // Initialize ValidatorExclusionManager
     m_validatorExclusionManager = std::make_unique<ValidatorExclusionManager>(
         *this, *config_, logs_->journal("ValidatorExclusionManager"));
+
+    // Initialize UNLHashWatcher for dynamic UNL updates
+    m_unlHashWatcher = std::make_unique<UNLHashWatcher>(
+        *this, logs_->journal("UNLHashWatcher"));
 
     Pathfinder::initPathTable();
 
@@ -1318,15 +1331,18 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     {
         JLOG(m_journal.info()) << "Loading specified Ledger";
 
-        //Load all ledgers that are present in the db
-        if (startUp == Config::LOAD || config_->START_LEDGER.empty()) {
+        // Load all ledgers that are present in the db
+        if (startUp == Config::LOAD || config_->START_LEDGER.empty())
+        {
             auto lastLedger = getLastFullLedger();
-            if (lastLedger) {
-                for (uint32_t i = 1; i < lastLedger->info().seq; i++) {
-                    auto ledger_info = getRelationalDatabase().getLedgerInfoByIndex(i);
+            if (lastLedger)
+            {
+                for (uint32_t i = 1; i < lastLedger->info().seq; i++)
+                {
+                    auto ledger_info =
+                        getRelationalDatabase().getLedgerInfoByIndex(i);
                     if (ledger_info)
-                        m_ledgerMaster->setLedgerRangePresent(
-                            i, i);
+                        m_ledgerMaster->setLedgerRangePresent(i, i);
                 }
             }
         }
@@ -1410,41 +1426,89 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
         // Setup trusted validators
 
         // Get network-specific validator list based on NETWORK_ID
+        // This provides the initial/fallback UNL for bootstrap
+        // TODO: think about using XRPL approach to let validators manually
+        // specify initial UNL in their config file
         std::vector<std::string> initialValidatorsList =
             NetworkValidators::getValidators(config_->NETWORK_ID);
 
-        // Use network-specific validator list instead of config file
+        // Get publisher keys for dynamic UNL
+        auto const publisherKeys =
+            config().section(SECTION_VALIDATOR_LIST_KEYS).values();
+
+        // Load initial validators from NetworkValidators AND enable publisher
+        // keys for dynamic UNL updates via ValidatorSite
         if (!validators_->load(
                 localSigningKey,
-                initialValidatorsList,  // Use network-specific list
-                {},
-                {}))
+                initialValidatorsList,  // Initial/fallback UNL
+                publisherKeys,          // Publisher keys for dynamic UNL
+                config().VALIDATOR_LIST_THRESHOLD))
         {
             JLOG(m_journal.fatal())
                 << "Invalid entry in validator configuration.";
             return false;
         }
 
-        // UNL ripple approached removed/commented
-        // if (!validators_->load(
-        //         localSigningKey,
-        //         config().section(SECTION_VALIDATORS).values(),
-        //         config().section(SECTION_VALIDATOR_LIST_KEYS).values(),
-        //         config().VALIDATOR_LIST_THRESHOLD))
-        // {
-        //     JLOG(m_journal.fatal())
-        //         << "Invalid entry in validator configuration.";
-        //     return false;
-        // }
+        // Configure UNLHashWatcher with publisher key and memo account
+        // The master_account is derived from the first publisher key
+        if (!publisherKeys.empty() &&
+            config_->exists(SECTION_UNL_HASH_PUBLISHER))
+        {
+            auto const& section = config_->section(SECTION_UNL_HASH_PUBLISHER);
+            auto memoStr = section.get("memo_account");
+
+            if (memoStr)
+            {
+                // Parse the first publisher key
+                auto const pubKeyBlob = strUnHex(publisherKeys[0]);
+                if (pubKeyBlob && publicKeyType(makeSlice(*pubKeyBlob)))
+                {
+                    PublicKey const publisherKey(makeSlice(*pubKeyBlob));
+                    // Derive master account from publisher key
+                    AccountID const masterAccount = calcAccountID(publisherKey);
+
+                    auto memoAccount = parseBase58<AccountID>(*memoStr);
+                    if (memoAccount)
+                    {
+                        m_unlHashWatcher->configure(
+                            masterAccount, *memoAccount);
+                        JLOG(m_journal.info())
+                            << "UNLHashWatcher configured with master="
+                            << toBase58(masterAccount)
+                            << " (derived from publisher key)";
+                    }
+                    else
+                    {
+                        JLOG(m_journal.warn())
+                            << "Invalid memo_account in ["
+                            << SECTION_UNL_HASH_PUBLISHER << "]";
+                    }
+                }
+                else
+                {
+                    JLOG(m_journal.warn())
+                        << "Invalid publisher key in ["
+                        << SECTION_VALIDATOR_LIST_KEYS << "]";
+                }
+            }
+            else
+            {
+                JLOG(m_journal.warn()) << "Missing memo_account in ["
+                                       << SECTION_UNL_HASH_PUBLISHER << "]";
+            }
+        }
     }
 
-    /*if (!validatorSites_->load(
+    // Load validator list sites for dynamic UNL fetching
+    // The fetched lists will be verified against on-chain hash before
+    // application
+    if (!validatorSites_->load(
             config().section(SECTION_VALIDATOR_LIST_SITES).values()))
     {
         JLOG(m_journal.fatal())
             << "Invalid entry in [" << SECTION_VALIDATOR_LIST_SITES << "]";
         return false;
-    }*/
+    }
 
     // Tell the AmendmentTable who the trusted validators are.
     m_amendmentTable->trustChanged(validators_->getQuorumKeys().second);

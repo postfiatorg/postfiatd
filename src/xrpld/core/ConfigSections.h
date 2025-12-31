@@ -85,6 +85,7 @@ struct ConfigSection
 #define SECTION_SSL_VERIFY_DIR "ssl_verify_dir"
 #define SECTION_SERVER_DOMAIN "server_domain"
 #define SECTION_SWEEP_INTERVAL "sweep_interval"
+#define SECTION_UNL_HASH_PUBLISHER "unl_hash_publisher"
 #define SECTION_VALIDATORS_FILE "validators_file"
 #define SECTION_VALIDATION_SEED "validation_seed"
 #define SECTION_VALIDATOR_KEYS "validator_keys"
