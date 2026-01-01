@@ -53,6 +53,9 @@ db/*.db-*
 # Ignore debug logs
 debug_log.txt
 
+# Ignore validator logs
+scripts/logs/
+
 # Ignore customized configs
 rippled.cfg
 validators.txt
