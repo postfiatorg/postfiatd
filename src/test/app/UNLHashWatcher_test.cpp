@@ -119,10 +119,10 @@ public:
 
         // Without any current hash set, any hash should pass (bootstrap mode)
         uint256 testHash1;
-        testHash1.SetHex(makeTestHash(1));
+        testHash1.parseHex(makeTestHash(1));
 
         uint256 testHash2;
-        testHash2.SetHex(makeTestHash(2));
+        testHash2.parseHex(makeTestHash(2));
 
         // Both should pass since no current hash is set
         BEAST_EXPECT(watcher.verifyHash(testHash1));
@@ -650,7 +650,7 @@ public:
 
         // Verify the hash value
         uint256 expectedHash;
-        expectedHash.SetHex(hashStr);
+        expectedHash.parseHex(hashStr);
         BEAST_EXPECT(*currentHash == expectedHash);
     }
 
@@ -684,12 +684,12 @@ public:
 
         // The correct hash should verify
         uint256 correctHash;
-        correctHash.SetHex(hashStr);
+        correctHash.parseHex(hashStr);
         BEAST_EXPECT(watcher.verifyHash(correctHash));
 
         // A different hash should fail
         uint256 wrongHash;
-        wrongHash.SetHex(makeTestHash(100));
+        wrongHash.parseHex(makeTestHash(100));
         BEAST_EXPECT(!watcher.verifyHash(wrongHash));
     }
 
