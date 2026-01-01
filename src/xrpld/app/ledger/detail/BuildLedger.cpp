@@ -146,6 +146,12 @@ applyTransactions(
                     app, view, *it->second, certainRetry, tapNONE, j))
                 {
                     case ApplyTransactionResult::Success:
+                        // Check for UNL scoring hash publications
+                        if (built->rules().enabled(featureDynamicUNL))
+                        {
+                            app.getUNLHashWatcher().processTransaction(
+                                *it->second);
+                        }
                         it = txns.erase(it);
                         ++changes;
                         break;
@@ -257,7 +263,14 @@ buildLedger(
         j,
         [&](OpenView& accum, std::shared_ptr<Ledger> const& built) {
             for (auto& tx : replayData.orderedTxns())
+            {
                 applyTransaction(app, accum, *tx.second, false, applyFlags, j);
+                // Check for UNL scoring hash publications during replay
+                if (replayLedger->rules().enabled(featureDynamicUNL))
+                {
+                    app.getUNLHashWatcher().processTransaction(*tx.second);
+                }
+            }
         });
 }
 
