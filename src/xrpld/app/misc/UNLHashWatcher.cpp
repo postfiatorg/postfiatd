@@ -23,6 +23,7 @@
 #include <xrpl/basics/StringUtilities.h>
 #include <xrpl/json/json_reader.h>
 #include <xrpl/protocol/Feature.h>
+#include <xrpl/protocol/STArray.h>
 #include <xrpl/protocol/STTx.h>
 #include <xrpl/protocol/jss.h>
 
