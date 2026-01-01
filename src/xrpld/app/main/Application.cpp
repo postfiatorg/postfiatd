@@ -1475,7 +1475,7 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
                         JLOG(m_journal.info())
                             << "UNLHashWatcher configured with master="
                             << toBase58(masterAccount)
-                            << " (derived from publisher key)";
+                            << " memo=" << toBase58(*memoAccount);
                     }
                     else
                     {
