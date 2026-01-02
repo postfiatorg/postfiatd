@@ -17,6 +17,7 @@
 */
 //==============================================================================
 
+#include <xrpld/app/misc/DynamicUNLManager.h>
 #include <xrpld/app/misc/UNLHashWatcher.h>
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/misc/ValidatorSite.h>
@@ -24,6 +25,7 @@
 #include <xrpld/app/misc/detail/WorkPlain.h>
 #include <xrpld/app/misc/detail/WorkSSL.h>
 
+#include <xrpl/basics/Slice.h>
 #include <xrpl/json/json_reader.h>
 #include <xrpl/protocol/digest.h>
 #include <xrpl/protocol/jss.h>
@@ -384,6 +386,60 @@ ValidatorSite::parseJsonResponse(
         }
         return body;
     }();
+
+    // Dynamic UNL format: validators with scores, no manifest
+    if (body.isObject() && body.isMember("validators") &&
+        body["validators"].isArray() && body["validators"].size() > 0 &&
+        body["validators"][0u].isMember("pubkey") &&
+        body["validators"][0u].isMember("score") &&
+        !body.isMember(jss::manifest))
+    {
+        auto const& uri = sites_[siteIdx].activeResource->uri;
+        auto const hash = sha512Half(makeSlice(res));
+
+        auto& dynamicManager = app_.getDynamicUNLManager();
+        auto selected = dynamicManager.processFetchedUNL(res, hash);
+
+        if (!selected)
+        {
+            sites_[siteIdx].lastRefreshStatus.emplace(Site::Status{
+                clock_type::now(),
+                ListDisposition::invalid,
+                "dynamic UNL failed"});
+            throw std::runtime_error{"dynamic UNL processing failed"};
+        }
+
+        JLOG(j_.info()) << "ValidatorSite: Dynamic UNL " << selected->size()
+                        << " validators from " << uri;
+
+        // Extract pubkey strings from selected validators
+        std::vector<std::string> pubkeyStrings;
+        pubkeyStrings.reserve(selected->size());
+        for (auto const& validator : *selected)
+        {
+            pubkeyStrings.push_back(validator.pubkey);
+        }
+
+        // Apply selected validators to ValidatorList
+        auto const applied =
+            app_.validators().applyDynamicUNL(pubkeyStrings, uri);
+
+        if (applied == 0)
+        {
+            sites_[siteIdx].lastRefreshStatus.emplace(Site::Status{
+                clock_type::now(),
+                ListDisposition::invalid,
+                "no valid validators in dynamic UNL"});
+            throw std::runtime_error{"no valid validators in dynamic UNL"};
+        }
+
+        JLOG(j_.info()) << "ValidatorSite: Applied " << applied
+                        << " Dynamic UNL validators from " << uri;
+
+        sites_[siteIdx].lastRefreshStatus.emplace(
+            Site::Status{clock_type::now(), ListDisposition::accepted, ""});
+        return;
+    }
 
     auto const [valid, version, blobs] = [&body]() {
         // Check the easy fields first

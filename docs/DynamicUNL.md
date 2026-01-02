@@ -82,6 +82,77 @@ The hash publication transaction must include a memo with the following JSON str
 | `sequence` | uint32 | Monotonically increasing counter (prevents replays) |
 | `version` | uint32 | Format version (currently 1) |
 
+## Dynamic UNL JSON Format (Score-Based Selection)
+
+When using the score-based validator selection feature, publishers host a JSON file with validators and their scores. The `DynamicUNLManager` component processes this data and selects the top validators by score.
+
+### JSON Format
+
+```json
+{
+  "validators": [
+    {"pubkey": "ED7A82...", "score": 95},
+    {"pubkey": "ED3B91...", "score": 92},
+    {"pubkey": "EDF4C2...", "score": 88},
+    {"pubkey": "ED1D5A...", "score": 85},
+    {"pubkey": "ED9E7F...", "score": 78}
+  ],
+  "version": 1
+}
+```
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `validators` | array | Yes | Array of validator objects |
+| `validators[].pubkey` | string | Yes | Hex-encoded Ed25519 public key (e.g., "ED...") |
+| `validators[].score` | uint32 | Yes | Score (higher = better). Used for ranking validators. |
+| `version` | uint32 | Yes | Format version for future compatibility (currently 1) |
+
+### Validator Selection
+
+The `DynamicUNLManager` selects validators based on their scores:
+
+1. **Sorting**: Validators are sorted by score in descending order (highest first)
+2. **Selection**: The top N validators are selected, where N = `MAX_UNL_VALIDATORS`
+3. **Maximum**: Currently, `MAX_UNL_VALIDATORS = 35`
+
+```cpp
+// TODO: Research optimal UNL size for network security, decentralization and performance
+static constexpr std::uint32_t MAX_UNL_VALIDATORS = 35;
+```
+
+### Processing Flow
+
+```
+Publisher JSON → sha512Half → Hash published on-chain
+                     ↓
+Node fetches JSON from HTTP
+                     ↓
+DynamicUNLManager.parseUNLData(json)
+                     ↓
+DynamicUNLManager.verifyHash(via UNLHashWatcher)
+                     ↓
+DynamicUNLManager.selectTopValidators()
+                     ↓
+Top N validators applied to UNL
+```
+
+### Example
+
+Given 5 validators with scores:
+- `ED_VALIDATOR_D` = 95
+- `ED_VALIDATOR_B` = 92
+- `ED_VALIDATOR_E` = 88
+- `ED_VALIDATOR_A` = 85
+- `ED_VALIDATOR_C` = 78
+
+If `MAX_UNL_VALIDATORS = 3`, the selected UNL would be:
+1. `ED_VALIDATOR_D` (score 95)
+2. `ED_VALIDATOR_B` (score 92)
+3. `ED_VALIDATOR_E` (score 88)
+
 ## Amendment
 
 This feature is controlled by the `DynamicUNL` amendment:
@@ -157,10 +228,13 @@ If updates are being rejected due to sequence:
 |------|---------|
 | `src/xrpld/app/misc/UNLHashWatcher.h` | UNLHashWatcher class declaration |
 | `src/xrpld/app/misc/UNLHashWatcher.cpp` | UNLHashWatcher implementation |
-| `src/xrpld/app/misc/detail/ValidatorSite.cpp` | On-chain hash verification |
+| `src/xrpld/app/misc/DynamicUNLManager.h` | DynamicUNLManager class declaration (score-based selection) |
+| `src/xrpld/app/misc/DynamicUNLManager.cpp` | DynamicUNLManager implementation |
+| `src/xrpld/app/misc/detail/ValidatorSite.cpp` | On-chain hash verification and Dynamic UNL integration |
 | `src/xrpld/app/ledger/detail/BuildLedger.cpp` | Flag ledger application |
 | `src/xrpld/app/main/Application.cpp` | Component initialization |
 | `src/xrpld/core/ConfigSections.h` | Config section definitions |
 | `include/xrpl/protocol/detail/features.macro` | Amendment definition |
+| `src/test/app/DynamicUNL_test.cpp` | Integration tests for Dynamic UNL feature |
 
 

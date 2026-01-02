@@ -265,6 +265,10 @@ class ValidatorList
     // The master public keys of the current negative UNL
     hash_set<PublicKey> negativeUNL_;
 
+    // Dynamic UNL validators (from score-based selection)
+    // When active, these are the sole source of trusted validators
+    hash_set<PublicKey> dynamicUNLValidators_;
+
     // Currently supported versions of publisher list format
     static constexpr std::uint32_t supportedListVersions[]{1, 2};
     // In the initial release, to prevent potential abuse and attacks, any VL
@@ -453,6 +457,25 @@ public:
         std::vector<ValidatorBlobInfo> const& blobs,
         std::string siteUri,
         std::optional<uint256> const& hash = {});
+
+    /** Apply Dynamic UNL validators as the sole source of trusted validators.
+
+        This replaces any previous Dynamic UNL validators. When Dynamic UNL
+        is active, only validators in this list will be trusted.
+
+        @param pubkeyHexStrings Hex-encoded Ed25519 public keys (e.g., "ED...")
+        @param siteUri The URI from which the Dynamic UNL was fetched
+
+        @return Number of validators successfully applied
+
+        @par Thread Safety
+
+        May be called concurrently
+    */
+    std::size_t
+    applyDynamicUNL(
+        std::vector<std::string> const& pubkeyHexStrings,
+        std::string const& siteUri);
 
     /* Attempt to read previously stored list files. Expected to only be
        called when loading from URL fails.

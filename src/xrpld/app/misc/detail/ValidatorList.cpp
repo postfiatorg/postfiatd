@@ -1070,6 +1070,66 @@ ValidatorList::applyLists(
     return result;
 }
 
+std::size_t
+ValidatorList::applyDynamicUNL(
+    std::vector<std::string> const& pubkeyHexStrings,
+    std::string const& siteUri)
+{
+    std::lock_guard lock{mutex_};
+
+    // Remove old Dynamic UNL validators from keyListings_
+    for (auto const& oldKey : dynamicUNLValidators_)
+    {
+        auto it = keyListings_.find(oldKey);
+        if (it != keyListings_.end())
+        {
+            if (it->second <= 1)
+                keyListings_.erase(it);
+            else
+                --it->second;
+        }
+    }
+
+    // Clear old Dynamic UNL set
+    dynamicUNLValidators_.clear();
+
+    // Parse and add new validators
+    std::size_t applied = 0;
+    for (auto const& pubkeyHex : pubkeyHexStrings)
+    {
+        // TODO: Validate pubkey format (should be "ED..." hex-encoded Ed25519)
+        auto const decoded = strUnHex(pubkeyHex);
+        if (!decoded || !publicKeyType(makeSlice(*decoded)))
+        {
+            JLOG(j_.warn()) << "Dynamic UNL: Invalid pubkey: " << pubkeyHex;
+            continue;
+        }
+
+        PublicKey const pubKey{Slice{decoded->data(), decoded->size()}};
+
+        // Add to Dynamic UNL set
+        dynamicUNLValidators_.insert(pubKey);
+
+        // Add to keyListings_ with count = listThreshold_ so it's immediately
+        // eligible for trustedMasterKeys_
+        auto [it, inserted] = keyListings_.insert({pubKey, listThreshold_});
+        if (!inserted)
+        {
+            // Key already exists (maybe from another source), ensure count
+            // meets threshold
+            if (it->second < listThreshold_)
+                it->second = listThreshold_;
+        }
+
+        ++applied;
+    }
+
+    JLOG(j_.info()) << "Dynamic UNL: Applied " << applied << " validators from "
+                    << siteUri;
+
+    return applied;
+}
+
 void
 ValidatorList::updatePublisherList(
     PublicKey const& pubKey,

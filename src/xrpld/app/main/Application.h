@@ -54,6 +54,7 @@ class ValidatorVoteTracker;
 class ExclusionManager;
 class ValidatorExclusionManager;
 class UNLHashWatcher;
+class DynamicUNLManager;
 
 template <
     class Key,
@@ -191,6 +192,8 @@ public:
     getValidatorExclusionManager() = 0;
     virtual UNLHashWatcher&
     getUNLHashWatcher() = 0;
+    virtual DynamicUNLManager&
+    getDynamicUNLManager() = 0;
     virtual HashRouter&
     getHashRouter() = 0;
     virtual LoadFeeTrack&

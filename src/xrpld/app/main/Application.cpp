@@ -36,6 +36,7 @@
 #include <xrpld/app/main/NodeIdentity.h>
 #include <xrpld/app/main/NodeStoreScheduler.h>
 #include <xrpld/app/misc/AmendmentTable.h>
+#include <xrpld/app/misc/DynamicUNLManager.h>
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
@@ -218,6 +219,7 @@ public:
     std::unique_ptr<ExclusionManager> m_exclusionManager;
     std::unique_ptr<ValidatorExclusionManager> m_validatorExclusionManager;
     std::unique_ptr<UNLHashWatcher> m_unlHashWatcher;
+    std::unique_ptr<DynamicUNLManager> m_dynamicUNLManager;
     std::unique_ptr<LoadFeeTrack> mFeeTrack;
     std::unique_ptr<HashRouter> hashRouter_;
     RCLValidations mValidations;
@@ -748,6 +750,12 @@ public:
     getUNLHashWatcher() override
     {
         return *m_unlHashWatcher;
+    }
+
+    DynamicUNLManager&
+    getDynamicUNLManager() override
+    {
+        return *m_dynamicUNLManager;
     }
 
     LoadFeeTrack&
@@ -1314,6 +1322,10 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     // Initialize UNLHashWatcher for dynamic UNL updates
     m_unlHashWatcher = std::make_unique<UNLHashWatcher>(
         *this, logs_->journal("UNLHashWatcher"));
+
+    // Initialize DynamicUNLManager for score-based validator selection
+    m_dynamicUNLManager = std::make_unique<DynamicUNLManager>(
+        *this, logs_->journal("DynamicUNLManager"));
 
     Pathfinder::initPathTable();
 
