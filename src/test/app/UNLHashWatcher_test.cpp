@@ -62,27 +62,19 @@ public:
         BEAST_EXPECT(!watcher.isConfigured());
 
         // Configure with accounts
-        AccountID master =
-            parseBase58<AccountID>("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh")
-                .value();
-        AccountID memo =
-            parseBase58<AccountID>("rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe")
-                .value();
+        Account master{"master"};
+        Account memo{"memo"};
 
-        watcher.configure(master, memo);
+        watcher.configure(master.id(), memo.id());
 
         // Now configured
         BEAST_EXPECT(watcher.isConfigured());
 
         // Reconfigure with different accounts
-        AccountID master2 =
-            parseBase58<AccountID>("rN7n3473SaZBCG4dFL83w7a1RXtXtbk2D9")
-                .value();
-        AccountID memo2 =
-            parseBase58<AccountID>("rLNaPoKeeBjZe2qs6x52yVPZpZ8td4dc6w")
-                .value();
+        Account master2{"master2"};
+        Account memo2{"memo2"};
 
-        watcher.configure(master2, memo2);
+        watcher.configure(master2.id(), memo2.id());
 
         // Still configured
         BEAST_EXPECT(watcher.isConfigured());
@@ -100,10 +92,10 @@ public:
 
         // Without any current hash set, any hash should pass (bootstrap mode)
         uint256 testHash1;
-        testHash1.parseHex(makeTestHash(1));
+        BEAST_EXPECT(testHash1.parseHex(makeTestHash(1)));
 
         uint256 testHash2;
-        testHash2.parseHex(makeTestHash(2));
+        BEAST_EXPECT(testHash2.parseHex(makeTestHash(2)));
 
         // Both should pass since no current hash is set
         BEAST_EXPECT(watcher.verifyHash(testHash1));
@@ -631,7 +623,7 @@ public:
 
         // Verify the hash value
         uint256 expectedHash;
-        expectedHash.parseHex(hashStr);
+        BEAST_EXPECT(expectedHash.parseHex(hashStr));
         BEAST_EXPECT(*currentHash == expectedHash);
     }
 
@@ -665,12 +657,12 @@ public:
 
         // The correct hash should verify
         uint256 correctHash;
-        correctHash.parseHex(hashStr);
+        BEAST_EXPECT(correctHash.parseHex(hashStr));
         BEAST_EXPECT(watcher.verifyHash(correctHash));
 
         // A different hash should fail
         uint256 wrongHash;
-        wrongHash.parseHex(makeTestHash(100));
+        BEAST_EXPECT(wrongHash.parseHex(makeTestHash(100)));
         BEAST_EXPECT(!watcher.verifyHash(wrongHash));
     }
 
