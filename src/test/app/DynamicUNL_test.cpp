@@ -359,8 +359,7 @@ public:
         testcase("Flag Ledger Auto Application");
 
         // This test verifies that BuildLedger automatically applies
-        // pending UNL hash updates at flag ledgers (every 256 ledgers).
-        // See BuildLedger.cpp lines 57-67.
+        // pending UNL hash updates at flag ledgers (every 256 ledgers)
 
         using namespace jtx;
 

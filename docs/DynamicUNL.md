@@ -118,11 +118,6 @@ The `DynamicUNLManager` selects validators based on their scores:
 2. **Selection**: The top N validators are selected, where N = `MAX_UNL_VALIDATORS`
 3. **Maximum**: Currently, `MAX_UNL_VALIDATORS = 35`
 
-```cpp
-// TODO: Research optimal UNL size for network security, decentralization and performance
-static constexpr std::uint32_t MAX_UNL_VALIDATORS = 35;
-```
-
 ### Processing Flow
 
 ```

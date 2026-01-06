@@ -142,34 +142,6 @@ private:
      */
     bool
     isEnabled(Rules const& rules) const;
-
-    // TODO: Key Revocation / Rotation
-    // ================================
-    // For enhanced security against publisher key compromise, consider
-    // implementing:
-    //
-    // 1. Multi-sig publisher account: Require multiple signatures for hash
-    // publications
-    //    - Use XRPL's native multi-sign feature on the master_account
-    //    - Reduces single-point-of-failure risk
-    //
-    // 2. Key rotation mechanism:
-    //    - Support a "key rotation" memo type that announces a new trusted
-    //    publisher key
-    //    - Require the old key to sign the rotation announcement
-    //    - Include an effective ledger for the transition
-    //
-    // 3. Emergency revocation:
-    //    - Leverage existing manifest revocation in ValidatorList::verify()
-    //    - When a publisher manifest is revoked, stop trusting that publisher
-    //
-    // 4. Config-based key update:
-    //    - As a fallback, operators can update [validator_list_keys] and
-    //    restart
-    //    - This requires coordination but provides a manual override
-    //
-    // See ValidatorList::verify() (lines 1373-1378) for existing revocation
-    // handling.
 };
 
 }  // namespace ripple

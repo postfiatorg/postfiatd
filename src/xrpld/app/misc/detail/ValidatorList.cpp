@@ -1097,7 +1097,6 @@ ValidatorList::applyDynamicUNL(
     std::size_t applied = 0;
     for (auto const& pubkeyHex : pubkeyHexStrings)
     {
-        // TODO: Validate pubkey format (should be "ED..." hex-encoded Ed25519)
         auto const decoded = strUnHex(pubkeyHex);
         if (!decoded || !publicKeyType(makeSlice(*decoded)))
         {
