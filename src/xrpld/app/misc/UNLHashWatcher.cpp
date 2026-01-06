@@ -42,58 +42,45 @@ UNLHashWatcher::processTransaction(STTx const& tx)
 {
     std::lock_guard lock(mutex_);
 
-    // Must be configured
     if (!masterAccount_ || !memoAccount_)
-    {
         return false;
-    }
 
-    // Check if this is a payment from masterAccount to memoAccount
     if (!tx.isFieldPresent(sfAccount) || !tx.isFieldPresent(sfDestination))
-    {
         return false;
-    }
 
     AccountID const sender = tx.getAccountID(sfAccount);
     AccountID const destination = tx.getAccountID(sfDestination);
 
     if (sender != *masterAccount_ || destination != *memoAccount_)
-    {
         return false;
-    }
 
-    // Check for memos
     if (!tx.isFieldPresent(sfMemos))
-    {
-        JLOG(j_.trace()) << "UNLHashWatcher: Transaction has no memos";
         return false;
-    }
 
     auto const& memos = tx.getFieldArray(sfMemos);
     if (memos.empty())
-    {
         return false;
-    }
 
-    // Process the first memo (assuming UNL hash is in first memo)
     for (auto const& memo : memos)
     {
         if (!memo.isFieldPresent(sfMemoData))
             continue;
 
-        // Get the memo data (hex-encoded)
-        auto const memoDataHex = memo.getFieldVL(sfMemoData);
+        auto const memoDataBlob = memo.getFieldVL(sfMemoData);
         std::string memoData(
-            reinterpret_cast<char const*>(memoDataHex.data()),
-            memoDataHex.size());
+            reinterpret_cast<char const*>(memoDataBlob.data()),
+            memoDataBlob.size());
 
-        // Try to parse as UNL hash update
         auto update = parseMemo(memoData);
         if (!update)
-        {
-            JLOG(j_.debug())
-                << "UNLHashWatcher: Could not parse memo as UNL hash update";
             continue;
+
+        // Idempotent: if this is the same update we already have, accept it
+        if (pendingUpdate_ && update->sequence == pendingUpdate_->sequence &&
+            update->hash == pendingUpdate_->hash &&
+            update->effectiveLedger == pendingUpdate_->effectiveLedger)
+        {
+            return true;
         }
 
         // Enforce monotonic sequence
@@ -105,15 +92,13 @@ UNLHashWatcher::processTransaction(STTx const& tx)
             return false;
         }
 
-        // Store as pending update
         pendingUpdate_ = update;
         highestSequence_ = update->sequence;
 
-        JLOG(j_.info()) << "UNLHashWatcher: Received new UNL hash update"
+        JLOG(j_.info()) << "UNLHashWatcher: Received UNL hash update"
                         << " hash=" << update->hash
                         << " effectiveLedger=" << update->effectiveLedger
                         << " sequence=" << update->sequence;
-
         return true;
     }
 
@@ -141,8 +126,6 @@ UNLHashWatcher::verifyHash(uint256 const& hash) const
 {
     std::lock_guard lock(mutex_);
 
-    // If no current hash is set, accept any hash (allows bootstrap)
-    // TODO: Consider making this stricter once the system is operational
     if (!currentUpdate_)
     {
         JLOG(j_.debug())
@@ -167,7 +150,6 @@ UNLHashWatcher::shouldApplyPendingUpdate(LedgerIndex ledgerSeq) const
     if (!pendingUpdate_)
         return false;
 
-    // Only apply at or after the effective ledger
     return ledgerSeq >= pendingUpdate_->effectiveLedger;
 }
 
@@ -201,7 +183,6 @@ UNLHashWatcher::getHighestSequence() const
 std::optional<UNLHashWatcher::UNLHashUpdate>
 UNLHashWatcher::parseMemo(std::string const& memoData) const
 {
-    // The memo data should be JSON
     Json::Value root;
     Json::Reader reader;
 
@@ -211,7 +192,6 @@ UNLHashWatcher::parseMemo(std::string const& memoData) const
         return std::nullopt;
     }
 
-    // Required fields: hash, effectiveLedger, sequence
     if (!root.isObject() || !root.isMember("hash") ||
         !root.isMember("effectiveLedger") || !root.isMember("sequence"))
     {
@@ -221,9 +201,8 @@ UNLHashWatcher::parseMemo(std::string const& memoData) const
 
     UNLHashUpdate update;
 
-    // Parse hash (hex string)
     std::string hashStr = root["hash"].asString();
-    if (hashStr.size() != 64)  // 256 bits = 64 hex chars
+    if (hashStr.size() != 64)
     {
         JLOG(j_.debug()) << "UNLHashWatcher: Invalid hash length: "
                          << hashStr.size();
@@ -238,27 +217,40 @@ UNLHashWatcher::parseMemo(std::string const& memoData) const
     }
     std::memcpy(update.hash.data(), hashBytes->data(), 32);
 
-    // Parse effectiveLedger
-    if (!root["effectiveLedger"].isUInt())
+    if (!root["effectiveLedger"].isIntegral())
     {
-        JLOG(j_.debug()) << "UNLHashWatcher: effectiveLedger is not a uint";
+        JLOG(j_.debug()) << "UNLHashWatcher: effectiveLedger is not an integer";
         return std::nullopt;
     }
-    update.effectiveLedger = root["effectiveLedger"].asUInt();
-
-    // Parse sequence
-    if (!root["sequence"].isUInt())
+    auto const effectiveLedgerVal = root["effectiveLedger"].asInt();
+    if (effectiveLedgerVal < 0)
     {
-        JLOG(j_.debug()) << "UNLHashWatcher: sequence is not a uint";
+        JLOG(j_.debug()) << "UNLHashWatcher: effectiveLedger is negative";
         return std::nullopt;
     }
-    update.sequence = root["sequence"].asUInt();
+    update.effectiveLedger = static_cast<LedgerIndex>(effectiveLedgerVal);
 
-    // Parse optional version (default to 1)
+    if (!root["sequence"].isIntegral())
+    {
+        JLOG(j_.debug()) << "UNLHashWatcher: sequence is not an integer";
+        return std::nullopt;
+    }
+    auto const sequenceVal = root["sequence"].asInt();
+    if (sequenceVal < 0)
+    {
+        JLOG(j_.debug()) << "UNLHashWatcher: sequence is negative";
+        return std::nullopt;
+    }
+    update.sequence = static_cast<std::uint32_t>(sequenceVal);
+
     update.version = 1;
-    if (root.isMember("version") && root["version"].isUInt())
+    if (root.isMember("version") && root["version"].isIntegral())
     {
-        update.version = root["version"].asUInt();
+        auto const versionVal = root["version"].asInt();
+        if (versionVal > 0)
+        {
+            update.version = static_cast<std::uint32_t>(versionVal);
+        }
     }
 
     return update;
