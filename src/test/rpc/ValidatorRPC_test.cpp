@@ -123,11 +123,6 @@ public:
             BEAST_EXPECT(
                 jrr[jss::trusted_validator_keys].size() == keys.size());
             BEAST_EXPECT(jrr[jss::publisher_lists].size() == 0);
-            BEAST_EXPECT(jrr[jss::local_static_keys].size() == keys.size());
-            for (auto const& jKey : jrr[jss::local_static_keys])
-            {
-                BEAST_EXPECT(keys.count(jKey.asString()) == 1);
-            }
             BEAST_EXPECT(jrr[jss::signing_keys].size() == 0);
         }
         // No validator sites configured
@@ -239,7 +234,6 @@ public:
                 BEAST_EXPECT(
                     jrr[jss::validation_quorum].asUInt() ==
                     std::numeric_limits<std::uint32_t>::max());
-                BEAST_EXPECT(jrr[jss::local_static_keys].size() == 0);
                 BEAST_EXPECT(jrr[jss::trusted_validator_keys].size() == 0);
                 BEAST_EXPECT(
                     jrr[jss::validator_list][jss::expiration] == "unknown");
@@ -306,7 +300,6 @@ public:
                 BEAST_EXPECT(
                     jrr[jss::validation_quorum].asUInt() ==
                     std::numeric_limits<std::uint32_t>::max());
-                BEAST_EXPECT(jrr[jss::local_static_keys].size() == 0);
                 BEAST_EXPECT(jrr[jss::trusted_validator_keys].size() == 0);
                 BEAST_EXPECT(
                     jrr[jss::validator_list][jss::expiration] == "unknown");
@@ -387,7 +380,6 @@ public:
                 BEAST_EXPECT(
                     jrr[jss::validator_list][jss::expiration] ==
                     to_string(validUntil));
-                BEAST_EXPECT(jrr[jss::local_static_keys].size() == 0);
 
                 BEAST_EXPECT(
                     jrr[jss::trusted_validator_keys].size() ==
@@ -489,7 +481,6 @@ public:
                 BEAST_EXPECT(
                     jrr[jss::validator_list][jss::expiration] ==
                     to_string(validUntil2));
-                BEAST_EXPECT(jrr[jss::local_static_keys].size() == 0);
 
                 BEAST_EXPECT(
                     jrr[jss::trusted_validator_keys].size() ==

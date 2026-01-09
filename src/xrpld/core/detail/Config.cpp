@@ -246,7 +246,6 @@ getSingleSection(
 
 char const* const Config::configFileName = "postfiatd.cfg";
 char const* const Config::databaseDirName = "db";
-char const* const Config::validatorsFileName = "validators.txt";
 
 [[nodiscard]] static std::string
 getEnvVar(char const* name)
@@ -890,117 +889,6 @@ Config::loadFromString(std::string const& fileContents)
     // Do not load trusted validator configuration for standalone mode
     if (!RUN_STANDALONE)
     {
-        // If a file was explicitly specified, then throw if the
-        // path is malformed or if the file does not exist or is
-        // not a file.
-        // If the specified file is not an absolute path, then look
-        // for it in the same directory as the config file.
-        // If no path was specified, then look for validators.txt
-        // in the same directory as the config file, but don't complain
-        // if we can't find it.
-        boost::filesystem::path validatorsFile;
-
-        if (getSingleSection(secConfig, SECTION_VALIDATORS_FILE, strTemp, j_))
-        {
-            validatorsFile = strTemp;
-
-            if (validatorsFile.empty())
-                Throw<std::runtime_error>(
-                    "Invalid path specified in [" SECTION_VALIDATORS_FILE "]");
-
-            if (!validatorsFile.is_absolute() && !CONFIG_DIR.empty())
-                validatorsFile = CONFIG_DIR / validatorsFile;
-
-            if (!boost::filesystem::exists(validatorsFile))
-                Throw<std::runtime_error>(
-                    "The file specified in [" SECTION_VALIDATORS_FILE
-                    "] "
-                    "does not exist: " +
-                    validatorsFile.string());
-
-            else if (
-                !boost::filesystem::is_regular_file(validatorsFile) &&
-                !boost::filesystem::is_symlink(validatorsFile))
-                Throw<std::runtime_error>(
-                    "Invalid file specified in [" SECTION_VALIDATORS_FILE
-                    "]: " +
-                    validatorsFile.string());
-        }
-        else if (!CONFIG_DIR.empty())
-        {
-            validatorsFile = CONFIG_DIR / validatorsFileName;
-
-            if (!validatorsFile.empty())
-            {
-                if (!boost::filesystem::exists(validatorsFile))
-                    validatorsFile.clear();
-                else if (
-                    !boost::filesystem::is_regular_file(validatorsFile) &&
-                    !boost::filesystem::is_symlink(validatorsFile))
-                    validatorsFile.clear();
-            }
-        }
-
-        if (!validatorsFile.empty() &&
-            boost::filesystem::exists(validatorsFile) &&
-            (boost::filesystem::is_regular_file(validatorsFile) ||
-             boost::filesystem::is_symlink(validatorsFile)))
-        {
-            boost::system::error_code ec;
-            auto const data = getFileContents(ec, validatorsFile);
-            if (ec)
-            {
-                Throw<std::runtime_error>(
-                    "Failed to read '" + validatorsFile.string() + "'." +
-                    std::to_string(ec.value()) + ": " + ec.message());
-            }
-
-            auto iniFile = parseIniFile(data, true);
-
-            auto entries = getIniFileSection(iniFile, SECTION_VALIDATORS);
-
-            if (entries)
-                section(SECTION_VALIDATORS).append(*entries);
-
-            auto valKeyEntries =
-                getIniFileSection(iniFile, SECTION_VALIDATOR_KEYS);
-
-            if (valKeyEntries)
-                section(SECTION_VALIDATOR_KEYS).append(*valKeyEntries);
-
-            auto valSiteEntries =
-                getIniFileSection(iniFile, SECTION_VALIDATOR_LIST_SITES);
-
-            if (valSiteEntries)
-                section(SECTION_VALIDATOR_LIST_SITES).append(*valSiteEntries);
-
-            auto valListKeys =
-                getIniFileSection(iniFile, SECTION_VALIDATOR_LIST_KEYS);
-
-            if (valListKeys)
-                section(SECTION_VALIDATOR_LIST_KEYS).append(*valListKeys);
-
-            auto valListThreshold =
-                getIniFileSection(iniFile, SECTION_VALIDATOR_LIST_THRESHOLD);
-
-            if (valListThreshold)
-                section(SECTION_VALIDATOR_LIST_THRESHOLD)
-                    .append(*valListThreshold);
-
-            if (!entries && !valKeyEntries && !valListKeys)
-                Throw<std::runtime_error>(
-                    "The file specified in [" SECTION_VALIDATORS_FILE
-                    "] "
-                    "does not contain a [" SECTION_VALIDATORS
-                    "], "
-                    "[" SECTION_VALIDATOR_KEYS
-                    "] or "
-                    "[" SECTION_VALIDATOR_LIST_KEYS
-                    "]"
-                    " section: " +
-                    validatorsFile.string());
-        }
-
         VALIDATOR_LIST_THRESHOLD = [&]() -> std::optional<std::size_t> {
             auto const& listThreshold =
                 section(SECTION_VALIDATOR_LIST_THRESHOLD);
@@ -1032,10 +920,6 @@ Config::loadFromString(std::string const& fileContents)
                     "] should contain single value only");
             }
         }();
-
-        // Consolidate [validator_keys] and [validators]
-        section(SECTION_VALIDATORS)
-            .append(section(SECTION_VALIDATOR_KEYS).lines());
 
         if (!section(SECTION_VALIDATOR_LIST_SITES).lines().empty() &&
             section(SECTION_VALIDATOR_LIST_KEYS).lines().empty())
@@ -1134,7 +1018,8 @@ Config::loadFromString(std::string const& fileContents)
                 {
                     Throw<std::runtime_error>(
                         "Interval must be at least 60 seconds in [" +
-                        std::string(SECTION_VALIDATOR_EXCLUSIONS_INTERVAL) + "]");
+                        std::string(SECTION_VALIDATOR_EXCLUSIONS_INTERVAL) +
+                        "]");
                 }
                 VALIDATOR_EXCLUSIONS_INTERVAL = std::chrono::seconds(interval);
             }

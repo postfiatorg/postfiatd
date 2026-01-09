@@ -252,16 +252,6 @@ class ValidatorList
 
     std::optional<PublicKey> localPubKey_;
 
-    // The below variable contains the Publisher list specified in the local
-    // config file under the title of SECTION_VALIDATORS or [validators].
-    // This list is not associated with the masterKey of any publisher.
-
-    // Appropos PublisherListCollection fields, localPublisherList does not
-    // have any "remaining" manifests. It is assumed to be perennially
-    // "available". The "validUntil" field is set to the highest possible
-    // value of the field, hence this list is always valid.
-    PublisherList localPublisherList;
-
     // The master public keys of the current negative UNL
     hash_set<PublicKey> negativeUNL_;
 
@@ -333,9 +323,9 @@ public:
 
         @param localSigningKey This node's validation public key
 
-        @param configKeys List of trusted keys from config. Each entry
-        consists of a base58 encoded validation public key, optionally followed
-        by a comment.
+        @param initialValidators List of initial/fallback validators from
+        NetworkValidators. Each entry consists of a base58 encoded validation
+        public key.
 
         @param publisherKeys List of trusted publisher public keys. Each
         entry contains a base58 encoded account public key.
@@ -349,7 +339,7 @@ public:
     bool
     load(
         std::optional<PublicKey> const& localSigningKey,
-        std::vector<std::string> const& configKeys,
+        std::vector<std::string> const& initialValidators,
         std::vector<std::string> const& publisherKeys,
         std::optional<std::size_t> listThreshold = {});
 

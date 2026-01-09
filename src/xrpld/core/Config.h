@@ -89,7 +89,6 @@ public:
     // Settings related to the configuration file location and directories
     static char const* const configFileName;
     static char const* const databaseDirName;
-    static char const* const validatorsFileName;
 
     /** Returns the full path and filename of the debug log file. */
     boost::filesystem::path
@@ -211,7 +210,8 @@ public:
         std::string pubkey;
     };
     std::vector<ValidatorExclusionSource> VALIDATOR_EXCLUSIONS_SOURCES;
-    std::chrono::seconds VALIDATOR_EXCLUSIONS_INTERVAL{300};  // Default 5 minutes
+    std::chrono::seconds VALIDATOR_EXCLUSIONS_INTERVAL{
+        300};  // Default 5 minutes
 
     FeeSetup FEES;
 

@@ -86,14 +86,15 @@ struct ConfigSection
 #define SECTION_SERVER_DOMAIN "server_domain"
 #define SECTION_SWEEP_INTERVAL "sweep_interval"
 #define SECTION_UNL_HASH_PUBLISHER "unl_hash_publisher"
-#define SECTION_VALIDATORS_FILE "validators_file"
 #define SECTION_VALIDATION_SEED "validation_seed"
-#define SECTION_VALIDATOR_KEYS "validator_keys"
 #define SECTION_VALIDATOR_KEY_REVOCATION "validator_key_revocation"
 #define SECTION_VALIDATOR_LIST_KEYS "validator_list_keys"
 #define SECTION_VALIDATOR_LIST_SITES "validator_list_sites"
 #define SECTION_VALIDATOR_LIST_THRESHOLD "validator_list_threshold"
+// DEPRECATED: Validators now come from NetworkValidators::getValidators().
+// These two sections are only used by tests for backwards compatibility.
 #define SECTION_VALIDATORS "validators"
+#define SECTION_VALIDATORS_FILE "validators_file"
 #define SECTION_VALIDATOR_TOKEN "validator_token"
 #define SECTION_VALIDATOR_EXCLUSIONS "validator_exclusions"
 #define SECTION_VALIDATOR_EXCLUSIONS_SOURCES "validator_exclusions_sources"

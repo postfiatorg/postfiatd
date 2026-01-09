@@ -138,22 +138,10 @@ ValidatorList::ValidatorList(
 bool
 ValidatorList::load(
     std::optional<PublicKey> const& localSigningKey,
-    std::vector<std::string> const& configKeys,
+    std::vector<std::string> const& initialValidators,
     std::vector<std::string> const& publisherKeys,
     std::optional<std::size_t> listThreshold)
 {
-    static boost::regex const re(
-        "[[:space:]]*"       // skip leading whitespace
-        "([[:alnum:]]+)"     // node identity
-        "(?:"                // begin optional comment block
-        "[[:space:]]+"       // (skip all leading whitespace)
-        "(?:"                // begin optional comment
-        "(.*[^[:space:]]+)"  // the comment
-        "[[:space:]]*"       // (skip all trailing whitespace)
-        ")?"                 // end optional comment
-        ")?"                 // end optional comment block
-    );
-
     std::lock_guard lock{mutex_};
 
     JLOG(j_.debug())
@@ -214,12 +202,12 @@ ValidatorList::load(
                          << listThreshold_;
     }
 
-    JLOG(j_.debug()) << "Loaded " << count << " keys";
+    JLOG(j_.debug()) << "Loaded " << count << " publisher keys";
 
     if (localSigningKey)
         localPubKey_ = validatorManifests_.getMasterKey(*localSigningKey);
 
-    // Treat local validator key as though it was listed in the config
+    // Treat local validator key as trusted
     if (localPubKey_)
     {
         // The local validator must meet listThreshold_ so the validator does
@@ -233,27 +221,19 @@ ValidatorList::load(
         }
     }
 
-    JLOG(j_.debug()) << "Loading configured validator keys";
+    JLOG(j_.debug())
+        << "Loading initial/fallback validators from NetworkValidators";
 
     count = 0;
-    for (auto const& n : configKeys)
+    for (auto const& n : initialValidators)
     {
         JLOG(j_.trace()) << "Processing '" << n << "'";
 
-        boost::smatch match;
-
-        if (!boost::regex_match(n, match, re))
-        {
-            JLOG(j_.error()) << "Malformed entry: '" << n << "'";
-            return false;
-        }
-
-        auto const id =
-            parseBase58<PublicKey>(TokenType::NodePublic, match[1].str());
+        auto const id = parseBase58<PublicKey>(TokenType::NodePublic, n);
 
         if (!id)
         {
-            JLOG(j_.error()) << "Invalid node identity: " << match[1];
+            JLOG(j_.error()) << "Invalid node identity: " << n;
             return false;
         }
 
@@ -261,23 +241,16 @@ ValidatorList::load(
         if (*id == localPubKey_ || *id == localSigningKey)
             continue;
 
-        auto ret = keyListings_.insert({*id, listThreshold_});
-        if (!ret.second)
+        auto [_, inserted] = keyListings_.insert({*id, listThreshold_});
+        if (!inserted)
         {
-            JLOG(j_.warn()) << "Duplicate node identity: " << match[1];
+            JLOG(j_.warn()) << "Duplicate node identity: " << n;
             continue;
         }
-        localPublisherList.list.emplace_back(*id);
         ++count;
     }
 
-    // Config listed keys never expire
-    // set the expiration time for the newly created publisher list
-    // exactly once
-    if (count > 0)
-        localPublisherList.validUntil = TimeKeeper::time_point::max();
-
-    JLOG(j_.debug()) << "Loaded " << count << " entries";
+    JLOG(j_.debug()) << "Loaded " << count << " initial validators";
 
     return true;
 }
@@ -955,8 +928,6 @@ ValidatorList::applyListsAndBroadcast(
     {
         bool good = true;
 
-        // localPublisherList never expires, so localPublisherList is excluded
-        // from the below check.
         for (auto const& [_, listCollection] : publisherLists_)
         {
             if (listCollection.status != PublisherStatus::available)
@@ -972,9 +943,6 @@ ValidatorList::applyListsAndBroadcast(
     }
     bool broadcast = disposition <= ListDisposition::known_sequence;
 
-    // this function is only called for PublicKeys which are not specified
-    // in the config file (Note: Keys specified in the local config file are
-    // stored in ValidatorList::localPublisherList data member).
     if (broadcast && result.status <= PublisherStatus::expired &&
         result.publisherKey &&
         publisherLists_[*result.publisherKey].maxSequence)
@@ -1606,7 +1574,7 @@ ValidatorList::removePublisherList(
 std::size_t
 ValidatorList::count(ValidatorList::shared_lock const&) const
 {
-    return publisherLists_.size() + (localPublisherList.list.size() > 0);
+    return publisherLists_.size();
 }
 
 std::size_t
@@ -1649,19 +1617,6 @@ ValidatorList::expires(ValidatorList::shared_lock const&) const
         }
     }
 
-    if (localPublisherList.list.size() > 0)
-    {
-        PublisherList collection = localPublisherList;
-        // Unfetched
-        auto const& current = collection;
-        auto chainedExpiration = current.validUntil;
-
-        // Earliest
-        if (!res || chainedExpiration < *res)
-        {
-            res = chainedExpiration;
-        }
-    }
     return res;
 }
 
@@ -1711,13 +1666,6 @@ ValidatorList::getJson() const
 
         x[jss::validator_list_threshold] = Json::UInt(listThreshold_);
     }
-
-    // Validator keys listed in the local config file
-    Json::Value& jLocalStaticKeys =
-        (res[jss::local_static_keys] = Json::arrayValue);
-
-    for (auto const& key : localPublisherList.list)
-        jLocalStaticKeys.append(toBase58(TokenType::NodePublic, key));
 
     // Publisher lists
     Json::Value& jPublisherLists =
@@ -1982,9 +1930,6 @@ ValidatorList::updateTrusted(
 
     // Rotate pending and remove expired published lists
     bool good = true;
-    // localPublisherList is not processed here. This is because the
-    // Validators specified in the local config file do not expire nor do
-    // they have a "remaining" section of PublisherList.
     for (auto& [pubKey, collection] : publisherLists_)
     {
         {
@@ -2050,8 +1995,6 @@ ValidatorList::updateTrusted(
             }
         }
         // Remove if expired
-        // ValidatorLists specified in the local config file never expire.
-        // Hence, the below steps are not relevant for localPublisherList
         if (collection.status == PublisherStatus::available &&
             collection.current.validUntil <= closeTime)
         {
@@ -2152,8 +2095,7 @@ ValidatorList::updateTrusted(
                         << unlSize << ")";
     }
 
-    if ((publisherLists_.size() || localPublisherList.list.size()) &&
-        unlSize == 0)
+    if (publisherLists_.size() && unlSize == 0)
     {
         // No validators. Lock down.
         ops.setUNLBlocked();
