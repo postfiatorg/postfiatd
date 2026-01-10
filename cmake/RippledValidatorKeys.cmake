@@ -1,17 +1,18 @@
 option (validator_keys "Enables building of validator-keys-tool as a separate target (imported via FetchContent)" OFF)
 
 if (validator_keys)
-  git_branch (current_branch)
-  # default to tracking VK master branch unless we are on release
-  if (NOT (current_branch STREQUAL "release"))
-    set (current_branch "master")
-  endif ()
-  message (STATUS "tracking ValidatorKeys branch: ${current_branch}")
+  # Pin to a specific commit to avoid upstream breaking changes
+  # On Dec 11, 2025, ripple/validator-keys-tool renamed ripple:: to xrpl:: namespace
+  # (commit db143b6), which breaks compatibility with postfiatd
+  # TODO: Fork validator-keys-tool and maintain compatibility, or
+  #       update postfiatd to match upstream namespace conventions
+  set (validator_keys_commit "05742108d4b7c0b7d9a97c073acd690d2c75a2b4")  # Last working commit before namespace rename (Sep 5, 2025)
+  message (STATUS "Using ValidatorKeys commit: ${validator_keys_commit}")
 
   FetchContent_Declare (
     validator_keys_src
     GIT_REPOSITORY https://github.com/ripple/validator-keys-tool.git
-    GIT_TAG        "${current_branch}"
+    GIT_TAG        "${validator_keys_commit}"
   )
   FetchContent_GetProperties (validator_keys_src)
   if (NOT validator_keys_src_POPULATED)
