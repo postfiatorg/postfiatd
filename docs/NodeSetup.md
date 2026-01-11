@@ -134,7 +134,7 @@ token has been compromised, use the `validator-keys` tool to create a new
 validator token with the domain of your validator:
 
 ```
-  $ ./validator-keys set_domain [VALIDATOR_DOMAIN]
+  $ validator-keys set_domain [VALIDATOR_DOMAIN]
 ```
 
 Sample output:

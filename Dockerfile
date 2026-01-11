@@ -26,10 +26,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set working directory
 WORKDIR /postfiat
 
-# Install build dependencies
+# Install build dependencies + logrotate and cron for log management
 RUN apt update
 
-RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make g++-11 libprotobuf-dev protobuf-compiler
+RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make g++-11 libprotobuf-dev protobuf-compiler logrotate cron
 
 RUN curl --location --remote-name \
   "https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1.tar.gz"
@@ -90,6 +90,16 @@ RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-k
 RUN cp /postfiat/cfg/postfiatd-${NETWORK}-${NODE_SIZE}.cfg /etc/postfiatd/postfiatd.cfg
 RUN cp /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
 
+# Setup log rotation
+RUN cp /postfiat/scripts/logrotate-postfiatd.conf /etc/logrotate.d/postfiatd
+# Add cron job to run logrotate every hour (with state file in persistent volume)
+RUN echo "0 * * * * root /usr/sbin/logrotate -s /var/log/postfiatd/.logrotate.status /etc/logrotate.d/postfiatd" > /etc/cron.d/postfiatd-logrotate
+RUN chmod 0644 /etc/cron.d/postfiatd-logrotate
+
+# Copy and setup entrypoint script
+RUN cp /postfiat/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Set working directory
 WORKDIR /var/lib/postfiatd
 
@@ -101,8 +111,8 @@ VOLUME ["/var/log/postfiatd"]
 # Expose ports (based on the config file)
 EXPOSE 5005 2559 6005 6006 50051
 
-# Set the entrypoint
-ENTRYPOINT ["/usr/local/bin/postfiatd"]
+# Set the entrypoint (uses wrapper script that starts cron for log rotation)
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Default command arguments
 CMD ["--conf", "/etc/postfiatd/postfiatd.cfg"]
