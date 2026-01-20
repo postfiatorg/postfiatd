@@ -1,11 +1,11 @@
-name: Devnet Build DH
+name: Mainnet Build DH
 on:
   workflow_dispatch:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: agtipft/postfiatd
 jobs:
-  build-devnet:
+  build-mainnet:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -25,10 +25,10 @@ jobs:
         sudo docker image prune --all --force
         echo "=== AFTER cleanup ==="
         df -h
-    - name: Checkout devnet
+    - name: Checkout main
       uses: actions/checkout@v4
       with:
-        ref: devnet
+        ref: main
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
@@ -42,8 +42,8 @@ jobs:
         file: ./Dockerfile
         target: builder
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:devnet-${{ matrix.node_size }}-latest
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:mainnet-${{ matrix.node_size }}-latest
         platforms: linux/amd64
         build-args: |
-          NETWORK=devnet
+          NETWORK=mainnet
           NODE_SIZE=${{ matrix.node_size }}

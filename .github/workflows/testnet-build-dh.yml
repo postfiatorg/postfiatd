@@ -10,6 +10,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        node_size: [light, medium, full]
     steps:
     - name: Free up disk space
       run: |
@@ -39,8 +42,8 @@ jobs:
         file: ./Dockerfile
         target: builder
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:testnet-latest
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:testnet-${{ matrix.node_size }}-latest
         platforms: linux/amd64
         build-args: |
           NETWORK=testnet
-          NODE_SIZE=full
+          NODE_SIZE=${{ matrix.node_size }}

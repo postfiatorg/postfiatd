@@ -6,19 +6,32 @@ This guide explains how to build PostFiat Docker images with different network a
 
 The Dockerfile supports the following configuration files:
 
-- `postfiatd-mainnet-full.cfg` - Mainnet full node
-- `postfiatd-mainnet-light.cfg` - Mainnet light node
-- `postfiatd-testnet-full.cfg` - Testnet full node
-- `postfiatd-testnet-light.cfg` - Testnet light node
-- `postfiatd-devnet-full.cfg` - Devnet full node (default)
-- `postfiatd-devnet-light.cfg` - Devnet light node
+| Config | Network | Node Size | History |
+|--------|---------|-----------|---------|
+| `postfiatd-mainnet-full.cfg` | Mainnet | Full | Complete history |
+| `postfiatd-mainnet-medium.cfg` | Mainnet | Medium | ~50,000 ledgers |
+| `postfiatd-mainnet-light.cfg` | Mainnet | Light | ~512 ledgers |
+| `postfiatd-testnet-full.cfg` | Testnet | Full | Complete history |
+| `postfiatd-testnet-medium.cfg` | Testnet | Medium | ~50,000 ledgers |
+| `postfiatd-testnet-light.cfg` | Testnet | Light | ~512 ledgers |
+| `postfiatd-devnet-full.cfg` | Devnet | Full | Complete history |
+| `postfiatd-devnet-medium.cfg` | Devnet | Medium | ~50,000 ledgers |
+| `postfiatd-devnet-light.cfg` | Devnet | Light | ~512 ledgers |
 
 ## Build Arguments
 
 The Dockerfile accepts two build arguments:
 
 - `NETWORK` - Network type: `mainnet`, `testnet`, or `devnet` (default: `devnet`)
-- `NODE_SIZE` - Node size: `full` or `light` (default: `full`)
+- `NODE_SIZE` - Node size: `full`, `medium`, or `light` (default: `full`)
+
+## Node Size Recommendations
+
+| Node Size | Use Case | Disk Space |
+|-----------|----------|------------|
+| `full` | Archive nodes, block explorers | High |
+| `medium` | RPC nodes serving API clients | Moderate |
+| `light` | Validators, minimal relay nodes | Low |
 
 ## Build Examples
 
@@ -28,19 +41,24 @@ The Dockerfile accepts two build arguments:
 docker build -t postfiatd .
 ```
 
-### Build Mainnet Full Node
+### Build Mainnet Nodes
 
 ```bash
+# Full archive node
 docker build \
   --build-arg NETWORK=mainnet \
   --build-arg NODE_SIZE=full \
   -t postfiatd:mainnet-full \
   .
-```
 
-### Build Mainnet Light Node
+# Medium RPC node
+docker build \
+  --build-arg NETWORK=mainnet \
+  --build-arg NODE_SIZE=medium \
+  -t postfiatd:mainnet-medium \
+  .
 
-```bash
+# Light node
 docker build \
   --build-arg NETWORK=mainnet \
   --build-arg NODE_SIZE=light \
@@ -48,19 +66,24 @@ docker build \
   .
 ```
 
-### Build Testnet Full Node
+### Build Testnet Nodes
 
 ```bash
+# Full archive node
 docker build \
   --build-arg NETWORK=testnet \
   --build-arg NODE_SIZE=full \
   -t postfiatd:testnet-full \
   .
-```
 
-### Build Testnet Light Node
+# Medium RPC node
+docker build \
+  --build-arg NETWORK=testnet \
+  --build-arg NODE_SIZE=medium \
+  -t postfiatd:testnet-medium \
+  .
 
-```bash
+# Light node
 docker build \
   --build-arg NETWORK=testnet \
   --build-arg NODE_SIZE=light \
@@ -68,19 +91,24 @@ docker build \
   .
 ```
 
-### Build Devnet Full Node
+### Build Devnet Nodes
 
 ```bash
+# Full archive node
 docker build \
   --build-arg NETWORK=devnet \
   --build-arg NODE_SIZE=full \
   -t postfiatd:devnet-full \
   .
-```
 
-### Build Devnet Light Node
+# Medium RPC node
+docker build \
+  --build-arg NETWORK=devnet \
+  --build-arg NODE_SIZE=medium \
+  -t postfiatd:devnet-medium \
+  .
 
-```bash
+# Light node
 docker build \
   --build-arg NETWORK=devnet \
   --build-arg NODE_SIZE=light \
@@ -115,8 +143,8 @@ services:
       context: .
       args:
         NETWORK: mainnet
-        NODE_SIZE: full
-    image: postfiatd:mainnet-full
+        NODE_SIZE: medium
+    image: postfiatd:mainnet-medium
     ports:
       - "5005:5005"
       - "6006:6006"
@@ -130,8 +158,8 @@ services:
       context: .
       args:
         NETWORK: testnet
-        NODE_SIZE: full
-    image: postfiatd:testnet-full
+        NODE_SIZE: medium
+    image: postfiatd:testnet-medium
     ports:
       - "5015:5005"
       - "6016:6006"
@@ -157,6 +185,6 @@ docker exec <container-id> cat /etc/postfiatd/postfiatd.cfg | grep network_id
 ```
 
 This should show the network ID corresponding to your selected network:
-- `network_id = main` for mainnet
-- `network_id = test` for testnet
-- `network_id = devnet` for devnet
+- `network_id = 2026` for mainnet
+- `network_id = 2025` for testnet
+- `network_id = 2024` for devnet
