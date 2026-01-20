@@ -18,7 +18,7 @@ FROM ubuntu:24.04 AS builder
 
 # Build arguments for configuration selection
 ARG NETWORK=devnet
-ARG NODE_SIZE=full
+ARG NODE_SIZE=light
 
 # Avoid interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
