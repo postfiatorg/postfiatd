@@ -1,9 +1,9 @@
 name: Build and publish Doxygen documentation
-# To test this workflow, push your changes to your fork's `develop` branch.
+# To test this workflow, push your changes to your fork's `main` branch.
 on:
   push:
     branches:
-      - develop
+      - main
       - doxygen
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

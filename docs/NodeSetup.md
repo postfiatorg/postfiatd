@@ -30,7 +30,7 @@ Create the necessary directory structure and download the configuration.
 ```bash
 mkdir -p /opt/postfiatd
 cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/develop/scripts/docker-compose-devnet.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-devnet.yml -O docker-compose.yml
 ```
 
 **For Testnet:**
@@ -38,7 +38,7 @@ wget https://raw.githubusercontent.com/postfiatorg/postfiatd/develop/scripts/doc
 ```bash
 mkdir -p /opt/postfiatd
 cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet_candidate/scripts/docker-compose-testnet.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet/scripts/docker-compose-testnet.yml -O docker-compose.yml
 ```
 
 ### 3. Start the Node

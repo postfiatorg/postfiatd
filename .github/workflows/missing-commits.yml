@@ -5,7 +5,7 @@ on:
     branches:
       # Only check that the branches are up to date when updating the
       # relevant branches.
-      - develop
+      - main
       - release
 
 jobs:
@@ -21,13 +21,13 @@ jobs:
         SUGGESTION: |
 
           If you are reading this, then the commits indicated above are
-          missing from "develop" and/or "release". Do a reverse-merge
+          missing from "main" and/or "release". Do a reverse-merge
           as soon as possible. See CONTRIBUTING.md for instructions.
       run: |
         set -o pipefail
         # Branches ordered by how "canonical" they are. Every commit in
         # one branch should be in all the branches behind it
-        order=( master release develop )
+        order=( master release main )
         branches=()
         for branch in "${order[@]}"
         do
