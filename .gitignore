@@ -52,6 +52,8 @@ db/*.db-*
 
 # Ignore debug logs
 debug_log.txt
+*.log
+scripts/logs/
 
 # Ignore customized configs
 rippled.cfg
@@ -112,3 +114,7 @@ bld.rippled/
 
 # Suggested in-tree build directory
 /.build/
+
+# Claude Code
+.claude/
+CLAUDE.md
