@@ -1,4 +1,4 @@
-name: Devnet Build DH
+name: Docker Build - Devnet
 on:
   workflow_dispatch:
 env:

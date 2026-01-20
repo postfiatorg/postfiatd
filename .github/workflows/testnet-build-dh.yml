@@ -1,4 +1,4 @@
-name: Testnet Build DH
+name: Docker Build - Testnet
 on:
   workflow_dispatch:
 env:

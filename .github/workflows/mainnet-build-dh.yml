@@ -1,4 +1,4 @@
-name: Mainnet Build DH
+name: Docker Build - Mainnet
 on:
   workflow_dispatch:
 env:
