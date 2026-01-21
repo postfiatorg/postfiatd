@@ -26,21 +26,6 @@ services:
         max-size: "100m"
         max-file: "10"
 
-  # Log cleanup service
-  log-cleanup:
-    image: alpine:latest
-    container_name: postfiatd-log-cleanup
-    volumes:
-      - ./logs:/logs
-    command: >
-      sh -c "
-      while true; do
-        find /logs -name '*.log' -type f -size +100M -exec truncate -s 100M {} \;
-        find /logs -name '*.log.*' -type f -mtime +7 -delete
-        sleep 3600
-      done"
-    restart: unless-stopped
-
 # Named volumes
 volumes:
   postfiatd-config:
