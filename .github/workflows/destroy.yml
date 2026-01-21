@@ -27,13 +27,18 @@ jobs:
     steps:
       - name: Set hosts based on network
         id: hosts
+        env:
+          DEVNET_VALIDATORS: ${{ secrets.DEVNET_VALIDATOR_HOSTS }}
+          DEVNET_RPC: ${{ secrets.DEVNET_RPC_HOSTS }}
+          TESTNET_VALIDATORS: ${{ secrets.TESTNET_VALIDATOR_HOSTS }}
+          TESTNET_RPC: ${{ secrets.TESTNET_RPC_HOSTS }}
         run: |
           if [ "${{ inputs.network }}" = "devnet" ]; then
-            echo "validator_hosts=${{ secrets.DEVNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
-            echo "rpc_hosts=${{ secrets.DEVNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "validator_hosts=$DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=$DEVNET_RPC" >> $GITHUB_OUTPUT
           else
-            echo "validator_hosts=${{ secrets.TESTNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
-            echo "rpc_hosts=${{ secrets.TESTNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "validator_hosts=$TESTNET_VALIDATORS" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=$TESTNET_RPC" >> $GITHUB_OUTPUT
           fi
 
   destroy-validators:
