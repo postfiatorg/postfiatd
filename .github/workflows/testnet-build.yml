@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - testnet
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'cfg/**'
+      - 'cmake/**'
+      - 'external/**'
+      - 'Builds/**'
+      - 'CMakeLists.txt'
+      - 'conanfile.py'
+      - 'Dockerfile'
+      - 'scripts/docker-entrypoint.sh'
+      - 'scripts/logrotate-postfiatd.conf'
 env:
   REGISTRY: docker.io
   IMAGE_NAME: agtipft/postfiatd
