@@ -28,10 +28,10 @@ jobs:
       - name: Set hosts based on network
         id: hosts
         env:
-          DEVNET_VALIDATORS: ${{ secrets.DEVNET_VALIDATOR_HOSTS }}
-          DEVNET_RPC: ${{ secrets.DEVNET_RPC_HOSTS }}
-          TESTNET_VALIDATORS: ${{ secrets.TESTNET_VALIDATOR_HOSTS }}
-          TESTNET_RPC: ${{ secrets.TESTNET_RPC_HOSTS }}
+          DEVNET_VALIDATORS: ${{ vars.DEVNET_VALIDATOR_HOSTS }}
+          DEVNET_RPC: ${{ vars.DEVNET_RPC_HOSTS }}
+          TESTNET_VALIDATORS: ${{ vars.TESTNET_VALIDATOR_HOSTS }}
+          TESTNET_RPC: ${{ vars.TESTNET_RPC_HOSTS }}
         run: |
           if [ "${{ inputs.network }}" = "devnet" ]; then
             echo "validator_hosts=$DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
