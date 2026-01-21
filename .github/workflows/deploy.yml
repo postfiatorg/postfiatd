@@ -1,0 +1,254 @@
+name: Deploy Nodes
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to deploy'
+        required: true
+        type: choice
+        options:
+          - devnet
+          - testnet
+      node_type:
+        description: 'Node type to deploy'
+        required: true
+        type: choice
+        options:
+          - validators
+          - rpc
+          - all
+      reset_vhs:
+        description: 'Reset VHS after validator deployment'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  PROMTAIL_CONFIG_BASE_URL: https://raw.githubusercontent.com/postfiatorg/infra-monitoring/main/promtail
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
+      rpc_hosts: ${{ steps.hosts.outputs.rpc_hosts }}
+      vhs_host: ${{ steps.hosts.outputs.vhs_host }}
+      loki_url: ${{ steps.hosts.outputs.loki_url }}
+    steps:
+      - name: Set hosts based on network
+        id: hosts
+        run: |
+          if [ "${{ inputs.network }}" = "devnet" ]; then
+            echo "validator_hosts=${{ secrets.DEVNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=${{ secrets.DEVNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "vhs_host=${{ secrets.DEVNET_VHS_HOST }}" >> $GITHUB_OUTPUT
+          else
+            echo "validator_hosts=${{ secrets.TESTNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=${{ secrets.TESTNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "vhs_host=${{ secrets.TESTNET_VHS_HOST }}" >> $GITHUB_OUTPUT
+          fi
+          echo "loki_url=http://infra-monitoring.${{ inputs.network }}.postfiat.org:3100/loki/api/v1/push" >> $GITHUB_OUTPUT
+
+  deploy-validators:
+    if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare.outputs.validator_hosts) }}
+    steps:
+      - name: Deploy to validator ${{ matrix.host }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          NETWORK: ${{ inputs.network }}
+          LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
+        with:
+          host: ${{ matrix.host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          envs: NETWORK,LOKI_URL
+          script: |
+            set -e
+
+            mkdir -p /opt/postfiatd/logs
+            cd /opt/postfiatd
+
+            docker compose down --remove-orphans 2>/dev/null || true
+
+            cat > docker-compose.yml << 'COMPOSE_EOF'
+            version: '3.8'
+            services:
+              postfiatd:
+                image: agtipft/postfiatd:${NETWORK:-devnet}-light-latest
+                container_name: postfiatd
+                ports:
+                  - "5005:5005"
+                  - "2559:2559"
+                  - "6005:6005"
+                  - "6006:6006"
+                  - "50051:50051"
+                volumes:
+                  - postfiatd-config:/etc/postfiatd
+                  - postfiatd-data:/var/lib/postfiatd/db
+                  - ./logs:/var/log/postfiatd
+                user: "0:0"
+                restart: unless-stopped
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "100m"
+                    max-file: "10"
+
+              promtail:
+                image: grafana/promtail:3.0.0
+                container_name: promtail
+                hostname: ${HOSTNAME}
+                volumes:
+                  - ./promtail-config.yml:/etc/promtail/config.yml:ro
+                  - ./logs:/var/log/postfiatd:ro
+                  - promtail-positions:/tmp
+                command: >
+                  -config.file=/etc/promtail/config.yml
+                  -client.url=${LOKI_URL}
+                  -client.external-labels=hostname=${HOSTNAME}
+                restart: unless-stopped
+                depends_on:
+                  - postfiatd
+
+            volumes:
+              postfiatd-config:
+              postfiatd-data:
+              promtail-positions:
+            COMPOSE_EOF
+
+            curl -fsSL "${{ env.PROMTAIL_CONFIG_BASE_URL }}/validator/promtail-config.yml" -o promtail-config.yml
+
+            cat > .env << ENV_EOF
+            NETWORK=${NETWORK}
+            LOKI_URL=${LOKI_URL}
+            HOSTNAME=$(hostname)
+            ENV_EOF
+
+            docker compose pull
+            docker compose up -d
+
+            echo "Waiting for postfiatd to start..."
+            sleep 30
+
+            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+              echo "postfiatd is healthy"
+            else
+              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
+
+  deploy-rpc:
+    if: ${{ always() && (inputs.node_type == 'rpc' || inputs.node_type == 'all') && !cancelled() }}
+    needs: [prepare, deploy-validators]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare.outputs.rpc_hosts) }}
+    steps:
+      - name: Deploy to RPC ${{ matrix.host }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          NETWORK: ${{ inputs.network }}
+          LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
+        with:
+          host: ${{ matrix.host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          envs: NETWORK,LOKI_URL
+          script: |
+            set -e
+
+            mkdir -p /opt/postfiatd/logs
+            cd /opt/postfiatd
+
+            docker compose down --remove-orphans 2>/dev/null || true
+
+            cat > docker-compose.yml << 'COMPOSE_EOF'
+            version: '3.8'
+            services:
+              postfiatd:
+                image: agtipft/postfiatd:${NETWORK:-devnet}-medium-latest
+                container_name: postfiatd
+                ports:
+                  - "5005:5005"
+                  - "2559:2559"
+                  - "6005:6005"
+                  - "6006:6006"
+                  - "50051:50051"
+                volumes:
+                  - postfiatd-config:/etc/postfiatd
+                  - postfiatd-data:/var/lib/postfiatd/db
+                  - ./logs:/var/log/postfiatd
+                user: "0:0"
+                restart: unless-stopped
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "100m"
+                    max-file: "10"
+
+              promtail:
+                image: grafana/promtail:3.0.0
+                container_name: promtail
+                hostname: ${HOSTNAME}
+                volumes:
+                  - ./promtail-config.yml:/etc/promtail/config.yml:ro
+                  - ./logs:/var/log/postfiatd:ro
+                  - promtail-positions:/tmp
+                command: >
+                  -config.file=/etc/promtail/config.yml
+                  -client.url=${LOKI_URL}
+                  -client.external-labels=hostname=${HOSTNAME}
+                restart: unless-stopped
+                depends_on:
+                  - postfiatd
+
+            volumes:
+              postfiatd-config:
+              postfiatd-data:
+              promtail-positions:
+            COMPOSE_EOF
+
+            curl -fsSL "${{ env.PROMTAIL_CONFIG_BASE_URL }}/rpc/promtail-config.yml" -o promtail-config.yml
+
+            cat > .env << ENV_EOF
+            NETWORK=${NETWORK}
+            LOKI_URL=${LOKI_URL}
+            HOSTNAME=$(hostname)
+            ENV_EOF
+
+            docker compose pull
+            docker compose up -d
+
+            echo "Waiting for postfiatd to start..."
+            sleep 30
+
+            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+              echo "postfiatd is healthy"
+            else
+              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
+
+  reset-vhs:
+    if: ${{ always() && inputs.reset_vhs && (inputs.node_type == 'validators' || inputs.node_type == 'all') && !cancelled() }}
+    needs: [prepare, deploy-validators, deploy-rpc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reset VHS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ needs.prepare.outputs.vhs_host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          script: |
+            set -e
+
+            curl -fsSL https://raw.githubusercontent.com/postfiatorg/validator-history-service/main/scripts/reset-vhs.sh | bash
+
+            echo "VHS reset complete"

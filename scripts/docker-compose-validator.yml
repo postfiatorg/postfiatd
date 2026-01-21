@@ -1,0 +1,43 @@
+version: '3.8'
+services:
+  postfiatd:
+    image: agtipft/postfiatd:${NETWORK:-devnet}-light-latest
+    container_name: postfiatd
+    ports:
+      - "5005:5005"
+      - "2559:2559"
+      - "6005:6005"
+      - "6006:6006"
+      - "50051:50051"
+    volumes:
+      - postfiatd-config:/etc/postfiatd
+      - postfiatd-data:/var/lib/postfiatd/db
+      - ./logs:/var/log/postfiatd
+    user: "0:0"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    hostname: ${HOSTNAME}
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - ./logs:/var/log/postfiatd:ro
+      - promtail-positions:/tmp
+    command: >
+      -config.file=/etc/promtail/config.yml
+      -client.url=${LOKI_URL}
+      -client.external-labels=hostname=${HOSTNAME}
+    restart: unless-stopped
+    depends_on:
+      - postfiatd
+
+volumes:
+  postfiatd-config:
+  postfiatd-data:
+  promtail-positions:

@@ -1,0 +1,101 @@
+name: Update Nodes
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to update'
+        required: true
+        type: choice
+        options:
+          - devnet
+          - testnet
+      node_type:
+        description: 'Node type to update'
+        required: true
+        type: choice
+        options:
+          - validators
+          - rpc
+          - all
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
+      rpc_hosts: ${{ steps.hosts.outputs.rpc_hosts }}
+    steps:
+      - name: Set hosts based on network
+        id: hosts
+        run: |
+          if [ "${{ inputs.network }}" = "devnet" ]; then
+            echo "validator_hosts=${{ secrets.DEVNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=${{ secrets.DEVNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+          else
+            echo "validator_hosts=${{ secrets.TESTNET_VALIDATOR_HOSTS }}" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=${{ secrets.TESTNET_RPC_HOSTS }}" >> $GITHUB_OUTPUT
+          fi
+
+  update-validators:
+    if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare.outputs.validator_hosts) }}
+    steps:
+      - name: Update validator ${{ matrix.host }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ matrix.host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /opt/postfiatd
+
+            docker compose pull
+            docker compose up -d
+
+            echo "Waiting for postfiatd to start..."
+            sleep 30
+
+            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+              echo "postfiatd is healthy"
+            else
+              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
+
+  update-rpc:
+    if: ${{ inputs.node_type == 'rpc' || inputs.node_type == 'all' }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare.outputs.rpc_hosts) }}
+    steps:
+      - name: Update RPC ${{ matrix.host }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ matrix.host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          script: |
+            set -e
+
+            cd /opt/postfiatd
+
+            docker compose pull
+            docker compose up -d
+
+            echo "Waiting for postfiatd to start..."
+            sleep 30
+
+            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+              echo "postfiatd is healthy"
+            else
+              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
