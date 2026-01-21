@@ -41,7 +41,7 @@ jobs:
             echo "rpc_hosts=$TESTNET_RPC" >> $GITHUB_OUTPUT
           fi
 
-  update-validators:
+  update-validator:
     if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
     needs: prepare
     runs-on: ubuntu-latest

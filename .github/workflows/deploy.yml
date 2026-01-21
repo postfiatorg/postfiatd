@@ -56,7 +56,7 @@ jobs:
           fi
           echo "loki_url=http://infra-monitoring.${{ inputs.network }}.postfiat.org:3100/loki/api/v1/push" >> $GITHUB_OUTPUT
 
-  deploy-validators:
+  deploy-validator:
     if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
     needs: prepare
     runs-on: ubuntu-latest
@@ -151,7 +151,7 @@ jobs:
 
   deploy-rpc:
     if: ${{ always() && (inputs.node_type == 'rpc' || inputs.node_type == 'all') && !cancelled() }}
-    needs: [prepare, deploy-validators]
+    needs: [prepare, deploy-validator]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -244,7 +244,7 @@ jobs:
 
   reset-vhs:
     if: ${{ always() && inputs.reset_vhs && (inputs.node_type == 'validators' || inputs.node_type == 'all') && !cancelled() }}
-    needs: [prepare, deploy-validators, deploy-rpc]
+    needs: [prepare, deploy-validator, deploy-rpc]
     runs-on: ubuntu-latest
     steps:
       - name: Reset VHS
