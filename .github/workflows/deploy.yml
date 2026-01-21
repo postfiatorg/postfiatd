@@ -23,9 +23,6 @@ on:
         type: boolean
         default: true
 
-env:
-  PROMTAIL_CONFIG_BASE_URL: https://raw.githubusercontent.com/postfiatorg/infra-monitoring/main/promtail
-
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -129,7 +126,46 @@ jobs:
               promtail-positions:
             COMPOSE_EOF
 
-            curl -fsSL "${{ env.PROMTAIL_CONFIG_BASE_URL }}/validator/promtail-config.yml" -o promtail-config.yml
+            cat > promtail-config.yml << 'PROMTAIL_EOF'
+            server:
+              http_listen_port: 9080
+              grpc_listen_port: 0
+
+            positions:
+              filename: /tmp/positions.yaml
+
+            clients:
+              - url: http://localhost:3100/loki/api/v1/push
+
+            scrape_configs:
+              - job_name: postfiatd
+                static_configs:
+                  - targets:
+                      - localhost
+                    labels:
+                      service_type: validator
+                      __path__: /var/log/postfiatd/*.log
+
+                pipeline_stages:
+                  - regex:
+                      expression: '^(?P<timestamp>\d{4}-[A-Z][a-z]{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+) UTC (?P<module>[^:]+):(?P<raw_level>\w+) (?P<message>.*)$'
+
+                  - timestamp:
+                      source: timestamp
+                      format: "2006-Jan-02 15:04:05.000000000"
+                      location: UTC
+
+                  - template:
+                      source: level
+                      template: '{{ if eq .raw_level "NFO" }}info{{ else if eq .raw_level "DBG" }}debug{{ else if eq .raw_level "WRN" }}warning{{ else if eq .raw_level "ERR" }}error{{ else if eq .raw_level "FTL" }}fatal{{ else }}{{ .raw_level }}{{ end }}'
+
+                  - labels:
+                      module:
+                      level:
+
+                  - output:
+                      source: message
+            PROMTAIL_EOF
 
             cat > .env << ENV_EOF
             NETWORK=${NETWORK}
@@ -222,7 +258,46 @@ jobs:
               promtail-positions:
             COMPOSE_EOF
 
-            curl -fsSL "${{ env.PROMTAIL_CONFIG_BASE_URL }}/rpc/promtail-config.yml" -o promtail-config.yml
+            cat > promtail-config.yml << 'PROMTAIL_EOF'
+            server:
+              http_listen_port: 9080
+              grpc_listen_port: 0
+
+            positions:
+              filename: /tmp/positions.yaml
+
+            clients:
+              - url: http://localhost:3100/loki/api/v1/push
+
+            scrape_configs:
+              - job_name: postfiatd
+                static_configs:
+                  - targets:
+                      - localhost
+                    labels:
+                      service_type: rpc
+                      __path__: /var/log/postfiatd/*.log
+
+                pipeline_stages:
+                  - regex:
+                      expression: '^(?P<timestamp>\d{4}-[A-Z][a-z]{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+) UTC (?P<module>[^:]+):(?P<raw_level>\w+) (?P<message>.*)$'
+
+                  - timestamp:
+                      source: timestamp
+                      format: "2006-Jan-02 15:04:05.000000000"
+                      location: UTC
+
+                  - template:
+                      source: level
+                      template: '{{ if eq .raw_level "NFO" }}info{{ else if eq .raw_level "DBG" }}debug{{ else if eq .raw_level "WRN" }}warning{{ else if eq .raw_level "ERR" }}error{{ else if eq .raw_level "FTL" }}fatal{{ else }}{{ .raw_level }}{{ end }}'
+
+                  - labels:
+                      module:
+                      level:
+
+                  - output:
+                      source: message
+            PROMTAIL_EOF
 
             cat > .env << ENV_EOF
             NETWORK=${NETWORK}
