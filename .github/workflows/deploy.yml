@@ -67,11 +67,16 @@ jobs:
         env:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
+          VALIDATOR_TOKEN_1: ${{ secrets.DEVNET_VALIDATOR_TOKEN_1 }}
+          VALIDATOR_TOKEN_2: ${{ secrets.DEVNET_VALIDATOR_TOKEN_2 }}
+          VALIDATOR_TOKEN_3: ${{ secrets.DEVNET_VALIDATOR_TOKEN_3 }}
+          VALIDATOR_TOKEN_4: ${{ secrets.DEVNET_VALIDATOR_TOKEN_4 }}
+          DEPLOY_HOST: ${{ matrix.host }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL
+          envs: NETWORK,LOKI_URL,VALIDATOR_TOKEN_1,VALIDATOR_TOKEN_2,VALIDATOR_TOKEN_3,VALIDATOR_TOKEN_4,DEPLOY_HOST
           script: |
             set -e
 
@@ -175,6 +180,30 @@ jobs:
 
             docker compose pull
             docker compose up -d
+
+            # Inject validator token based on host IP (devnet only)
+            if [ "${NETWORK}" = "devnet" ]; then
+              VALIDATOR_TOKEN=""
+              case "${DEPLOY_HOST}" in
+                "66.135.27.77")   VALIDATOR_TOKEN="${VALIDATOR_TOKEN_1}" ;;
+                "108.61.85.238")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_2}" ;;
+                "207.148.22.37")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_3}" ;;
+                "64.176.199.51")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_4}" ;;
+              esac
+
+              if [ -n "${VALIDATOR_TOKEN}" ]; then
+                echo "Injecting validator token..."
+                docker exec postfiatd bash -c "cat >> /etc/postfiatd/postfiatd.cfg << 'TOKEN_EOF'
+
+[validator_token]
+${VALIDATOR_TOKEN}
+TOKEN_EOF"
+                echo "Restarting postfiatd with validator token..."
+                docker compose restart postfiatd
+              else
+                echo "Warning: No validator token found for host ${DEPLOY_HOST}"
+              fi
+            fi
 
             echo "Waiting for postfiatd to start..."
             sleep 30

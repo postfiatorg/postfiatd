@@ -1,0 +1,12 @@
+#
+# Devnet Validators (Static List)
+#
+# This file contains the public keys of trusted validators for the devnet.
+# Using static list instead of dynamic fetch for simplicity during development.
+#
+
+[validators]
+nHUDXa2bH68Zm5Fmg2WaDSeyEYbiqzMLXussLMyK3t6bTCNiHKY2
+nHBgo2xSUVPy4zsWb1NM7CYmyYeobx7Swa3gFgoB55ipuyJwRdKX
+nHBg5iGpnvmbckhEUkY1oTnNqr8RbzRwKyW8x5NoGJYPVT4iS7um
+nHBXSCTwVUbvZg5EAZsXXTtads2ZVd8UwLsuniGcLBgH9pP8EeBc

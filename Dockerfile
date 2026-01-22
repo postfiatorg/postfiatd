@@ -88,7 +88,7 @@ RUN cp /postfiat/.build/validator-keys/validator-keys /usr/local/bin/validator-k
 # Copy configuration files based on build arguments
 # Construct the config filename from NETWORK and NODE_SIZE
 RUN cp /postfiat/cfg/postfiatd-${NETWORK}-${NODE_SIZE}.cfg /etc/postfiatd/postfiatd.cfg
-RUN cp /postfiat/cfg/validators-example.txt /etc/postfiatd/validators.txt
+RUN cp /postfiat/cfg/validators-${NETWORK}.txt /etc/postfiatd/validators.txt
 
 # Setup log rotation
 RUN cp /postfiat/scripts/logrotate-postfiatd.conf /etc/logrotate.d/postfiatd
