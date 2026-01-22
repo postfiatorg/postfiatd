@@ -63,9 +63,10 @@ jobs:
 
             docker compose down --volumes --remove-orphans 2>/dev/null || true
 
-            docker volume rm postfiatd-data postfiatd-config promtail-positions 2>/dev/null || true
+            # Remove volumes with project prefix (postfiatd_)
+            docker volume ls -q --filter name=postfiatd | xargs -r docker volume rm 2>/dev/null || true
 
-            docker system prune -f 2>/dev/null || true
+            docker system prune -af 2>/dev/null || true
 
             rm -rf /opt/postfiatd
 
@@ -93,9 +94,10 @@ jobs:
 
             docker compose down --volumes --remove-orphans 2>/dev/null || true
 
-            docker volume rm postfiatd-data postfiatd-config promtail-positions 2>/dev/null || true
+            # Remove volumes with project prefix (postfiatd_)
+            docker volume ls -q --filter name=postfiatd | xargs -r docker volume rm 2>/dev/null || true
 
-            docker system prune -f 2>/dev/null || true
+            docker system prune -af 2>/dev/null || true
 
             rm -rf /opt/postfiatd
 
