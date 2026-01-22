@@ -42,7 +42,6 @@
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
-#include <xrpld/app/misc/NetworkValidators.h>
 #include <xrpld/app/misc/SHAMapStore.h>
 #include <xrpld/app/misc/TxQ.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
@@ -1408,43 +1407,25 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
             localSigningKey = validatorKeys_.keys->publicKey;
 
         // Setup trusted validators
-
-        // Get network-specific validator list based on NETWORK_ID
-        std::vector<std::string> initialValidatorsList =
-            NetworkValidators::getValidators(config_->NETWORK_ID);
-
-        // Use network-specific validator list instead of config file
         if (!validators_->load(
                 localSigningKey,
-                initialValidatorsList,  // Use network-specific list
-                {},
-                {}))
+                config().section(SECTION_VALIDATORS).values(),
+                config().section(SECTION_VALIDATOR_LIST_KEYS).values(),
+                config().VALIDATOR_LIST_THRESHOLD))
         {
             JLOG(m_journal.fatal())
                 << "Invalid entry in validator configuration.";
             return false;
         }
-
-        // UNL ripple approached removed/commented
-        // if (!validators_->load(
-        //         localSigningKey,
-        //         config().section(SECTION_VALIDATORS).values(),
-        //         config().section(SECTION_VALIDATOR_LIST_KEYS).values(),
-        //         config().VALIDATOR_LIST_THRESHOLD))
-        // {
-        //     JLOG(m_journal.fatal())
-        //         << "Invalid entry in validator configuration.";
-        //     return false;
-        // }
     }
 
-    /*if (!validatorSites_->load(
+    if (!validatorSites_->load(
             config().section(SECTION_VALIDATOR_LIST_SITES).values()))
     {
         JLOG(m_journal.fatal())
             << "Invalid entry in [" << SECTION_VALIDATOR_LIST_SITES << "]";
         return false;
-    }*/
+    }
 
     // Tell the AmendmentTable who the trusted validators are.
     m_amendmentTable->trustChanged(validators_->getQuorumKeys().second);
