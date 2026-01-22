@@ -193,11 +193,7 @@ jobs:
 
               if [ -n "${VALIDATOR_TOKEN}" ]; then
                 echo "Injecting validator token..."
-                docker exec postfiatd bash -c "cat >> /etc/postfiatd/postfiatd.cfg << 'TOKEN_EOF'
-
-[validator_token]
-${VALIDATOR_TOKEN}
-TOKEN_EOF"
+                docker exec postfiatd bash -c "printf '\n[validator_token]\n%s\n' '${VALIDATOR_TOKEN}' >> /etc/postfiatd/postfiatd.cfg"
                 echo "Restarting postfiatd with validator token..."
                 docker compose restart postfiatd
               else
