@@ -12,14 +12,15 @@ PFT is the native digital asset of the PFT Ledger, designed to facilitate value 
 The server software that powers the PFT Ledger is called `postfiatd`. It is a fork of rippled server. Shared code and documentation will still have mentions of rippled and XRP. Any mention of rippled applies to postfiatd and mention of XRP asset applies to PFT.
 
 ## rippled
+
 The server software that powers the XRP Ledger is called `rippled` and is available in this repository under the permissive [ISC open-source license](LICENSE.md). The `rippled` server software is written primarily in C++ and runs on a variety of platforms. The `rippled` server software can run in several modes depending on its [configuration](https://xrpl.org/rippled-server-modes.html).
 
 If you are interested in running an **API Server** (including a **Full History Server**), take a look at [Clio](https://github.com/XRPLF/clio). (rippled Reporting Mode has been replaced by Clio.)
 
 ### Build from Source
 
-* [Read the build instructions in `BUILD.md`](BUILD.md)
-* If you encounter any issues, please [open an issue](https://github.com/XRPLF/rippled/issues)
+- [Read the build instructions in `BUILD.md`](BUILD.md)
+- If you encounter any issues, please [open an issue](https://github.com/XRPLF/rippled/issues)
 
 ## Key Features of the XRP Ledger
 
@@ -39,7 +40,6 @@ If you are interested in running an **API Server** (including a **Full History S
 [Modern Features for Smart Contracts]: https://xrpl.org/xrp-ledger-overview.html#modern-features-for-smart-contracts
 [On-Ledger Decentralized Exchange]: https://xrpl.org/xrp-ledger-overview.html#on-ledger-decentralized-exchange
 
-
 ## Source Code
 
 Here are some good places to start learning the source code:
@@ -51,7 +51,7 @@ Here are some good places to start learning the source code:
 ### Repository Contents
 
 | Folder     | Contents                                         |
-|:-----------|:-------------------------------------------------|
+| :--------- | :----------------------------------------------- |
 | `./bin`    | Scripts and data files for Ripple integrators.   |
 | `./Builds` | Platform-specific guides for building `rippled`. |
 | `./docs`   | Source documentation files and doxygen config.   |
@@ -61,15 +61,14 @@ Here are some good places to start learning the source code:
 Some of the directories under `src` are external repositories included using
 git-subtree. See those directories' README files for more details.
 
-
 ## Additional Documentation
 
-* [XRP Ledger Dev Portal](https://xrpl.org/)
-* [Setup and Installation](https://xrpl.org/install-rippled.html)
-* [Source Documentation (Doxygen)](https://xrplf.github.io/rippled/)
+- [XRP Ledger Dev Portal](https://xrpl.org/)
+- [Setup and Installation](https://xrpl.org/install-rippled.html)
+- [Source Documentation (Doxygen)](https://xrplf.github.io/rippled/)
 
 ## See Also
 
-* [Clio API Server for the XRP Ledger](https://github.com/XRPLF/clio)
-* [Mailing List for Release Announcements](https://groups.google.com/g/ripple-server)
-* [Learn more about the XRP Ledger (YouTube)](https://www.youtube.com/playlist?list=PLJQ55Tj1hIVZtJ_JdTvSum2qMTsedWkNi)
+- [Clio API Server for the XRP Ledger](https://github.com/XRPLF/clio)
+- [Mailing List for Release Announcements](https://groups.google.com/g/ripple-server)
+- [Learn more about the XRP Ledger (YouTube)](https://www.youtube.com/playlist?list=PLJQ55Tj1hIVZtJ_JdTvSum2qMTsedWkNi)
