@@ -251,7 +251,9 @@ public:
      *
      * @param suite_ the current unit_test::suite
      */
-    Env(beast::unit_test::suite& suite_) : Env(suite_, envconfig())
+    Env(beast::unit_test::suite& suite_,
+        beast::severities::Severity thresh = beast::severities::kError)
+        : Env(suite_, envconfig(), nullptr, thresh)
     {
     }
 
@@ -469,6 +471,9 @@ public:
         Returns 0 if the trust line does not exist.
     */
     // VFALCO NOTE This should return a unit-less amount
+    PrettyAmount
+    balance(Account const& account, Asset const& asset) const;
+
     PrettyAmount
     balance(Account const& account, Issue const& issue) const;
 

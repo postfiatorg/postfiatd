@@ -22,10 +22,10 @@
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/TxQ.h>
 #include <xrpld/app/tx/apply.h>
-#include <xrpld/ledger/CachedView.h>
 #include <xrpld/overlay/Message.h>
 #include <xrpld/overlay/Overlay.h>
 
+#include <xrpl/ledger/CachedView.h>
 #include <xrpl/protocol/TxFlags.h>
 
 #include <boost/range/adaptor/transformed.hpp>
@@ -124,8 +124,11 @@ OpenLedger::accept(
         auto const txId = tx->getTransactionID();
 
         // skip batch txns
+        // The flag should only be settable if Batch feature is enabled. If
+        // Batch is not enabled, the flag is always invalid, so don't relay it
+        // regardless.
         // LCOV_EXCL_START
-        if (tx->isFlag(tfInnerBatchTxn) && rules.enabled(featureBatch))
+        if (tx->isFlag(tfInnerBatchTxn))
         {
             XRPL_ASSERT(
                 txpair.second && txpair.second->isFieldPresent(sfParentBatchID),

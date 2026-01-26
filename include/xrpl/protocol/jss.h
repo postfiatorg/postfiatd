@@ -59,6 +59,8 @@ JSS(BaseAsset);            // in: Oracle
 JSS(BidMax);               // in: AMM Bid
 JSS(BidMin);               // in: AMM Bid
 JSS(ClearFlag);            // field.
+JSS(Counterparty);         // field.
+JSS(CounterpartySignature);// field.
 JSS(DeliverMax);           // out: alias to Amount
 JSS(DeliverMin);           // in: TransactionSign
 JSS(Destination);          // in: TransactionSign; field.
@@ -68,9 +70,13 @@ JSS(Flags);                // in/out: TransactionSign; field.
 JSS(Holder);               // field.
 JSS(Invalid);              //
 JSS(Issuer);               // in: Credential transactions
+JSS(IssuingChainDoor);     // field.
+JSS(IssuingChainIssue);    // field.
 JSS(LastLedgerSequence);   // in: TransactionSign; field
 JSS(LastUpdateTime);       // field.
 JSS(LimitAmount);          // field.
+JSS(LockingChainDoor);     // field.
+JSS(LockingChainIssue);    // field.
 JSS(NetworkID);            // field.
 JSS(LPTokenOut);           // in: AMM Liquidity Provider deposit tokens
 JSS(LPTokenIn);            // in: AMM Liquidity Provider withdraw tokens
@@ -391,6 +397,8 @@ JSS(load_factor_local);       // out: NetworkOPs
 JSS(load_factor_net);         // out: NetworkOPs
 JSS(load_factor_server);      // out: NetworkOPs
 JSS(load_fee);                // out: LoadFeeTrackImp, NetworkOPs
+JSS(loan_broker_id);          // in: LedgerEntry
+JSS(loan_seq);                // in: LedgerEntry
 JSS(local);                   // out: resource/Logic.h
 JSS(local_txs);               // out: GetCounts
 JSS(local_static_keys);       // out: ValidatorList
@@ -503,6 +511,7 @@ JSS(propose_seq);             // out: LedgerPropose
 JSS(proposers);               // out: NetworkOPs, LedgerConsensus
 JSS(protocol);                // out: NetworkOPs, PeerImp
 JSS(proxied);                 // out: RPC ping
+JSS(pseudo_account);          // out: AccountInfo
 JSS(pubkey_node);             // out: NetworkOPs
 JSS(pubkey_publisher);        // out: ValidatorList
 JSS(pubkey_validator);        // out: NetworkOPs, ValidatorList
@@ -568,6 +577,7 @@ JSS(settle_delay);            // out: AccountChannels
 JSS(severity);                // in: LogLevel
 JSS(shares);                  // out: VaultInfo
 JSS(signature);               // out: NetworkOPs, ChannelAuthorize
+JSS(signature_target);        // in: TransactionSign
 JSS(signature_verified);      // out: ChannelVerify
 JSS(signing_key);             // out: NetworkOPs
 JSS(signing_keys);            // out: ValidatorList
@@ -713,7 +723,7 @@ JSS(write_load);              // out: GetCounts
 #pragma push_macro("TRANSACTION")
 #undef TRANSACTION
 
-#define TRANSACTION(tag, value, name, delegatable, fields) JSS(name);
+#define TRANSACTION(tag, value, name, ...) JSS(name);
 
 #include <xrpl/protocol/detail/transactions.macro>
 
@@ -725,11 +735,11 @@ JSS(write_load);              // out: GetCounts
 #pragma push_macro("LEDGER_ENTRY_DUPLICATE")
 #undef LEDGER_ENTRY_DUPLICATE
 
-#define LEDGER_ENTRY(tag, value, name, rpcName, fields) \
-    JSS(name);                                          \
+#define LEDGER_ENTRY(tag, value, name, rpcName, ...) \
+    JSS(name);                                       \
     JSS(rpcName);
 
-#define LEDGER_ENTRY_DUPLICATE(tag, value, name, rpcName, fields) JSS(rpcName);
+#define LEDGER_ENTRY_DUPLICATE(tag, value, name, rpcName, ...) JSS(rpcName);
 
 #include <xrpl/protocol/detail/ledger_entries.macro>
 

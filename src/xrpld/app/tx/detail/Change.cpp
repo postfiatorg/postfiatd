@@ -25,9 +25,9 @@
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/tx/detail/Change.h>
 #include <xrpld/ledger/ApplyView.h>
-#include <xrpld/ledger/Sandbox.h>
 
 #include <xrpl/basics/Log.h>
+#include <xrpl/ledger/Sandbox.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/STArray.h>
@@ -39,11 +39,16 @@
 
 namespace ripple {
 
+template <>
 NotTEC
-Change::preflight(PreflightContext const& ctx)
+Transactor::invokePreflight<Change>(PreflightContext const& ctx)
 {
-    auto const ret = preflight0(ctx);
-    if (!isTesSuccess(ret))
+    // 0 means "Allow any flags"
+    // The check for tfChangeMask is gated by LendingProtocol because that
+    // feature introduced this parameter, and it's not worth adding another
+    // amendment just for this.
+    if (auto const ret = preflight0(
+            ctx, ctx.rules.enabled(featureLendingProtocol) ? tfChangeMask : 0))
     {
         if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE)
         {
@@ -180,9 +185,11 @@ Change::doApply()
             JLOG(j_.info()) << "ValidatorVote: applyValidatorVote returned " << transToken(result);
             return result;
         }
+        // LCOV_EXCL_START
         default:
             UNREACHABLE("ripple::Change::doApply : invalid transaction type");
             return tefFAILURE;
+            // LCOV_EXCL_STOP
     }
 }
 

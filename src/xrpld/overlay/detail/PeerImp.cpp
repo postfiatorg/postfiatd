@@ -1286,6 +1286,22 @@ PeerImp::handleTransaction(
 
         // Charge strongly for attempting to relay a txn with tfInnerBatchTxn
         // LCOV_EXCL_START
+        /*
+           There is no need to check whether the featureBatch amendment is
+           enabled.
+
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is
+           enabled, then it's an invalid transaction because inner batch
+           transactions should not be relayed.
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is *not*
+           enabled, then the transaction is malformed because it's using an
+           "unknown" flag. There's no need to waste the resources to send it
+           to the transaction engine.
+
+           We don't normally check transaction validity at this level, but
+           since we _need_ to check it when the amendment is enabled, we may as
+           well drop it if the flag is set regardless.
+        */
         if (stx->isFlag(tfInnerBatchTxn))
         {
             JLOG(p_journal_.warn()) << "Ignoring Network relayed Tx containing "
@@ -2132,10 +2148,12 @@ PeerImp::onValidatorListMessage(
         case ListDisposition::invalid:
         case ListDisposition::unsupported_version:
             break;
+        // LCOV_EXCL_START
         default:
             UNREACHABLE(
                 "ripple::PeerImp::onValidatorListMessage : invalid best list "
                 "disposition");
+            // LCOV_EXCL_STOP
     }
 
     // Charge based on the worst result
@@ -2176,10 +2194,12 @@ PeerImp::onValidatorListMessage(
             // If it happens frequently, that's probably bad.
             fee_.update(Resource::feeInvalidData, "version");
             break;
+        // LCOV_EXCL_START
         default:
             UNREACHABLE(
                 "ripple::PeerImp::onValidatorListMessage : invalid worst list "
                 "disposition");
+            // LCOV_EXCL_STOP
     }
 
     // Log based on all the results.
@@ -2236,10 +2256,12 @@ PeerImp::onValidatorListMessage(
                     << "Ignored " << count << "invalid " << messageType
                     << "(s) from peer " << remote_address_;
                 break;
+            // LCOV_EXCL_START
             default:
                 UNREACHABLE(
                     "ripple::PeerImp::onValidatorListMessage : invalid list "
                     "disposition");
+                // LCOV_EXCL_STOP
         }
     }
 }
@@ -2850,6 +2872,22 @@ PeerImp::checkTransaction(
     {
         // charge strongly for relaying batch txns
         // LCOV_EXCL_START
+        /*
+           There is no need to check whether the featureBatch amendment is
+           enabled.
+
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is
+           enabled, then it's an invalid transaction because inner batch
+           transactions should not be relayed.
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is *not*
+           enabled, then the transaction is malformed because it's using an
+           "unknown" flag. There's no need to waste the resources to send it
+           to the transaction engine.
+
+           We don't normally check transaction validity at this level, but
+           since we _need_ to check it when the amendment is enabled, we may as
+           well drop it if the flag is set regardless.
+        */
         if (stx->isFlag(tfInnerBatchTxn))
         {
             JLOG(p_journal_.warn()) << "Ignoring Network relayed Tx containing "

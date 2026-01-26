@@ -32,18 +32,23 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 // The duplication is because Visual Studio 2019 cannot compile that header
 // even with the option -Zc:__cplusplus added.
 #define ALWAYS(cond, message, ...) assert((message) && (cond))
-#define ALWAYS_OR_UNREACHABLE(cond, message, ...) assert((message) && (cond))
+#define ALWAYS_OR_UNREACHABLE(cond, message) assert((message) && (cond))
 #define SOMETIMES(cond, message, ...)
 #define REACHABLE(message, ...)
 #define UNREACHABLE(message, ...) assert((message) && false)
 #endif
 
 #define XRPL_ASSERT ALWAYS_OR_UNREACHABLE
+#define XRPL_ASSERT_PARTS(cond, function, description, ...) \
+    XRPL_ASSERT(cond, function " : " description)
 
 // How to use the instrumentation macros:
 //
 // * XRPL_ASSERT if cond must be true but the line might not be reached during
 //   fuzzing. Same like `assert` in normal use.
+// * XRPL_ASSERT_PARTS is for convenience, and works like XRPL_ASSERT, but
+//   splits the message param into "function" and "description", then joins
+//   them with " : " before passing to XRPL_ASSERT.
 // * ALWAYS if cond must be true _and_ the line must be reached during fuzzing.
 //   Same like `assert` in normal use.
 // * REACHABLE if the line must be reached during fuzzing

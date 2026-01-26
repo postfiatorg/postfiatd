@@ -27,13 +27,20 @@
 #error "undefined macro: XRPL_RETIRE"
 #endif
 
+// clang-format off
+
 // Add new amendments to the top of this list.
 // Keep it sorted in reverse chronological order.
 
+XRPL_FEATURE(LendingProtocol,            Supported::no,  VoteBehavior::DefaultNo)
 XRPL_FIX    (DirectoryLimit,             Supported::yes, VoteBehavior::DefaultNo)
-XRPL_FIX    (PriceOracleOrder,           Supported::no,  VoteBehavior::DefaultNo)
-XRPL_FIX    (MPTDeliveredAmount,         Supported::no,  VoteBehavior::DefaultNo)
-XRPL_FIX    (AMMClawbackRounding,        Supported::no,  VoteBehavior::DefaultNo)
+XRPL_FIX    (IncludeKeyletFields,        Supported::yes, VoteBehavior::DefaultNo)
+XRPL_FEATURE(DynamicMPT,                 Supported::no,  VoteBehavior::DefaultNo)
+XRPL_FIX    (TokenEscrowV1,              Supported::yes, VoteBehavior::DefaultNo)
+XRPL_FIX    (DelegateV1_1,               Supported::no,  VoteBehavior::DefaultNo)
+XRPL_FIX    (PriceOracleOrder,           Supported::yes, VoteBehavior::DefaultNo)
+XRPL_FIX    (MPTDeliveredAmount,         Supported::yes, VoteBehavior::DefaultNo)
+XRPL_FIX    (AMMClawbackRounding,        Supported::yes, VoteBehavior::DefaultNo)
 XRPL_FEATURE(AccountExclusion,           Supported::yes, VoteBehavior::DefaultYes)
 XRPL_FEATURE(ValidatorVoteTracking,      Supported::yes, VoteBehavior::DefaultYes)
 XRPL_FEATURE(TokenEscrow,                Supported::yes, VoteBehavior::DefaultNo)
@@ -153,3 +160,5 @@ XRPL_RETIRE(fix1512)
 XRPL_RETIRE(fix1523)
 XRPL_RETIRE(fix1528)
 XRPL_RETIRE(FlowCross)
+
+// clang-format on

@@ -647,6 +647,12 @@ STObject::getFieldH256(SField const& field) const
     return getFieldByValue<STUInt256>(field);
 }
 
+std::int32_t
+STObject::getFieldI32(SField const& field) const
+{
+    return getFieldByValue<STInt32>(field);
+}
+
 AccountID
 STObject::getAccountID(SField const& field) const
 {
@@ -680,6 +686,16 @@ STObject::getFieldV256(SField const& field) const
 {
     static STVector256 const empty{};
     return getFieldByConstRef<STVector256>(field, empty);
+}
+
+STObject
+STObject::getFieldObject(SField const& field) const
+{
+    STObject const empty{field};
+    auto ret = getFieldByConstRef<STObject>(field, empty);
+    if (ret != empty)
+        ret.applyTemplateFromSField(field);
+    return ret;
 }
 
 STArray const&
@@ -762,6 +778,12 @@ STObject::setFieldH256(SField const& field, uint256 const& v)
 }
 
 void
+STObject::setFieldI32(SField const& field, std::int32_t v)
+{
+    setFieldUsingSetValue<STInt32>(field, v);
+}
+
+void
 STObject::setFieldV256(SField const& field, STVector256 const& v)
 {
     setFieldUsingSetValue<STVector256>(field, v);
@@ -817,6 +839,12 @@ STObject::setFieldPathSet(SField const& field, STPathSet const& v)
 
 void
 STObject::setFieldArray(SField const& field, STArray const& v)
+{
+    setFieldUsingAssignment(field, v);
+}
+
+void
+STObject::setFieldObject(SField const& field, STObject const& v)
 {
     setFieldUsingAssignment(field, v);
 }

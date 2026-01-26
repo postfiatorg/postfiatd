@@ -18,9 +18,10 @@
 //==============================================================================
 
 #include <xrpld/app/tx/detail/VaultDelete.h>
-#include <xrpld/ledger/View.h>
 
+#include <xrpl/ledger/View.h>
 #include <xrpl/protocol/Feature.h>
+#include <xrpl/protocol/MPTIssue.h>
 #include <xrpl/protocol/STNumber.h>
 #include <xrpl/protocol/TER.h>
 #include <xrpl/protocol/TxFlags.h>
@@ -30,22 +31,13 @@ namespace ripple {
 NotTEC
 VaultDelete::preflight(PreflightContext const& ctx)
 {
-    if (!ctx.rules.enabled(featureSingleAssetVault))
-        return temDISABLED;
-
-    if (auto const ter = preflight1(ctx))
-        return ter;
-
-    if (ctx.tx.getFlags() & tfUniversalMask)
-        return temINVALID_FLAG;
-
     if (ctx.tx[sfVaultID] == beast::zero)
     {
         JLOG(ctx.j.debug()) << "VaultDelete: zero/empty vault ID.";
         return temMALFORMED;
     }
 
-    return preflight2(ctx);
+    return tesSUCCESS;
 }
 
 TER
@@ -128,13 +120,32 @@ VaultDelete::doApply()
 
     // Destroy the share issuance. Do not use MPTokenIssuanceDestroy for this,
     // no special logic needed. First run few checks, duplicated from preclaim.
-    auto const mpt = view().peek(keylet::mptIssuance(vault->at(sfShareMPTID)));
+    auto const shareMPTID = *vault->at(sfShareMPTID);
+    auto const mpt = view().peek(keylet::mptIssuance(shareMPTID));
     if (!mpt)
     {
         // LCOV_EXCL_START
         JLOG(j_.error()) << "VaultDelete: missing issuance of vault shares.";
         return tefINTERNAL;
         // LCOV_EXCL_STOP
+    }
+
+    // Try to remove MPToken for vault shares for the vault owner if it exists.
+    if (auto const mptoken = view().peek(keylet::mptoken(shareMPTID, account_)))
+    {
+        if (auto const ter =
+                removeEmptyHolding(view(), account_, MPTIssue(shareMPTID), j_);
+            !isTesSuccess(ter))
+        {
+            // LCOV_EXCL_START
+            JLOG(j_.error())  //
+                << "VaultDelete: failed to remove vault owner's MPToken"
+                << " MPTID=" << to_string(shareMPTID)  //
+                << " account=" << toBase58(account_)   //
+                << " with result: " << transToken(ter);
+            return ter;
+            // LCOV_EXCL_STOP
+        }
     }
 
     if (!view().dirRemove(
@@ -154,7 +165,35 @@ VaultDelete::doApply()
         return tecHAS_OBLIGATIONS;  // LCOV_EXCL_LINE
 
     // Destroy the pseudo-account.
-    view().erase(view().peek(keylet::account(pseudoID)));
+    auto vaultPseudoSLE = view().peek(keylet::account(pseudoID));
+    if (!vaultPseudoSLE || vaultPseudoSLE->at(~sfVaultID) != vault->key())
+        return tefBAD_LEDGER;  // LCOV_EXCL_LINE
+
+    // Making the payment and removing the empty holding should have deleted any
+    // obligations associated with the vault or vault pseudo-account.
+    if (*vaultPseudoSLE->at(sfBalance))
+    {
+        // LCOV_EXCL_START
+        JLOG(j_.error()) << "VaultDelete: pseudo-account has a balance";
+        return tecHAS_OBLIGATIONS;
+        // LCOV_EXCL_STOP
+    }
+    if (vaultPseudoSLE->at(sfOwnerCount) != 0)
+    {
+        // LCOV_EXCL_START
+        JLOG(j_.error()) << "VaultDelete: pseudo-account still owns objects";
+        return tecHAS_OBLIGATIONS;
+        // LCOV_EXCL_STOP
+    }
+    if (view().exists(keylet::ownerDir(pseudoID)))
+    {
+        // LCOV_EXCL_START
+        JLOG(j_.error()) << "VaultDelete: pseudo-account has a directory";
+        return tecHAS_OBLIGATIONS;
+        // LCOV_EXCL_STOP
+    }
+
+    view().erase(vaultPseudoSLE);
 
     // Remove the vault from its owner's directory.
     auto const ownerID = vault->at(sfOwner);
@@ -178,7 +217,9 @@ VaultDelete::doApply()
         return tefBAD_LEDGER;
         // LCOV_EXCL_STOP
     }
-    adjustOwnerCount(view(), owner, -1, j_);
+
+    // We are destroying Vault and PseudoAccount, hence decrease by 2
+    adjustOwnerCount(view(), owner, -2, j_);
 
     // Destroy the vault.
     view().erase(vault);

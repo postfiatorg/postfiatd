@@ -18,30 +18,27 @@
 //==============================================================================
 
 #include <xrpld/app/tx/detail/MPTokenAuthorize.h>
-#include <xrpld/ledger/View.h>
 
+#include <xrpl/ledger/View.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/TxFlags.h>
 #include <xrpl/protocol/st.h>
 
 namespace ripple {
 
+std::uint32_t
+MPTokenAuthorize::getFlagsMask(PreflightContext const& ctx)
+{
+    return tfMPTokenAuthorizeMask;
+}
+
 NotTEC
 MPTokenAuthorize::preflight(PreflightContext const& ctx)
 {
-    if (!ctx.rules.enabled(featureMPTokensV1))
-        return temDISABLED;
-
-    if (auto const ret = preflight1(ctx); !isTesSuccess(ret))
-        return ret;
-
-    if (ctx.tx.getFlags() & tfMPTokenAuthorizeMask)
-        return temINVALID_FLAG;
-
     if (ctx.tx[sfAccount] == ctx.tx[~sfHolder])
         return temMALFORMED;
 
-    return preflight2(ctx);
+    return tesSUCCESS;
 }
 
 TER
@@ -78,7 +75,7 @@ MPTokenAuthorize::preclaim(PreclaimContext const& ctx)
                 auto const sleMptIssuance = ctx.view.read(
                     keylet::mptIssuance(ctx.tx[sfMPTokenIssuanceID]));
                 if (!sleMptIssuance)
-                    return tefINTERNAL;
+                    return tefINTERNAL;  // LCOV_EXCL_LINE
 
                 return tecHAS_OBLIGATIONS;
             }
@@ -116,7 +113,8 @@ MPTokenAuthorize::preclaim(PreclaimContext const& ctx)
         return tesSUCCESS;
     }
 
-    if (!ctx.view.exists(keylet::account(*holderID)))
+    auto const sleHolder = ctx.view.read(keylet::account(*holderID));
+    if (!sleHolder)
         return tecNO_DST;
 
     auto const sleMptIssuance =
@@ -145,6 +143,12 @@ MPTokenAuthorize::preclaim(PreclaimContext const& ctx)
     if (!ctx.view.exists(
             keylet::mptoken(ctx.tx[sfMPTokenIssuanceID], *holderID)))
         return tecOBJECT_NOT_FOUND;
+
+    // Can't unauthorize the pseudo-accounts because they are implicitly
+    // always authorized. No need to amendment gate since Vault and LoanBroker
+    // can only be created if the Vault amendment is enabled.
+    if (isPseudoAccount(ctx.view, *holderID, {&sfVaultID, &sfLoanBrokerID}))
+        return tecNO_PERMISSION;
 
     return tesSUCCESS;
 }
