@@ -54,14 +54,11 @@ ENV PATH="/root/.local/bin:$PATH"
 COPY . .
 
 RUN conan profile detect --force
-RUN conan profile update settings.compiler.version=13 default
-RUN conan profile update settings.compiler.cppstd=20 default
-RUN conan profile update settings.compiler.libcxx=libstdc++11 default
 
 #Build
 WORKDIR /postfiat/.build
 
-RUN conan install .. --output-folder . --build missing --settings build_type=Debug
+RUN conan install .. --output-folder . --build missing --settings build_type=Debug --settings compiler.version=13 --settings compiler.cppstd=20 --settings compiler.libcxx=libstdc++11
 RUN cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -Dxrpld=ON -Dtests=ON -Dvalidator_keys=ON ..
 RUN cmake --build . -j $(nproc)
 RUN cmake --build . --target validator-keys -j $(nproc)
