@@ -54,8 +54,9 @@ ENV PATH="/root/.local/bin:$PATH"
 COPY . .
 
 RUN conan profile detect --force
-RUN conan config install conan/profiles/ -tf $(conan config home)/profiles/
-RUN conan remote add --index 0 xrplf https://conan.ripplex.io
+RUN conan profile update settings.compiler.version=13 default
+RUN conan profile update settings.compiler.cppstd=20 default
+RUN conan profile update settings.compiler.libcxx=libstdc++11 default
 
 #Build
 WORKDIR /postfiat/.build
