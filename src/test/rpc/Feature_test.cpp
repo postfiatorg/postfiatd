@@ -139,7 +139,8 @@ class Feature_test : public beast::unit_test::suite
 
         // Test a random sampling of the variables. If any of these get retired
         // or removed, swap out for any other feature.
-        BEAST_EXPECT(featureToName(featureOwnerPaysFee) == "OwnerPaysFee");
+        BEAST_EXPECT(
+            featureToName(fixTrustLinesToSelf) == "fixTrustLinesToSelf");
         BEAST_EXPECT(featureToName(featureFlow) == "Flow");
         BEAST_EXPECT(featureToName(featureNegativeUNL) == "NegativeUNL");
         BEAST_EXPECT(featureToName(fix1578) == "fix1578");
@@ -308,10 +309,8 @@ class Feature_test : public beast::unit_test::suite
             params[jss::feature] =
                 "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCD"
                 "EF";
-            auto const result = env.rpc(
-                "json",
-                "feature",
-                boost::lexical_cast<std::string>(params))[jss::result];
+            auto const result =
+                env.rpc("json", "feature", to_string(params))[jss::result];
             BEAST_EXPECTS(
                 result[jss::error] == "badFeature", result.toStyledString());
             BEAST_EXPECT(
@@ -325,10 +324,8 @@ class Feature_test : public beast::unit_test::suite
                 "A7";
             // invalid param
             params[jss::vetoed] = true;
-            auto const result = env.rpc(
-                "json",
-                "feature",
-                boost::lexical_cast<std::string>(params))[jss::result];
+            auto const result =
+                env.rpc("json", "feature", to_string(params))[jss::result];
             BEAST_EXPECTS(
                 result[jss::error] == "noPermission",
                 result[jss::error].asString());
@@ -343,10 +340,8 @@ class Feature_test : public beast::unit_test::suite
                 "37";
             Json::Value params;
             params[jss::feature] = feature;
-            auto const result = env.rpc(
-                "json",
-                "feature",
-                boost::lexical_cast<std::string>(params))[jss::result];
+            auto const result =
+                env.rpc("json", "feature", to_string(params))[jss::result];
             BEAST_EXPECT(result.isMember(feature));
             auto const amendmentResult = result[feature];
             BEAST_EXPECT(amendmentResult[jss::enabled].asBool() == false);

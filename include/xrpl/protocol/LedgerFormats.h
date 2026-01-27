@@ -56,7 +56,7 @@ enum LedgerEntryType : std::uint16_t
 #pragma push_macro("LEDGER_ENTRY")
 #undef LEDGER_ENTRY
 
-#define LEDGER_ENTRY(tag, value, name, rpcName, fields) tag = value,
+#define LEDGER_ENTRY(tag, value, ...) tag = value,
 
 #include <xrpl/protocol/detail/ledger_entries.macro>
 
@@ -188,6 +188,15 @@ enum LedgerSpecificFlags {
     lsfMPTCanTransfer = 0x00000020,
     lsfMPTCanClawback = 0x00000040,
 
+    lsmfMPTCanMutateCanLock = 0x00000002,
+    lsmfMPTCanMutateRequireAuth = 0x00000004,
+    lsmfMPTCanMutateCanEscrow = 0x00000008,
+    lsmfMPTCanMutateCanTrade = 0x00000010,
+    lsmfMPTCanMutateCanTransfer = 0x00000020,
+    lsmfMPTCanMutateCanClawback = 0x00000040,
+    lsmfMPTCanMutateMetadata = 0x00010000,
+    lsmfMPTCanMutateTransferFee = 0x00020000,
+
     // ltMPTOKEN
     lsfMPTAuthorized = 0x00000002,
 
@@ -196,6 +205,11 @@ enum LedgerSpecificFlags {
 
     // ltVAULT
     lsfVaultPrivate = 0x00010000,
+
+    // ltLOAN
+    lsfLoanDefault = 0x00010000,
+    lsfLoanImpaired = 0x00020000,
+    lsfLoanOverpayment = 0x00040000, // True, loan allows overpayments
 };
 
 //------------------------------------------------------------------------------

@@ -17,14 +17,14 @@
 */
 //==============================================================================
 
-#include <xrpld/app/misc/CredentialHelpers.h>
 #include <xrpld/app/misc/DelegateUtils.h>
 #include <xrpld/app/misc/PermissionedDEXHelpers.h>
 #include <xrpld/app/paths/RippleCalc.h>
 #include <xrpld/app/tx/detail/Payment.h>
-#include <xrpld/ledger/View.h>
 
 #include <xrpl/basics/Log.h>
+#include <xrpl/ledger/CredentialHelpers.h>
+#include <xrpl/ledger/View.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Quality.h>
 #include <xrpl/protocol/TxFlags.h>
@@ -65,20 +65,33 @@ getMaxSourceAmount(
             dstAmount < beast::zero);
 }
 
-NotTEC
-Payment::preflight(PreflightContext const& ctx)
+bool
+Payment::checkExtraFeatures(PreflightContext const& ctx)
 {
     if (ctx.tx.isFieldPresent(sfCredentialIDs) &&
         !ctx.rules.enabled(featureCredentials))
-        return temDISABLED;
-
+        return false;
     if (ctx.tx.isFieldPresent(sfDomainID) &&
         !ctx.rules.enabled(featurePermissionedDEX))
-        return temDISABLED;
+        return false;
 
-    if (auto const ret = preflight1(ctx); !isTesSuccess(ret))
-        return ret;
+    return true;
+}
 
+std::uint32_t
+Payment::getFlagsMask(PreflightContext const& ctx)
+{
+    auto& tx = ctx.tx;
+
+    STAmount const dstAmount(tx.getFieldAmount(sfAmount));
+    bool const mptDirect = dstAmount.holds<MPTIssue>();
+
+    return mptDirect ? tfMPTPaymentMask : tfPaymentMask;
+}
+
+NotTEC
+Payment::preflight(PreflightContext const& ctx)
+{
     auto& tx = ctx.tx;
     auto& j = ctx.j;
 
@@ -89,14 +102,6 @@ Payment::preflight(PreflightContext const& ctx)
         return temDISABLED;
 
     std::uint32_t const txFlags = tx.getFlags();
-
-    std::uint32_t paymentMask = mptDirect ? tfMPTPaymentMask : tfPaymentMask;
-
-    if (txFlags & paymentMask)
-    {
-        JLOG(j.trace()) << "Malformed transaction: Invalid flags set.";
-        return temINVALID_FLAG;
-    }
 
     if (mptDirect && ctx.tx.isFieldPresent(sfPaths))
         return temMALFORMED;
@@ -238,10 +243,11 @@ Payment::preflight(PreflightContext const& ctx)
         }
     }
 
-    if (auto const err = credentials::checkFields(ctx); !isTesSuccess(err))
+    if (auto const err = credentials::checkFields(ctx.tx, ctx.j);
+        !isTesSuccess(err))
         return err;
 
-    return preflight2(ctx);
+    return tesSUCCESS;
 }
 
 TER
@@ -264,8 +270,33 @@ Payment::checkPermission(ReadView const& view, STTx const& tx)
     loadGranularPermission(sle, ttPAYMENT, granularPermissions);
 
     auto const& dstAmount = tx.getFieldAmount(sfAmount);
-    auto const& amountIssue = dstAmount.issue();
+    // post-amendment: disallow cross currency payments for PaymentMint and
+    // PaymentBurn
+    if (view.rules().enabled(fixDelegateV1_1))
+    {
+        auto const& amountAsset = dstAmount.asset();
+        if (tx.isFieldPresent(sfSendMax) &&
+            tx[sfSendMax].asset() != amountAsset)
+            return tecNO_DELEGATE_PERMISSION;
 
+        if (granularPermissions.contains(PaymentMint) && !isXRP(amountAsset) &&
+            amountAsset.getIssuer() == tx[sfAccount])
+            return tesSUCCESS;
+
+        if (granularPermissions.contains(PaymentBurn) && !isXRP(amountAsset) &&
+            amountAsset.getIssuer() == tx[sfDestination])
+            return tesSUCCESS;
+
+        return tecNO_DELEGATE_PERMISSION;
+    }
+
+    // Calling dstAmount.issue() in the next line would throw if it holds MPT.
+    // That exception would be caught in preclaim and returned as tefEXCEPTION.
+    // This check is just a cleaner, more explicit way to get the same result.
+    if (dstAmount.holds<MPTIssue>())
+        return tefEXCEPTION;
+
+    auto const& amountIssue = dstAmount.issue();
     if (granularPermissions.contains(PaymentMint) && !isXRP(amountIssue) &&
         amountIssue.account == tx[sfAccount])
         return tesSUCCESS;
@@ -358,7 +389,8 @@ Payment::preclaim(PreclaimContext const& ctx)
         }
     }
 
-    if (auto const err = credentials::valid(ctx, ctx.tx[sfAccount]);
+    if (auto const err =
+            credentials::valid(ctx.tx, ctx.view, ctx.tx[sfAccount], ctx.j);
         !isTesSuccess(err))
         return err;
 
@@ -450,8 +482,13 @@ Payment::doApply()
             //  1. If Account == Destination, or
             //  2. If Account is deposit preauthorized by destination.
 
-            if (auto err =
-                    verifyDepositPreauth(ctx_, account_, dstAccountID, sleDst);
+            if (auto err = verifyDepositPreauth(
+                    ctx_.tx,
+                    ctx_.view(),
+                    account_,
+                    dstAccountID,
+                    sleDst,
+                    ctx_.journal);
                 !isTesSuccess(err))
                 return err;
         }
@@ -521,8 +558,13 @@ Payment::doApply()
             ter != tesSUCCESS)
             return ter;
 
-        if (auto err =
-                verifyDepositPreauth(ctx_, account_, dstAccountID, sleDst);
+        if (auto err = verifyDepositPreauth(
+                ctx_.tx,
+                ctx_.view(),
+                account_,
+                dstAccountID,
+                sleDst,
+                ctx_.journal);
             !isTesSuccess(err))
             return err;
 
@@ -568,7 +610,16 @@ Payment::doApply()
         auto res = accountSend(
             pv, account_, dstAccountID, amountDeliver, ctx_.journal);
         if (res == tesSUCCESS)
+        {
             pv.apply(ctx_.rawView());
+
+            // If the actual amount delivered is different from the original
+            // amount due to partial payment or transfer fee, we need to update
+            // DelieveredAmount using the actual delivered amount
+            if (view().rules().enabled(fixMPTDeliveredAmount) &&
+                amountDeliver != dstAmount)
+                ctx_.deliver(amountDeliver);
+        }
         else if (res == tecINSUFFICIENT_FUNDS || res == tecPATH_DRY)
             res = tecPATH_PARTIAL;
 
@@ -581,7 +632,7 @@ Payment::doApply()
 
     auto const sleSrc = view().peek(keylet::account(account_));
     if (!sleSrc)
-        return tefINTERNAL;
+        return tefINTERNAL;  // LCOV_EXCL_LINE
 
     // ownerCount is the number of entries in this ledger for this
     // account that require a reserve.
@@ -644,8 +695,13 @@ Payment::doApply()
         if (dstAmount > dstReserve ||
             sleDst->getFieldAmount(sfBalance) > dstReserve)
         {
-            if (auto err =
-                    verifyDepositPreauth(ctx_, account_, dstAccountID, sleDst);
+            if (auto err = verifyDepositPreauth(
+                    ctx_.tx,
+                    ctx_.view(),
+                    account_,
+                    dstAccountID,
+                    sleDst,
+                    ctx_.journal);
                 !isTesSuccess(err))
                 return err;
         }

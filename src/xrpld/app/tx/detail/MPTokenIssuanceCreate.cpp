@@ -18,23 +18,42 @@
 //==============================================================================
 
 #include <xrpld/app/tx/detail/MPTokenIssuanceCreate.h>
-#include <xrpld/ledger/View.h>
 
+#include <xrpl/ledger/View.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/TxFlags.h>
 
 namespace ripple {
 
+bool
+MPTokenIssuanceCreate::checkExtraFeatures(PreflightContext const& ctx)
+{
+    if (ctx.tx.isFieldPresent(sfDomainID) &&
+        !(ctx.rules.enabled(featurePermissionedDomains) &&
+          ctx.rules.enabled(featureSingleAssetVault)))
+        return false;
+
+    if (ctx.tx.isFieldPresent(sfMutableFlags) &&
+        !ctx.rules.enabled(featureDynamicMPT))
+        return false;
+
+    return true;
+}
+
+std::uint32_t
+MPTokenIssuanceCreate::getFlagsMask(PreflightContext const& ctx)
+{
+    // This mask is only compared against sfFlags
+    return tfMPTokenIssuanceCreateMask;
+}
+
 NotTEC
 MPTokenIssuanceCreate::preflight(PreflightContext const& ctx)
 {
-    if (!ctx.rules.enabled(featureMPTokensV1))
-        return temDISABLED;
-
-    if (auto const ret = preflight1(ctx); !isTesSuccess(ret))
-        return ret;
-
-    if (ctx.tx.getFlags() & tfMPTokenIssuanceCreateMask)
+    // If the mutable flags field is included, at least one flag must be
+    // specified.
+    if (auto const mutableFlags = ctx.tx[~sfMutableFlags]; mutableFlags &&
+        (!*mutableFlags || *mutableFlags & tmfMPTokenIssuanceCreateMutableMask))
         return temINVALID_FLAG;
 
     if (auto const fee = ctx.tx[~sfTransferFee])
@@ -45,6 +64,16 @@ MPTokenIssuanceCreate::preflight(PreflightContext const& ctx)
         // If a non-zero TransferFee is set then the tfTransferable flag
         // must also be set.
         if (fee > 0u && !ctx.tx.isFlag(tfMPTCanTransfer))
+            return temMALFORMED;
+    }
+
+    if (auto const domain = ctx.tx[~sfDomainID])
+    {
+        if (*domain == beast::zero)
+            return temMALFORMED;
+
+        // Domain present implies that MPTokenIssuance is not public
+        if ((ctx.tx.getFlags() & tfMPTRequireAuth) == 0)
             return temMALFORMED;
     }
 
@@ -64,7 +93,7 @@ MPTokenIssuanceCreate::preflight(PreflightContext const& ctx)
         if (maxAmt > maxMPTokenAmount)
             return temMALFORMED;
     }
-    return preflight2(ctx);
+    return tesSUCCESS;
 }
 
 Expected<MPTID, TER>
@@ -117,6 +146,9 @@ MPTokenIssuanceCreate::create(
         if (args.domainId)
             (*mptIssuance)[sfDomainID] = *args.domainId;
 
+        if (args.mutableFlags)
+            (*mptIssuance)[sfMutableFlags] = *args.mutableFlags;
+
         view.insert(mptIssuance);
     }
 
@@ -142,6 +174,8 @@ MPTokenIssuanceCreate::doApply()
             .assetScale = tx[~sfAssetScale],
             .transferFee = tx[~sfTransferFee],
             .metadata = tx[~sfMPTokenMetadata],
+            .domainId = tx[~sfDomainID],
+            .mutableFlags = tx[~sfMutableFlags],
         });
     return result ? tesSUCCESS : result.error();
 }

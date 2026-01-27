@@ -22,10 +22,10 @@
 #include <xrpld/app/paths/RippleCalc.h>
 #include <xrpld/app/paths/detail/Steps.h>
 #include <xrpld/core/Config.h>
-#include <xrpld/ledger/PaymentSandbox.h>
 
 #include <xrpl/basics/contract.h>
 #include <xrpl/basics/safe_cast.h>
+#include <xrpl/ledger/PaymentSandbox.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/jss.h>
 
@@ -1267,16 +1267,13 @@ struct PayStrand_test : public beast::unit_test::suite
     run() override
     {
         using namespace jtx;
-        auto const sa = supported_amendments();
-        testToStrand(sa - featureFlowCross - featurePermissionedDEX);
+        auto const sa = testable_amendments();
         testToStrand(sa - featurePermissionedDEX);
         testToStrand(sa);
 
-        testRIPD1373(sa - featureFlowCross - featurePermissionedDEX);
         testRIPD1373(sa - featurePermissionedDEX);
         testRIPD1373(sa);
 
-        testLoop(sa - featureFlowCross - featurePermissionedDEX);
         testLoop(sa - featurePermissionedDEX);
         testLoop(sa);
 

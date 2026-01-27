@@ -55,7 +55,7 @@ public:
         {
             test::jtx::Env no_fully_canonical(
                 *this,
-                test::jtx::supported_amendments() -
+                test::jtx::testable_amendments() -
                     featureRequireFullyCanonicalSig);
 
             Validity valid = checkValidity(
@@ -66,12 +66,12 @@ public:
                                  .first;
 
             if (valid != Validity::Valid)
-                fail("Non-Fully canoncial signature was not permitted");
+                fail("Non-Fully canonical signature was not permitted");
         }
 
         {
             test::jtx::Env fully_canonical(
-                *this, test::jtx::supported_amendments());
+                *this, test::jtx::testable_amendments());
 
             Validity valid = checkValidity(
                                  fully_canonical.app().getHashRouter(),
@@ -80,13 +80,13 @@ public:
                                  fully_canonical.app().config())
                                  .first;
             if (valid == Validity::Valid)
-                fail("Non-Fully canoncial signature was permitted");
+                fail("Non-Fully canonical signature was permitted");
         }
 
         pass();
     }
 };
 
-BEAST_DEFINE_TESTSUITE(Apply, app, ripple);
+BEAST_DEFINE_TESTSUITE(Apply, tx, ripple);
 
 }  // namespace ripple

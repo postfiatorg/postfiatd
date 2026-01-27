@@ -82,7 +82,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
-#include <iostream>
+#include <fstream>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -311,8 +311,8 @@ public:
                       static_cast<int>(std::thread::hardware_concurrency());
 
                   // Be more aggressive about the number of threads to use
-                  // for the job queue if the server is configured as "large"
-                  // or "huge" if there are enough cores.
+                  // for the job queue if the server is configured as
+                  // "large" or "huge" if there are enough cores.
                   if (config->NODE_SIZE >= 4 && count >= 16)
                       count = 6 + std::min(count, 8);
                   else if (config->NODE_SIZE >= 3 && count >= 8)
@@ -2041,11 +2041,13 @@ ApplicationImp::loadOldLedger(
 
                 if (!loadLedger)
                 {
+                    // LCOV_EXCL_START
                     JLOG(m_journal.fatal()) << "Replay ledger missing/damaged";
                     UNREACHABLE(
                         "ripple::ApplicationImp::loadOldLedger : replay ledger "
                         "missing/damaged");
                     return false;
+                    // LCOV_EXCL_STOP
                 }
             }
         }
@@ -2072,28 +2074,34 @@ ApplicationImp::loadOldLedger(
 
         if (loadLedger->info().accountHash.isZero())
         {
+            // LCOV_EXCL_START
             JLOG(m_journal.fatal()) << "Ledger is empty.";
             UNREACHABLE(
                 "ripple::ApplicationImp::loadOldLedger : ledger is empty");
             return false;
+            // LCOV_EXCL_STOP
         }
 
         if (!loadLedger->walkLedger(journal("Ledger"), true))
         {
+            // LCOV_EXCL_START
             JLOG(m_journal.fatal()) << "Ledger is missing nodes.";
             UNREACHABLE(
                 "ripple::ApplicationImp::loadOldLedger : ledger is missing "
                 "nodes");
             return false;
+            // LCOV_EXCL_STOP
         }
 
         if (!loadLedger->assertSensible(journal("Ledger")))
         {
+            // LCOV_EXCL_START
             JLOG(m_journal.fatal()) << "Ledger is not sensible.";
             UNREACHABLE(
                 "ripple::ApplicationImp::loadOldLedger : ledger is not "
                 "sensible");
             return false;
+            // LCOV_EXCL_STOP
         }
 
         m_ledgerMaster->setLedgerRangePresent(

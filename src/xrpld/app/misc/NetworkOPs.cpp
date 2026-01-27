@@ -63,6 +63,7 @@
 #include <xrpl/protocol/BuildInfo.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/MultiApiJson.h>
+#include <xrpl/protocol/NFTSyntheticSerializer.h>
 #include <xrpl/protocol/RPCErr.h>
 #include <xrpl/protocol/TxFlags.h>
 #include <xrpl/protocol/jss.h>
@@ -1206,7 +1207,7 @@ NetworkOPsImp::submitTransaction(std::shared_ptr<STTx const> const& iTrans)
     auto const txid = trans->getTransactionID();
     auto const flags = app_.getHashRouter().getFlags(txid);
 
-    if ((flags & SF_BAD) != 0)
+    if ((flags & HashRouterFlags::BAD) != HashRouterFlags::UNDEFINED)
     {
         JLOG(m_journal.warn()) << "Submitted transaction cached bad";
         return;
@@ -1250,7 +1251,7 @@ NetworkOPsImp::preProcessTransaction(std::shared_ptr<Transaction>& transaction)
 {
     auto const newFlags = app_.getHashRouter().getFlags(transaction->getID());
 
-    if ((newFlags & SF_BAD) != 0)
+    if ((newFlags & HashRouterFlags::BAD) != HashRouterFlags::UNDEFINED)
     {
         // cached bad
         JLOG(m_journal.warn()) << transaction->getID() << ": cached bad!\n";
@@ -1269,7 +1270,8 @@ NetworkOPsImp::preProcessTransaction(std::shared_ptr<Transaction>& transaction)
     {
         transaction->setStatus(INVALID);
         transaction->setResult(temINVALID_FLAG);
-        app_.getHashRouter().setFlags(transaction->getID(), SF_BAD);
+        app_.getHashRouter().setFlags(
+            transaction->getID(), HashRouterFlags::BAD);
         return false;
     }
 
@@ -1288,7 +1290,8 @@ NetworkOPsImp::preProcessTransaction(std::shared_ptr<Transaction>& transaction)
         JLOG(m_journal.info()) << "Transaction has bad signature: " << reason;
         transaction->setStatus(INVALID);
         transaction->setResult(temBAD_SIGNATURE);
-        app_.getHashRouter().setFlags(transaction->getID(), SF_BAD);
+        app_.getHashRouter().setFlags(
+            transaction->getID(), HashRouterFlags::BAD);
         return false;
     }
 
@@ -1411,7 +1414,8 @@ NetworkOPsImp::processTransactionSet(CanonicalTXSet const& set)
                 JLOG(m_journal.trace())
                     << "Exception checking transaction: " << reason;
             }
-            app_.getHashRouter().setFlags(tx->getTransactionID(), SF_BAD);
+            app_.getHashRouter().setFlags(
+                tx->getTransactionID(), HashRouterFlags::BAD);
             continue;
         }
 
@@ -1443,6 +1447,11 @@ NetworkOPsImp::processTransactionSet(CanonicalTXSet const& set)
         mTransactions.reserve(mTransactions.size() + transactions.size());
         for (auto& t : transactions)
             mTransactions.push_back(std::move(t));
+    }
+    if (mTransactions.empty())
+    {
+        JLOG(m_journal.debug()) << "No transaction to process!";
+        return;
     }
 
     doTransactionSyncBatch(lock, [&](std::unique_lock<std::mutex> const&) {
@@ -1537,7 +1546,8 @@ NetworkOPsImp::apply(std::unique_lock<std::mutex>& batchLock)
             e.transaction->setResult(e.result);
 
             if (isTemMalformed(e.result))
-                app_.getHashRouter().setFlags(e.transaction->getID(), SF_BAD);
+                app_.getHashRouter().setFlags(
+                    e.transaction->getID(), HashRouterFlags::BAD);
 
 #ifdef DEBUG
             if (e.result != tesSUCCESS)
@@ -1625,7 +1635,8 @@ NetworkOPsImp::apply(std::unique_lock<std::mutex>& batchLock)
                     //    (5) ledgers into the future. (Remember that an
                     //    unseated optional compares as less than all seated
                     //    values, so it has to be checked explicitly first.)
-                    // 3. The SF_HELD flag is not set on the txID. (setFlags
+                    // 3. The HashRouterFlags::BAD flag is not set on the txID.
+                    // (setFlags
                     //    checks before setting. If the flag is set, it returns
                     //    false, which means it's been held once without one of
                     //    the other conditions, so don't hold it again. Time's
@@ -1634,7 +1645,7 @@ NetworkOPsImp::apply(std::unique_lock<std::mutex>& batchLock)
                     if (e.local ||
                         (ledgersLeft && ledgersLeft <= LocalTxs::holdLedgers) ||
                         app_.getHashRouter().setFlags(
-                            e.transaction->getID(), SF_HELD))
+                            e.transaction->getID(), HashRouterFlags::HELD))
                     {
                         // transaction should be held
                         JLOG(m_journal.debug())
@@ -1681,10 +1692,11 @@ NetworkOPsImp::apply(std::unique_lock<std::mutex>& batchLock)
                     app_.getHashRouter().shouldRelay(e.transaction->getID());
                 if (auto const sttx = *(e.transaction->getSTransaction());
                     toSkip &&
-                    // Skip relaying if it's an inner batch txn and batch
-                    // feature is enabled
-                    !(sttx.isFlag(tfInnerBatchTxn) &&
-                      newOL->rules().enabled(featureBatch)))
+                    // Skip relaying if it's an inner batch txn. The flag should
+                    // only be set if the Batch feature is enabled. If Batch is
+                    // not enabled, the flag is always invalid, so don't relay
+                    // it regardless.
+                    !sttx.isFlag(tfInnerBatchTxn))
                 {
                     protocol::TMTransaction tx;
                     Serializer s;
@@ -1783,11 +1795,13 @@ NetworkOPsImp::getOwnerInfo(
 
                     case ltACCOUNT_ROOT:
                     case ltDIR_NODE:
+                    // LCOV_EXCL_START
                     default:
                         UNREACHABLE(
                             "ripple::NetworkOPsImp::getOwnerInfo : invalid "
                             "type");
                         break;
+                        // LCOV_EXCL_STOP
                 }
             }
 
@@ -2409,6 +2423,7 @@ NetworkOPsImp::pubValidation(std::shared_ptr<STValidation> const& val)
         jvObj[jss::flags] = val->getFlags();
         jvObj[jss::signing_time] = *(*val)[~sfSigningTime];
         jvObj[jss::data] = strHex(val->getSerializer().slice());
+        jvObj[jss::network_id] = app_.config().NETWORK_ID;
 
         if (auto version = (*val)[~sfServerVersion])
             jvObj[jss::server_version] = std::to_string(*version);
@@ -3044,9 +3059,11 @@ NetworkOPsImp::pubProposedTransaction(
     std::shared_ptr<STTx const> const& transaction,
     TER result)
 {
-    // never publish an inner txn inside a batch txn
-    if (transaction->isFlag(tfInnerBatchTxn) &&
-        ledger->rules().enabled(featureBatch))
+    // never publish an inner txn inside a batch txn. The flag should
+    // only be set if the Batch feature is enabled. If Batch is not
+    // enabled, the flag is always invalid, so don't publish it
+    // regardless.
+    if (transaction->isFlag(tfInnerBatchTxn))
         return;
 
     MultiApiJson jvObj =
@@ -3112,6 +3129,8 @@ NetworkOPsImp::pubLedger(std::shared_ptr<ReadView const> const& lpAccepted)
             jvObj[jss::ledger_hash] = to_string(lpAccepted->info().hash);
             jvObj[jss::ledger_time] = Json::Value::UInt(
                 lpAccepted->info().closeTime.time_since_epoch().count());
+
+            jvObj[jss::network_id] = app_.config().NETWORK_ID;
 
             if (!lpAccepted->rules().enabled(featureXRPFees))
                 jvObj[jss::fee_ref] = Config::FEE_UNITS_DEPRECATED;
@@ -3258,6 +3277,7 @@ NetworkOPsImp::transJson(
         jvObj[jss::meta] = meta->get().getJson(JsonOptions::none);
         RPC::insertDeliveredAmount(
             jvObj[jss::meta], *ledger, transaction, meta->get());
+        RPC::insertNFTSyntheticInJson(jvObj, transaction, meta->get());
         RPC::insertMPTokenIssuanceID(
             jvObj[jss::meta], transaction, meta->get());
     }
@@ -3707,6 +3727,9 @@ NetworkOPsImp::addAccountHistoryJob(SubAccountHistoryInfoWeak subInfo)
 
     if (databaseType == DatabaseType::None)
     {
+        // LCOV_EXCL_START
+        UNREACHABLE(
+            "ripple::NetworkOPsImp::addAccountHistoryJob : no database");
         JLOG(m_journal.error())
             << "AccountHistory job for account "
             << toBase58(subInfo.index_->accountId_) << " no database";
@@ -3716,6 +3739,7 @@ NetworkOPsImp::addAccountHistoryJob(SubAccountHistoryInfoWeak subInfo)
             unsubAccountHistory(sptr, subInfo.index_->accountId_, false);
         }
         return;
+        // LCOV_EXCL_STOP
     }
 
     app_.getJobQueue().addJob(
@@ -3812,12 +3836,14 @@ NetworkOPsImp::addAccountHistoryJob(SubAccountHistoryInfoWeak subInfo)
                             accountId, minLedger, maxLedger, marker, 0, true};
                         return db->newestAccountTxPage(options);
                     }
+                    // LCOV_EXCL_START
                     default: {
                         UNREACHABLE(
-                            "ripple::NetworkOPsImp::addAccountHistoryJob::"
+                            "ripple::NetworkOPsImp::addAccountHistoryJob : "
                             "getMoreTxns : invalid database type");
                         return {};
                     }
+                        // LCOV_EXCL_STOP
                 }
             };
 
@@ -3878,11 +3904,16 @@ NetworkOPsImp::addAccountHistoryJob(SubAccountHistoryInfoWeak subInfo)
                         getMoreTxns(startLedgerSeq, lastLedgerSeq, marker);
                     if (!dbResult)
                     {
+                        // LCOV_EXCL_START
+                        UNREACHABLE(
+                            "ripple::NetworkOPsImp::addAccountHistoryJob : "
+                            "getMoreTxns failed");
                         JLOG(m_journal.debug())
                             << "AccountHistory job for account "
                             << toBase58(accountId) << " getMoreTxns failed.";
                         send(rpcError(rpcINTERNAL), true);
                         return;
+                        // LCOV_EXCL_STOP
                     }
 
                     auto const& txns = dbResult->first;
@@ -3905,22 +3936,32 @@ NetworkOPsImp::addAccountHistoryJob(SubAccountHistoryInfoWeak subInfo)
                                 tx->getLedger());
                         if (!curTxLedger)
                         {
+                            // LCOV_EXCL_START
+                            UNREACHABLE(
+                                "ripple::NetworkOPsImp::addAccountHistoryJob : "
+                                "getLedgerBySeq failed");
                             JLOG(m_journal.debug())
                                 << "AccountHistory job for account "
                                 << toBase58(accountId) << " no ledger.";
                             send(rpcError(rpcINTERNAL), true);
                             return;
+                            // LCOV_EXCL_STOP
                         }
                         std::shared_ptr<STTx const> stTxn =
                             tx->getSTransaction();
                         if (!stTxn)
                         {
+                            // LCOV_EXCL_START
+                            UNREACHABLE(
+                                "NetworkOPsImp::addAccountHistoryJob : "
+                                "getSTransaction failed");
                             JLOG(m_journal.debug())
                                 << "AccountHistory job for account "
                                 << toBase58(accountId)
                                 << " getSTransaction failed.";
                             send(rpcError(rpcINTERNAL), true);
                             return;
+                            // LCOV_EXCL_STOP
                         }
 
                         auto const mRef = std::ref(*meta);
@@ -4011,10 +4052,12 @@ NetworkOPsImp::subAccountHistoryStart(
         }
         else
         {
+            // LCOV_EXCL_START
             UNREACHABLE(
                 "ripple::NetworkOPsImp::subAccountHistoryStart : failed to "
                 "access genesis account");
             return;
+            // LCOV_EXCL_STOP
         }
     }
     subInfo.index_->historyLastLedgerSeq_ = ledger->seq();
@@ -4121,7 +4164,11 @@ NetworkOPsImp::subBook(InfoSub::ref isrListener, Book const& book)
     if (auto listeners = app_.getOrderBookDB().makeBookListeners(book))
         listeners->addSubscriber(isrListener);
     else
+    {
+        // LCOV_EXCL_START
         UNREACHABLE("ripple::NetworkOPsImp::subBook : null book listeners");
+        // LCOV_EXCL_STOP
+    }
     return true;
 }
 
@@ -4170,6 +4217,7 @@ NetworkOPsImp::subLedger(InfoSub::ref isrListener, Json::Value& jvResult)
         jvResult[jss::reserve_base] =
             lpClosed->fees().accountReserve(0).jsonClipped();
         jvResult[jss::reserve_inc] = lpClosed->fees().increment.jsonClipped();
+        jvResult[jss::network_id] = app_.config().NETWORK_ID;
     }
 
     if ((mMode >= OperatingMode::SYNCING) && !isNeedNetworkLedger())

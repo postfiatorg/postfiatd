@@ -22,11 +22,11 @@
 #include <test/jtx/AMMTest.h>
 
 #include <xrpld/app/tx/detail/PermissionedDomainSet.h>
-#include <xrpld/ledger/ApplyViewImpl.h>
 
 #include <xrpl/basics/Blob.h>
 #include <xrpl/basics/Slice.h>
 #include <xrpl/beast/unit_test/suite.h>
+#include <xrpl/ledger/ApplyViewImpl.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/IOUAmount.h>
 #include <xrpl/protocol/Indexes.h>
@@ -202,24 +202,6 @@ class PermissionedDEX_test : public beast::unit_test::suite
             env.close();
 
             env.enableFeature(featurePermissionedDEX);
-            env.close();
-            env(offer(bob, XRP(10), USD(10)), domain(domainID));
-            env.close();
-        }
-
-        // test preflight: permissioned dex cannot be used without enable
-        // flowcross
-        {
-            Env env(*this, features - featureFlowCross);
-            auto const& [gw, domainOwner, alice, bob, carol, USD, domainID, credType] =
-                PermissionedDEX(env);
-
-            env(offer(bob, XRP(10), USD(10)),
-                domain(domainID),
-                ter(temDISABLED));
-            env.close();
-
-            env.enableFeature(featureFlowCross);
             env.close();
             env(offer(bob, XRP(10), USD(10)), domain(domainID));
             env.close();
@@ -1003,8 +985,8 @@ class PermissionedDEX_test : public beast::unit_test::suite
     {
         testcase("Remove unfunded offer");
 
-        // checking that an unfunded offer will be implictly removed by a
-        // successfuly payment tx
+        // checking that an unfunded offer will be implicitly removed by a
+        // successful payment tx
         Env env(*this, features);
         auto const& [gw, domainOwner, alice, bob, carol, USD, domainID, credType] =
             PermissionedDEX(env);
@@ -1569,7 +1551,7 @@ public:
     void
     run() override
     {
-        FeatureBitset const all{jtx::supported_amendments()};
+        FeatureBitset const all{jtx::testable_amendments()};
 
         // Test domain offer (w/o hyrbid)
         testOfferCreate(all);

@@ -22,6 +22,7 @@
 
 // Convenience header that includes everything
 
+#include <test/jtx/AMM.h>
 #include <test/jtx/Account.h>
 #include <test/jtx/Env.h>
 #include <test/jtx/Env_ss.h>
@@ -38,6 +39,7 @@
 #include <test/jtx/delivermin.h>
 #include <test/jtx/deposit.h>
 #include <test/jtx/did.h>
+#include <test/jtx/directory.h>
 #include <test/jtx/domain.h>
 #include <test/jtx/escrow.h>
 #include <test/jtx/fee.h>
@@ -69,6 +71,7 @@
 #include <test/jtx/tag.h>
 #include <test/jtx/tags.h>
 #include <test/jtx/ter.h>
+#include <test/jtx/testline.h>
 #include <test/jtx/ticket.h>
 #include <test/jtx/token.h>
 #include <test/jtx/trust.h>

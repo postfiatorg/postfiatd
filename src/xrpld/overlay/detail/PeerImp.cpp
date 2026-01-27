@@ -1286,8 +1286,23 @@ PeerImp::handleTransaction(
 
         // Charge strongly for attempting to relay a txn with tfInnerBatchTxn
         // LCOV_EXCL_START
-        if (stx->isFlag(tfInnerBatchTxn) &&
-            getCurrentTransactionRules()->enabled(featureBatch))
+        /*
+           There is no need to check whether the featureBatch amendment is
+           enabled.
+
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is
+           enabled, then it's an invalid transaction because inner batch
+           transactions should not be relayed.
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is *not*
+           enabled, then the transaction is malformed because it's using an
+           "unknown" flag. There's no need to waste the resources to send it
+           to the transaction engine.
+
+           We don't normally check transaction validity at this level, but
+           since we _need_ to check it when the amendment is enabled, we may as
+           well drop it if the flag is set regardless.
+        */
+        if (stx->isFlag(tfInnerBatchTxn))
         {
             JLOG(p_journal_.warn()) << "Ignoring Network relayed Tx containing "
                                        "tfInnerBatchTxn (handleTransaction).";
@@ -1296,13 +1311,13 @@ PeerImp::handleTransaction(
         }
         // LCOV_EXCL_STOP
 
-        int flags;
+        HashRouterFlags flags;
         constexpr std::chrono::seconds tx_interval = 10s;
 
         if (!app_.getHashRouter().shouldProcess(txID, id_, flags, tx_interval))
         {
             // we have seen this transaction recently
-            if (flags & SF_BAD)
+            if (any(flags & HashRouterFlags::BAD))
             {
                 fee_.update(Resource::feeUselessData, "known bad");
                 JLOG(p_journal_.debug()) << "Ignoring known bad tx " << txID;
@@ -1329,7 +1344,7 @@ PeerImp::handleTransaction(
             {
                 // Skip local checks if a server we trust
                 // put the transaction in its open ledger
-                flags |= SF_TRUSTED;
+                flags |= HashRouterFlags::TRUSTED;
             }
 
             // for non-validator nodes only -- localPublicKey is set for
@@ -2133,10 +2148,12 @@ PeerImp::onValidatorListMessage(
         case ListDisposition::invalid:
         case ListDisposition::unsupported_version:
             break;
+        // LCOV_EXCL_START
         default:
             UNREACHABLE(
                 "ripple::PeerImp::onValidatorListMessage : invalid best list "
                 "disposition");
+            // LCOV_EXCL_STOP
     }
 
     // Charge based on the worst result
@@ -2177,10 +2194,12 @@ PeerImp::onValidatorListMessage(
             // If it happens frequently, that's probably bad.
             fee_.update(Resource::feeInvalidData, "version");
             break;
+        // LCOV_EXCL_START
         default:
             UNREACHABLE(
                 "ripple::PeerImp::onValidatorListMessage : invalid worst list "
                 "disposition");
+            // LCOV_EXCL_STOP
     }
 
     // Log based on all the results.
@@ -2237,10 +2256,12 @@ PeerImp::onValidatorListMessage(
                     << "Ignored " << count << "invalid " << messageType
                     << "(s) from peer " << remote_address_;
                 break;
+            // LCOV_EXCL_START
             default:
                 UNREACHABLE(
                     "ripple::PeerImp::onValidatorListMessage : invalid list "
                     "disposition");
+                // LCOV_EXCL_STOP
         }
     }
 }
@@ -2841,7 +2862,7 @@ PeerImp::doTransactions(
 
 void
 PeerImp::checkTransaction(
-    int flags,
+    HashRouterFlags flags,
     bool checkSignature,
     std::shared_ptr<STTx const> const& stx,
     bool batch)
@@ -2851,8 +2872,23 @@ PeerImp::checkTransaction(
     {
         // charge strongly for relaying batch txns
         // LCOV_EXCL_START
-        if (stx->isFlag(tfInnerBatchTxn) &&
-            getCurrentTransactionRules()->enabled(featureBatch))
+        /*
+           There is no need to check whether the featureBatch amendment is
+           enabled.
+
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is
+           enabled, then it's an invalid transaction because inner batch
+           transactions should not be relayed.
+           * If the `tfInnerBatchTxn` flag is set, and the amendment is *not*
+           enabled, then the transaction is malformed because it's using an
+           "unknown" flag. There's no need to waste the resources to send it
+           to the transaction engine.
+
+           We don't normally check transaction validity at this level, but
+           since we _need_ to check it when the amendment is enabled, we may as
+           well drop it if the flag is set regardless.
+        */
+        if (stx->isFlag(tfInnerBatchTxn))
         {
             JLOG(p_journal_.warn()) << "Ignoring Network relayed Tx containing "
                                        "tfInnerBatchTxn (checkSignature).";
@@ -2866,7 +2902,11 @@ PeerImp::checkTransaction(
             (stx->getFieldU32(sfLastLedgerSequence) <
              app_.getLedgerMaster().getValidLedgerIndex()))
         {
-            app_.getHashRouter().setFlags(stx->getTransactionID(), SF_BAD);
+            JLOG(p_journal_.info())
+                << "Marking transaction " << stx->getTransactionID()
+                << "as BAD because it's expired";
+            app_.getHashRouter().setFlags(
+                stx->getTransactionID(), HashRouterFlags::BAD);
             charge(Resource::feeUselessData, "expired tx");
             return;
         }
@@ -2921,12 +2961,14 @@ PeerImp::checkTransaction(
             {
                 if (!validReason.empty())
                 {
-                    JLOG(p_journal_.trace())
+                    JLOG(p_journal_.debug())
                         << "Exception checking transaction: " << validReason;
                 }
 
-                // Probably not necessary to set SF_BAD, but doesn't hurt.
-                app_.getHashRouter().setFlags(stx->getTransactionID(), SF_BAD);
+                // Probably not necessary to set HashRouterFlags::BAD, but
+                // doesn't hurt.
+                app_.getHashRouter().setFlags(
+                    stx->getTransactionID(), HashRouterFlags::BAD);
                 charge(
                     Resource::feeInvalidSignature,
                     "check transaction signature failure");
@@ -2946,15 +2988,16 @@ PeerImp::checkTransaction(
         {
             if (!reason.empty())
             {
-                JLOG(p_journal_.trace())
+                JLOG(p_journal_.debug())
                     << "Exception checking transaction: " << reason;
             }
-            app_.getHashRouter().setFlags(stx->getTransactionID(), SF_BAD);
+            app_.getHashRouter().setFlags(
+                stx->getTransactionID(), HashRouterFlags::BAD);
             charge(Resource::feeInvalidSignature, "tx (impossible)");
             return;
         }
 
-        bool const trusted(flags & SF_TRUSTED);
+        bool const trusted = any(flags & HashRouterFlags::TRUSTED);
         app_.getOPs().processTransaction(
             tx, trusted, false, NetworkOPs::FailHard::no);
     }
@@ -2962,7 +3005,8 @@ PeerImp::checkTransaction(
     {
         JLOG(p_journal_.warn())
             << "Exception in " << __func__ << ": " << ex.what();
-        app_.getHashRouter().setFlags(stx->getTransactionID(), SF_BAD);
+        app_.getHashRouter().setFlags(
+            stx->getTransactionID(), HashRouterFlags::BAD);
         using namespace std::string_literals;
         charge(Resource::feeInvalidData, "tx "s + ex.what());
     }

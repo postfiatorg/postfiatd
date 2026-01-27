@@ -26,6 +26,7 @@
 #include <xrpld/overlay/Cluster.h>
 #include <xrpld/overlay/detail/ConnectAttempt.h>
 #include <xrpld/overlay/detail/PeerImp.h>
+#include <xrpld/overlay/detail/TrafficCount.h>
 #include <xrpld/overlay/detail/Tuning.h>
 #include <xrpld/overlay/predicates.h>
 #include <xrpld/peerfinder/make_Manager.h>
@@ -40,8 +41,6 @@
 #include <xrpl/server/SimpleWriter.h>
 
 #include <boost/algorithm/string/predicate.hpp>
-
-#include "xrpld/overlay/detail/TrafficCount.h"
 
 namespace ripple {
 
@@ -193,14 +192,16 @@ OverlayImpl::onHandoff(
     if (consumer.disconnect(journal))
         return handoff;
 
-    auto const slot = m_peerFinder->new_inbound_slot(
+    auto const [slot, result] = m_peerFinder->new_inbound_slot(
         beast::IPAddressConversion::from_asio(local_endpoint),
         beast::IPAddressConversion::from_asio(remote_endpoint));
 
     if (slot == nullptr)
     {
-        // self-connect, close
+        // connection refused either IP limit exceeded or self-connect
         handoff.moved = false;
+        JLOG(journal.debug())
+            << "Peer " << remote_endpoint << " refused, " << to_string(result);
         return handoff;
     }
 
@@ -269,8 +270,8 @@ OverlayImpl::onHandoff(
             if (result != PeerFinder::Result::success)
             {
                 m_peerFinder->on_closed(slot);
-                JLOG(journal.debug())
-                    << "Peer " << remote_endpoint << " redirected, slots full";
+                JLOG(journal.debug()) << "Peer " << remote_endpoint
+                                      << " redirected, " << to_string(result);
                 handoff.moved = false;
                 handoff.response = makeRedirectResponse(
                     slot, request, remote_endpoint.address());
@@ -400,10 +401,11 @@ OverlayImpl::connect(beast::IP::Endpoint const& remote_endpoint)
         return;
     }
 
-    auto const slot = peerFinder().new_outbound_slot(remote_endpoint);
+    auto const [slot, result] = peerFinder().new_outbound_slot(remote_endpoint);
     if (slot == nullptr)
     {
-        JLOG(journal_.debug()) << "Connect: No slot for " << remote_endpoint;
+        JLOG(journal_.debug()) << "Connect: No slot for " << remote_endpoint
+                               << ": " << to_string(result);
         return;
     }
 
@@ -1223,7 +1225,16 @@ OverlayImpl::relay(
     {
         auto& txn = tx->get();
         SerialIter sit(makeSlice(txn.rawtransaction()));
-        relay = !isPseudoTx(STTx{sit});
+        try
+        {
+            relay = !isPseudoTx(STTx{sit});
+        }
+        catch (std::exception const&)
+        {
+            // Could not construct STTx, not relaying
+            JLOG(journal_.debug()) << "Could not construct STTx: " << hash;
+            return;
+        }
     }
 
     Overlay::PeerSequence peers = {};
@@ -1423,7 +1434,12 @@ OverlayImpl::updateSlotAndSquelch(
     if (!strand_.running_in_this_thread())
         return post(
             strand_,
-            [this, key, validator, peers = std::move(peers), type]() mutable {
+            // Must capture copies of reference parameters (i.e. key, validator)
+            [this,
+             key = key,
+             validator = validator,
+             peers = std::move(peers),
+             type]() mutable {
                 updateSlotAndSquelch(key, validator, std::move(peers), type);
             });
 
@@ -1444,9 +1460,12 @@ OverlayImpl::updateSlotAndSquelch(
         return;
 
     if (!strand_.running_in_this_thread())
-        return post(strand_, [this, key, validator, peer, type]() {
-            updateSlotAndSquelch(key, validator, peer, type);
-        });
+        return post(
+            strand_,
+            // Must capture copies of reference parameters (i.e. key, validator)
+            [this, key = key, validator = validator, peer, type]() {
+                updateSlotAndSquelch(key, validator, peer, type);
+            });
 
     slots_.updateSlotAndSquelch(key, validator, peer, type, [&]() {
         reportInboundTraffic(TrafficCount::squelch_ignored, 0);

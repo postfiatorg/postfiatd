@@ -29,11 +29,7 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/functional/hash.hpp>
 
-#include <cstdint>
-#include <ios>
-#include <sstream>
 #include <string>
-#include <typeinfo>
 
 //------------------------------------------------------------------------------
 
@@ -98,7 +94,11 @@ hash_append(Hasher& h, beast::IP::Address const& addr) noexcept
     else if (addr.is_v6())
         hash_append(h, addr.to_v6().to_bytes());
     else
+    {
+        // LCOV_EXCL_START
         UNREACHABLE("beast::hash_append : invalid address type");
+        // LCOV_EXCL_STOP
+    }
 }
 }  // namespace beast
 

@@ -58,10 +58,10 @@ public:
         {
             // account_info with an account that's not in the ledger.
             Account const bogie{"bogie"};
-            auto const info = env.rpc(
-                "json",
-                "account_info",
-                R"({ "account": ")" + bogie.human() + R"("})");
+            Json::Value params;
+            params[jss::account] = bogie.human();
+            auto const info =
+                env.rpc("json", "account_info", to_string(params));
             BEAST_EXPECT(
                 info[jss::result][jss::error_code] == rpcACT_NOT_FOUND);
             BEAST_EXPECT(
@@ -128,16 +128,18 @@ public:
         Account const alice{"alice"};
         env.fund(XRP(1000), alice);
 
-        auto const withoutSigners =
-            std::string("{ ") + "\"account\": \"" + alice.human() + "\"}";
+        Json::Value withoutSigners;
+        withoutSigners[jss::account] = alice.human();
 
-        auto const withSigners = std::string("{ ") + "\"account\": \"" +
-            alice.human() + "\", " + "\"signer_lists\": true }";
+        Json::Value withSigners;
+        withSigners[jss::account] = alice.human();
+        withSigners[jss::signer_lists] = true;
 
         // Alice has no SignerList yet.
         {
             // account_info without the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withoutSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withoutSigners));
             BEAST_EXPECT(
                 info.isMember(jss::result) &&
                 info[jss::result].isMember(jss::account_data));
@@ -146,7 +148,8 @@ public:
         }
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(
                 info.isMember(jss::result) &&
                 info[jss::result].isMember(jss::account_data));
@@ -164,7 +167,8 @@ public:
         env(smallSigners);
         {
             // account_info without the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withoutSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withoutSigners));
             BEAST_EXPECT(
                 info.isMember(jss::result) &&
                 info[jss::result].isMember(jss::account_data));
@@ -173,7 +177,8 @@ public:
         }
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(
                 info.isMember(jss::result) &&
                 info[jss::result].isMember(jss::account_data));
@@ -216,7 +221,8 @@ public:
         env(bigSigners);
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(
                 info.isMember(jss::result) &&
                 info[jss::result].isMember(jss::account_data));
@@ -250,12 +256,14 @@ public:
         Account const alice{"alice"};
         env.fund(XRP(1000), alice);
 
-        auto const withoutSigners = std::string("{ ") +
-            "\"api_version\": 2, \"account\": \"" + alice.human() + "\"}";
+        Json::Value withoutSigners;
+        withoutSigners[jss::api_version] = 2;
+        withoutSigners[jss::account] = alice.human();
 
-        auto const withSigners = std::string("{ ") +
-            "\"api_version\": 2, \"account\": \"" + alice.human() + "\", " +
-            "\"signer_lists\": true }";
+        Json::Value withSigners;
+        withSigners[jss::api_version] = 2;
+        withSigners[jss::account] = alice.human();
+        withSigners[jss::signer_lists] = true;
 
         auto const withSignersAsString = std::string("{ ") +
             "\"api_version\": 2, \"account\": \"" + alice.human() + "\", " +
@@ -264,13 +272,15 @@ public:
         // Alice has no SignerList yet.
         {
             // account_info without the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withoutSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withoutSigners));
             BEAST_EXPECT(info.isMember(jss::result));
             BEAST_EXPECT(!info[jss::result].isMember(jss::signer_lists));
         }
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(info.isMember(jss::result));
             auto const& data = info[jss::result];
             BEAST_EXPECT(data.isMember(jss::signer_lists));
@@ -286,13 +296,15 @@ public:
         env(smallSigners);
         {
             // account_info without the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withoutSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withoutSigners));
             BEAST_EXPECT(info.isMember(jss::result));
             BEAST_EXPECT(!info[jss::result].isMember(jss::signer_lists));
         }
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(info.isMember(jss::result));
             auto const& data = info[jss::result];
             BEAST_EXPECT(data.isMember(jss::signer_lists));
@@ -340,7 +352,8 @@ public:
         env(bigSigners);
         {
             // account_info with the "signer_lists" argument.
-            auto const info = env.rpc("json", "account_info", withSigners);
+            auto const info =
+                env.rpc("json", "account_info", to_string(withSigners));
             BEAST_EXPECT(info.isMember(jss::result));
             auto const& data = info[jss::result];
             BEAST_EXPECT(data.isMember(jss::signer_lists));
@@ -567,10 +580,10 @@ public:
         auto getAccountFlag = [&env](
                                   std::string_view fName,
                                   Account const& account) {
-            auto const info = env.rpc(
-                "json",
-                "account_info",
-                R"({"account" : ")" + account.human() + R"("})");
+            Json::Value params;
+            params[jss::account] = account.human();
+            auto const info =
+                env.rpc("json", "account_info", to_string(params));
 
             std::optional<bool> res;
             if (info[jss::result][jss::status] == "success" &&
@@ -675,6 +688,30 @@ public:
             BEAST_EXPECT(
                 !getAccountFlag(allowTrustLineClawbackFlag.first, bob));
         }
+
+        static constexpr std::pair<std::string_view, std::uint32_t>
+            allowTrustLineLockingFlag{
+                "allowTrustLineLocking", asfAllowTrustLineLocking};
+
+        if (features[featureTokenEscrow])
+        {
+            auto const f1 =
+                getAccountFlag(allowTrustLineLockingFlag.first, bob);
+            BEAST_EXPECT(f1.has_value());
+            BEAST_EXPECT(!f1.value());
+
+            // Set allowTrustLineLocking
+            env(fset(bob, allowTrustLineLockingFlag.second));
+            env.close();
+            auto const f2 =
+                getAccountFlag(allowTrustLineLockingFlag.first, bob);
+            BEAST_EXPECT(f2.has_value());
+            BEAST_EXPECT(f2.value());
+        }
+        else
+        {
+            BEAST_EXPECT(!getAccountFlag(allowTrustLineLockingFlag.first, bob));
+        }
     }
 
     void
@@ -686,11 +723,14 @@ public:
         testSignerListsV2();
 
         FeatureBitset const allFeatures{
-            ripple::test::jtx::supported_amendments()};
+            ripple::test::jtx::testable_amendments()};
         testAccountFlags(allFeatures);
         testAccountFlags(allFeatures - featureDisallowIncoming);
         testAccountFlags(
             allFeatures - featureDisallowIncoming - featureClawback);
+        testAccountFlags(
+            allFeatures - featureDisallowIncoming - featureClawback -
+            featureTokenEscrow);
     }
 };
 

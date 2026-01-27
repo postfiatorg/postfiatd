@@ -88,10 +88,8 @@ class NFTokenBurnBaseUtil_test : public beast::unit_test::suite
         jvParams[jss::ledger_index] = "current";
         jvParams[jss::binary] = false;
         {
-            Json::Value jrr = env.rpc(
-                "json",
-                "ledger_data",
-                boost::lexical_cast<std::string>(jvParams));
+            Json::Value jrr =
+                env.rpc("json", "ledger_data", to_string(jvParams));
 
             // Iterate the state and print all NFTokenPages.
             if (!jrr.isMember(jss::result) ||
@@ -413,10 +411,8 @@ class NFTokenBurnBaseUtil_test : public beast::unit_test::suite
             jvParams[jss::ledger_index] = "current";
             jvParams[jss::binary] = false;
             {
-                Json::Value jrr = env.rpc(
-                    "json",
-                    "ledger_data",
-                    boost::lexical_cast<std::string>(jvParams));
+                Json::Value jrr =
+                    env.rpc("json", "ledger_data", to_string(jvParams));
 
                 Json::Value& state = jrr[jss::result][jss::state];
 
@@ -460,10 +456,8 @@ class NFTokenBurnBaseUtil_test : public beast::unit_test::suite
             jvParams[jss::ledger_index] = "current";
             jvParams[jss::binary] = false;
             {
-                Json::Value jrr = env.rpc(
-                    "json",
-                    "ledger_data",
-                    boost::lexical_cast<std::string>(jvParams));
+                Json::Value jrr =
+                    env.rpc("json", "ledger_data", to_string(jvParams));
 
                 Json::Value& state = jrr[jss::result][jss::state];
 
@@ -1235,10 +1229,8 @@ class NFTokenBurnBaseUtil_test : public beast::unit_test::suite
             jvParams[jss::ledger_index] = "current";
             jvParams[jss::binary] = false;
             {
-                Json::Value jrr = env.rpc(
-                    "json",
-                    "ledger_data",
-                    boost::lexical_cast<std::string>(jvParams));
+                Json::Value jrr =
+                    env.rpc("json", "ledger_data", to_string(jvParams));
 
                 Json::Value& state = jrr[jss::result][jss::state];
 
@@ -1385,7 +1377,7 @@ protected:
     run(std::uint32_t instance, bool last = false)
     {
         using namespace test::jtx;
-        static FeatureBitset const all{supported_amendments()};
+        static FeatureBitset const all{testable_amendments()};
         static FeatureBitset const fixNFTV1_2{fixNonFungibleTokensV1_2};
         static FeatureBitset const fixNFTDir{fixNFTokenDirV1};
         static FeatureBitset const fixNFTRemint{fixNFTokenRemint};
@@ -1454,10 +1446,10 @@ public:
     }
 };
 
-BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnBaseUtil, tx, ripple, 3);
-BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOfixFungTokens, tx, ripple, 3);
-BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOFixTokenRemint, tx, ripple, 3);
-BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOFixNFTPageLinks, tx, ripple, 3);
-BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnAllFeatures, tx, ripple, 3);
+BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnBaseUtil, app, ripple, 3);
+BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOfixFungTokens, app, ripple, 3);
+BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOFixTokenRemint, app, ripple, 3);
+BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnWOFixNFTPageLinks, app, ripple, 3);
+BEAST_DEFINE_TESTSUITE_PRIO(NFTokenBurnAllFeatures, app, ripple, 3);
 
 }  // namespace ripple

@@ -6,7 +6,7 @@
 #include <xrpl/protocol/STTx.h>
 #include <xrpl/protocol/TxFormats.h>
 #include <xrpld/shamap/SHAMap.h>
-#include <xrpld/ledger/ReadView.h>
+#include <xrpl/ledger/ReadView.h>
 
 namespace ripple {
 

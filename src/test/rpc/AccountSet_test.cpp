@@ -19,6 +19,8 @@
 
 #include <test/jtx.h>
 
+#include <xrpld/app/tx/apply.h>
+
 #include <xrpl/protocol/AmountConversions.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Quality.h>
@@ -53,7 +55,7 @@ public:
         Account const alice("alice");
 
         // Test without DepositAuth enabled initially.
-        Env env(*this, supported_amendments() - featureDepositAuth);
+        Env env(*this, testable_amendments() - featureDepositAuth);
         env.fund(XRP(10000), noripple(alice));
 
         // Give alice a regular key so she can legally set and clear
@@ -357,7 +359,7 @@ public:
         };
 
         doTests(
-            supported_amendments(),
+            testable_amendments(),
             {{1.0, tesSUCCESS, 1.0},
              {1.1, tesSUCCESS, 1.1},
              {2.0, tesSUCCESS, 2.0},
@@ -579,6 +581,32 @@ public:
     }
 
     void
+    testBadSigningKey()
+    {
+        using namespace test::jtx;
+        testcase("Bad signing key");
+        Env env(*this);
+        Account const alice("alice");
+
+        env.fund(XRP(10000), alice);
+        env.close();
+
+        auto jtx = env.jt(noop("alice"), ter(temBAD_SIGNATURE));
+        if (!BEAST_EXPECT(jtx.stx))
+            return;
+        auto stx = std::make_shared<STTx>(*jtx.stx);
+        stx->at(sfSigningPubKey) = makeSlice(std::string("badkey"));
+
+        env.app().openLedger().modify([&](OpenView& view, beast::Journal j) {
+            auto const result =
+                ripple::apply(env.app(), view, *stx, tapNONE, j);
+            BEAST_EXPECT(result.ter == temBAD_SIGNATURE);
+            BEAST_EXPECT(!result.applied);
+            return result.applied;
+        });
+    }
+
+    void
     run() override
     {
         testNullAccountSet();
@@ -594,9 +622,10 @@ public:
         testRequireAuthWithDir();
         testTransferRate();
         testTicket();
+        testBadSigningKey();
     }
 };
 
-BEAST_DEFINE_TESTSUITE_PRIO(AccountSet, app, ripple, 1);
+BEAST_DEFINE_TESTSUITE_PRIO(AccountSet, rpc, ripple, 1);
 
 }  // namespace ripple

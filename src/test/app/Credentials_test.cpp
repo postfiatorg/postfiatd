@@ -19,10 +19,9 @@
 
 #include <test/jtx.h>
 
-#include <xrpld/app/misc/CredentialHelpers.h>
-#include <xrpld/ledger/ApplyViewImpl.h>
-
 #include <xrpl/basics/strHex.h>
+#include <xrpl/ledger/ApplyViewImpl.h>
+#include <xrpl/ledger/CredentialHelpers.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/Protocol.h>
@@ -33,15 +32,6 @@
 
 namespace ripple {
 namespace test {
-
-static inline bool
-checkVL(
-    std::shared_ptr<SLE const> const& sle,
-    SField const& field,
-    std::string const& expected)
-{
-    return strHex(expected) == strHex(sle->getFieldVL(field));
-}
 
 struct Credentials_test : public beast::unit_test::suite
 {
@@ -568,6 +558,39 @@ struct Credentials_test : public beast::unit_test::suite
                     jle[jss::result][jss::node]["CredentialType"] ==
                         strHex(std::string_view(credType)));
             }
+
+            {
+                testcase("Credentials fail, directory full");
+                std::uint32_t const issuerSeq{env.seq(issuer) + 1};
+                env(ticket::create(issuer, 63));
+                env.close();
+
+                // Everything below can only be tested on open ledger.
+                auto const res1 = directory::bumpLastPage(
+                    env,
+                    directory::maximumPageIndex(env),
+                    keylet::ownerDir(issuer.id()),
+                    directory::adjustOwnerNode);
+                BEAST_EXPECT(res1);
+
+                auto const jv = credentials::create(issuer, subject, credType);
+                env(jv, ter(tecDIR_FULL));
+                // Free one directory entry by using a ticket
+                env(noop(issuer), ticket::use(issuerSeq + 40));
+
+                // Fill subject directory
+                env(ticket::create(subject, 63));
+                auto const res2 = directory::bumpLastPage(
+                    env,
+                    directory::maximumPageIndex(env),
+                    keylet::ownerDir(subject.id()),
+                    directory::adjustOwnerNode);
+                BEAST_EXPECT(res2);
+                env(jv, ter(tecDIR_FULL));
+
+                // End test
+                env.close();
+            }
         }
 
         {
@@ -1090,10 +1113,11 @@ struct Credentials_test : public beast::unit_test::suite
     run() override
     {
         using namespace test::jtx;
-        FeatureBitset const all{supported_amendments()};
+        FeatureBitset const all{testable_amendments()};
         testSuccessful(all);
         testCredentialsDelete(all);
         testCreateFailed(all);
+        testCreateFailed(all - fixDirectoryLimit);
         testAcceptFailed(all);
         testDeleteFailed(all);
         testFeatureFailed(all - featureCredentials);

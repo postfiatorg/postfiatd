@@ -20,8 +20,8 @@
 #include <test/jtx.h>
 
 #include <xrpld/app/tx/applySteps.h>
-#include <xrpld/ledger/Dir.h>
 
+#include <xrpl/ledger/Dir.h>
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/TxFlags.h>
@@ -253,6 +253,14 @@ struct Escrow_test : public beast::unit_test::suite
         BEAST_EXPECT(sle);
         BEAST_EXPECT((*sle)[sfSourceTag] == 1);
         BEAST_EXPECT((*sle)[sfDestinationTag] == 2);
+        if (features[fixIncludeKeyletFields])
+        {
+            BEAST_EXPECT((*sle)[sfSequence] == seq);
+        }
+        else
+        {
+            BEAST_EXPECT(!sle->isFieldPresent(sfSequence));
+        }
     }
 
     void
@@ -294,7 +302,7 @@ struct Escrow_test : public beast::unit_test::suite
         {
             testcase("Implied Finish Time (without fix1571)");
 
-            Env env(*this, supported_amendments() - fix1571);
+            Env env(*this, testable_amendments() - fix1571);
             auto const baseFee = env.current()->fees().base;
             env.fund(XRP(5000), "alice", "bob", "carol");
             env.close();
@@ -1715,9 +1723,10 @@ public:
     run() override
     {
         using namespace test::jtx;
-        FeatureBitset const all{supported_amendments()};
+        FeatureBitset const all{testable_amendments()};
         testWithFeats(all);
         testWithFeats(all - featureTokenEscrow);
+        testTags(all - fixIncludeKeyletFields);
     }
 };
 

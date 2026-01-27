@@ -32,6 +32,15 @@ class Number;
 std::string
 to_string(Number const& amount);
 
+template <typename T>
+constexpr bool
+isPowerOfTen(T value)
+{
+    while (value >= 10 && value % 10 == 0)
+        value /= 10;
+    return value == 1;
+}
+
 class Number
 {
     using rep = std::int64_t;
@@ -41,7 +50,9 @@ class Number
 public:
     // The range for the mantissa when normalized
     constexpr static std::int64_t minMantissa = 1'000'000'000'000'000LL;
-    constexpr static std::int64_t maxMantissa = 9'999'999'999'999'999LL;
+    static_assert(isPowerOfTen(minMantissa));
+    constexpr static std::int64_t maxMantissa = minMantissa * 10 - 1;
+    static_assert(maxMantissa == 9'999'999'999'999'999LL);
 
     // The range for the exponent when normalized
     constexpr static int minExponent = -32768;
@@ -150,6 +161,9 @@ public:
         return (mantissa_ < 0) ? -1 : (mantissa_ ? 1 : 0);
     }
 
+    Number
+    truncate() const noexcept;
+
     friend constexpr bool
     operator>(Number const& x, Number const& y) noexcept
     {
@@ -192,6 +206,8 @@ private:
 
     class Guard;
 };
+
+constexpr static Number numZero{};
 
 inline constexpr Number::Number(rep mantissa, int exponent, unchecked) noexcept
     : mantissa_{mantissa}, exponent_{exponent}

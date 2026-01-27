@@ -20,9 +20,9 @@
 #include <xrpld/app/paths/Flow.h>
 #include <xrpld/app/paths/RippleCalc.h>
 #include <xrpld/app/paths/detail/FlowDebugInfo.h>
-#include <xrpld/ledger/View.h>
 
 #include <xrpl/basics/Log.h>
+#include <xrpl/ledger/View.h>
 #include <xrpl/protocol/Feature.h>
 
 namespace ripple {
@@ -95,9 +95,6 @@ RippleCalc::rippleCalculate(
             return std::nullopt;
         }();
 
-        bool const ownerPaysTransferFee =
-            view.rules().enabled(featureOwnerPaysFee);
-
         try
         {
             flowOut = flow(
@@ -108,7 +105,7 @@ RippleCalc::rippleCalculate(
                 spsPaths,
                 defaultPaths,
                 partialPayment,
-                ownerPaysTransferFee,
+                false,
                 OfferCrossing::no,
                 limitQuality,
                 sendMax,

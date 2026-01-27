@@ -32,6 +32,7 @@
 #include <xrpl/protocol/jss.h>
 
 #include <cstdint>
+#include <set>
 
 namespace ripple {
 
@@ -290,9 +291,11 @@ delegate(AccountID const& account, AccountID const& authorizedAccount) noexcept;
 Keylet
 bridge(STXChainBridge const& bridge, STXChainBridge::ChainType chainType);
 
+// `seq` is stored as `sfXChainClaimID` in the object
 Keylet
 xChainClaimID(STXChainBridge const& bridge, std::uint64_t seq);
 
+// `seq` is stored as `sfXChainAccountCreateCount` in the object
 Keylet
 xChainCreateAccountClaimID(STXChainBridge const& bridge, std::uint64_t seq);
 
@@ -345,6 +348,24 @@ inline Keylet
 vault(uint256 const& vaultKey)
 {
     return {ltVAULT, vaultKey};
+}
+
+Keylet
+loanbroker(AccountID const& owner, std::uint32_t seq) noexcept;
+
+inline Keylet
+loanbroker(uint256 const& key)
+{
+    return {ltLOAN_BROKER, key};
+}
+
+Keylet
+loan(uint256 const& loanBrokerID, std::uint32_t loanSeq) noexcept;
+
+inline Keylet
+loan(uint256 const& key)
+{
+    return {ltLOAN, key};
 }
 
 Keylet

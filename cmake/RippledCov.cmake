@@ -11,6 +11,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
   return()
 endif()
 
+include(ProcessorCount)
+ProcessorCount(PROCESSOR_COUNT)
+
 include(CodeCoverage)
 
 # The instructions for these commands come from the `CodeCoverage` module,
@@ -26,13 +29,15 @@ list(APPEND GCOVR_ADDITIONAL_ARGS
   --exclude-throw-branches
   --exclude-noncode-lines
   --exclude-unreachable-branches -s
-  -j ${coverage_test_parallelism})
+  -j ${PROCESSOR_COUNT})
 
 setup_target_for_coverage_gcovr(
   NAME coverage
   FORMAT ${coverage_format}
   EXECUTABLE postfiatd
   EXECUTABLE_ARGS --unittest$<$<BOOL:${coverage_test}>:=${coverage_test}> --unittest-jobs ${coverage_test_parallelism} --quiet --unittest-log
-  EXCLUDE "src/test" "include/xrpl/beast/test" "include/xrpl/beast/unit_test" "${CMAKE_BINARY_DIR}/pb-xrpl.libpb"
-  DEPENDENCIES postfiatd
+  EXCLUDE "src/test" "src/tests" "include/xrpl/beast/test" "include/xrpl/beast/unit_test" "${CMAKE_BINARY_DIR}/pb-xrpl"
+  DEPENDENCIES postfiatd xrpl.tests
 )
+
+add_code_coverage_to_target(opts INTERFACE)
