@@ -58,8 +58,8 @@ RUN conan profile detect --force
 #Build
 WORKDIR /postfiat/.build
 
-RUN conan install .. --output-folder . --build missing --settings build_type=Debug --settings compiler.version=13 --settings compiler.cppstd=20 --settings compiler.libcxx=libstdc++11
-RUN cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -Dxrpld=ON -Dtests=ON -Dvalidator_keys=ON ..
+RUN conan install .. --output-folder . --build missing --settings build_type=Release --settings compiler.version=13 --settings compiler.cppstd=20 --settings compiler.libcxx=libstdc++11
+RUN cmake -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -Dxrpld=ON -Dvalidator_keys=ON ..
 RUN cmake --build . -j $(nproc)
 RUN cmake --build . --target validator-keys -j $(nproc)
 
