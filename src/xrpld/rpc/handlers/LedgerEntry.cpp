@@ -670,6 +670,20 @@ parseVault(Json::Value const& params, Json::StaticString const fieldName)
 }
 
 static Expected<uint256, Json::Value>
+parseValidatorVoteStats(
+    Json::Value const& params,
+    Json::StaticString const fieldName)
+{
+    if (auto const account = LedgerEntryHelpers::parse<AccountID>(params))
+    {
+        return keylet::validatorVoteStats(*account).key;
+    }
+
+    return LedgerEntryHelpers::invalidFieldError(
+        "malformedAddress", fieldName, "AccountID");
+}
+
+static Expected<uint256, Json::Value>
 parseXChainOwnedClaimID(
     Json::Value const& claim_id,
     Json::StaticString const fieldName)

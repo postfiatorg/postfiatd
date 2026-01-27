@@ -20,7 +20,7 @@
 #include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/ValidatorList.h>
-#include <xrpld/ledger/ReadView.h>
+#include <xrpl/ledger/ReadView.h>
 #include <xrpld/rpc/Context.h>
 #include <xrpld/rpc/detail/RPCHelpers.h>
 #include <xrpl/protocol/Feature.h>

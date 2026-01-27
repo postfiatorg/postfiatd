@@ -1130,12 +1130,16 @@ TRANSACTION(ttUNL_MODIFY, 102, UNLModify,
 }))
 
 /** This system-generated transaction type records a validator's vote for a ledger.
-    
+
     This pseudo-transaction is automatically created when a validator on the UNL
     votes for a ledger. The transaction is included in the subsequent ledger (N+1)
     and increments the validator's total vote count in the ledger state.
  */
-TRANSACTION(ttVALIDATOR_VOTE, 1501, ValidatorVote, Delegation::notDelegatable, ({
+TRANSACTION(ttVALIDATOR_VOTE, 1501, ValidatorVote,
+    Delegation::notDelegatable,
+    uint256{},
+    noPriv,
+    ({
     {sfLedgerSequence, soeREQUIRED},
     {sfLedgerHash, soeREQUIRED},
     {sfValidatorPublicKey, soeREQUIRED},

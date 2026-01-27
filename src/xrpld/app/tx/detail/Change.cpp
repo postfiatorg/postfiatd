@@ -24,7 +24,7 @@
 #include <xrpld/app/misc/ExclusionManager.h>
 #include <xrpld/app/misc/NetworkOPs.h>
 #include <xrpld/app/tx/detail/Change.h>
-#include <xrpld/ledger/ApplyView.h>
+#include <xrpl/ledger/ApplyView.h>
 
 #include <xrpl/basics/Log.h>
 #include <xrpl/ledger/Sandbox.h>

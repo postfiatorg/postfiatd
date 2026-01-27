@@ -1062,7 +1062,7 @@ ValidNewAccountRoot::finalize(
     }
 
     // From this point on we know exactly one account was created.
-    if (hasPrivilege(tx, createAcct | createPseudoAcct ||                                                                                                                                                                                                  
+    if ((hasPrivilege(tx, createAcct | createPseudoAcct) ||
        tx.getTxnType() == ttVALIDATOR_VOTE) && result == tesSUCCESS)
     {
         bool const pseudoAccount =
