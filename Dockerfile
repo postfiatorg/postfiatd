@@ -29,7 +29,11 @@ WORKDIR /postfiat
 # Install build dependencies + logrotate and cron for log management
 RUN apt update
 
-RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make g++-11 libprotobuf-dev protobuf-compiler logrotate cron
+RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make gcc-13 g++-13 libprotobuf-dev protobuf-compiler logrotate cron
+
+# Set GCC 13 as default compiler
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
 
 RUN curl --location --remote-name \
   "https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1.tar.gz"
@@ -41,20 +45,17 @@ RUN make --jobs $(nproc)
 RUN make install
 WORKDIR /postfiat
 
-RUN pipx install 'conan<2'
+RUN pipx install conan
 RUN pipx ensurepath
 RUN export PATH=$PATH:/root/.local/bin
 ENV PATH="/root/.local/bin:$PATH"
 
-RUN conan profile new default --detect
-RUN conan profile update settings.compiler.cppstd=20 default
-RUN conan config set general.revisions_enabled=1
-RUN conan profile update settings.compiler.libcxx=libstdc++11 default
-RUN conan profile update 'conf.tools.build:cxxflags+=["-DBOOST_BEAST_USE_STD_STRING_VIEW"]' default
-RUN conan profile update 'env.CXXFLAGS="-DBOOST_BEAST_USE_STD_STRING_VIEW"' default
-
-# Copy source code
+# Copy source code first (needed for conan profile setup)
 COPY . .
+
+RUN conan profile detect --force
+RUN conan config install conan/profiles/ -tf $(conan config home)/profiles/
+RUN conan remote add --index 0 xrplf https://conan.ripplex.io
 
 #Build
 WORKDIR /postfiat/.build
