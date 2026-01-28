@@ -101,4 +101,8 @@ jobs:
 
             rm -rf /opt/postfiatd
 
+            # Stop Caddy and remove config (but keep Caddy installed)
+            systemctl stop caddy 2>/dev/null || true
+            rm -f /etc/caddy/Caddyfile
+
             echo "Data destroyed on RPC ${{ matrix.host }}"

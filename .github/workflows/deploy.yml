@@ -80,6 +80,15 @@ jobs:
           script: |
             set -e
 
+            # Configure UFW firewall for validator
+            echo "Configuring UFW firewall..."
+            ufw --force reset
+            ufw default deny incoming
+            ufw default allow outgoing
+            ufw allow 22/tcp comment 'SSH'
+            ufw allow 2559/tcp comment 'Peer protocol'
+            ufw --force enable
+
             mkdir -p /opt/postfiatd/logs
             cd /opt/postfiatd
 
@@ -232,6 +241,58 @@ jobs:
           script: |
             set -e
 
+            # Configure UFW firewall for RPC node
+            echo "Configuring UFW firewall..."
+            ufw --force reset
+            ufw default deny incoming
+            ufw default allow outgoing
+            ufw allow 22/tcp comment 'SSH'
+            ufw allow 80/tcp comment 'HTTP (Caddy)'
+            ufw allow 443/tcp comment 'HTTPS (RPC API)'
+            ufw allow 2559/tcp comment 'Peer protocol'
+            ufw allow 6005/tcp comment 'WebSocket API'
+            ufw --force enable
+
+            # Install Caddy if not present
+            if ! command -v caddy &> /dev/null; then
+              echo "Installing Caddy..."
+              apt-get update
+              apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+              apt-get update
+              apt-get install -y caddy
+            fi
+
+            # Configure Caddy for RPC node
+            echo "Configuring Caddy..."
+            cat > /etc/caddy/Caddyfile << CADDY_EOF
+            # PFT Ledger RPC Node - ${NETWORK}
+            # Managed by deploy.yml workflow
+
+            # JSON-RPC API (HTTPS on port 443)
+            rpc.${NETWORK}.postfiat.org {
+                reverse_proxy localhost:5005 {
+                    transport http {
+                        tls_insecure_skip_verify
+                    }
+                }
+            }
+
+            # WebSocket API (WSS on port 6005)
+            rpc.${NETWORK}.postfiat.org:6005 {
+                reverse_proxy localhost:6005
+            }
+
+            # Health check endpoint
+            :80 {
+                respond /health 200
+            }
+            CADDY_EOF
+
+            systemctl enable caddy
+            systemctl restart caddy
+
             mkdir -p /opt/postfiatd/logs
             cd /opt/postfiatd
 
@@ -340,6 +401,14 @@ jobs:
               echo "postfiatd is healthy"
             else
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
+
+            # Test Caddy is working
+            echo "Testing Caddy health endpoint..."
+            if curl -s http://localhost/health | grep -q "200"; then
+              echo "Caddy health check passed"
+            else
+              echo "Warning: Caddy health check failed"
             fi
 
   reset-vhs:
