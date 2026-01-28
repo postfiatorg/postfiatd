@@ -284,15 +284,12 @@ jobs:
                 }
             }
 
-            # WebSocket API (WSS on port 6005)
-            rpc.${NETWORK}.postfiat.org:6005 {
-                reverse_proxy localhost:6005
-            }
-
             # Health check endpoint
             :80 {
                 respond /health 200
             }
+
+            # Note: WebSocket (port 6005) is exposed directly by Docker, not proxied by Caddy
             CADDY_EOF
 
             systemctl enable caddy
