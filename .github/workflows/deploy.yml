@@ -251,7 +251,6 @@ jobs:
             ufw allow 80/tcp comment 'HTTP (Caddy)'
             ufw allow 443/tcp comment 'HTTPS (RPC API)'
             ufw allow 2559/tcp comment 'Peer protocol'
-            ufw allow 6005/tcp comment 'WebSocket API'
             # Allow VHS admin access on port 5005 (restricted to VHS IP)
             if [ -n "${VHS_HOST}" ]; then
               ufw allow from ${VHS_HOST} to any port 5005 proto tcp comment 'VHS Admin RPC'
@@ -284,12 +283,15 @@ jobs:
                 }
             }
 
+            # WebSocket API (WSS proxied through Caddy for valid TLS)
+            ws.${NETWORK}.postfiat.org {
+                reverse_proxy localhost:6005
+            }
+
             # Health check endpoint
             :80 {
                 respond /health 200
             }
-
-            # Note: WebSocket (port 6005) is exposed directly by Docker, not proxied by Caddy
             CADDY_EOF
 
             systemctl enable caddy
@@ -309,7 +311,7 @@ jobs:
                 ports:
                   - "5005:5005"
                   - "2559:2559"
-                  - "6005:6005"
+                  - "127.0.0.1:6005:6005"
                   - "6006:6006"
                   - "50051:50051"
                 volumes:
@@ -405,18 +407,25 @@ jobs:
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
             fi
 
+            # Configure WebSocket to use plain ws:// (Caddy handles TLS termination)
+            echo "Configuring WebSocket for Caddy proxy..."
+            docker exec postfiatd sed -i 's/^\[port_ws_public\]$/[port_ws_public]\n# Modified by deploy.yml: using ws instead of wss (Caddy handles TLS)/' /etc/postfiatd/postfiatd.cfg
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/,/^\[/ s/^protocol = wss$/protocol = ws/' /etc/postfiatd/postfiatd.cfg
+
             # Configure VHS admin access if VHS_HOST is set
             if [ -n "${VHS_HOST}" ]; then
               echo "Configuring VHS admin access for ${VHS_HOST}..."
               # Add VHS IP to admin whitelist on port 5005
               docker exec postfiatd sed -i "s/^admin = 127.0.0.1$/admin = 127.0.0.1, ${VHS_HOST}/" /etc/postfiatd/postfiatd.cfg
-              echo "Restarting postfiatd with VHS admin config..."
-              docker compose restart postfiatd
-              sleep 15
-              echo "VHS admin access configured on port 5005"
             else
               echo "Warning: VHS_HOST not set, skipping VHS admin configuration"
             fi
+
+            # Restart postfiatd with updated config
+            echo "Restarting postfiatd with updated config..."
+            docker compose restart postfiatd
+            sleep 15
+            echo "postfiatd restarted with WebSocket proxy config"
 
             # Test Caddy is working
             echo "Testing Caddy health endpoint..."
