@@ -127,13 +127,6 @@ Config::makeConfig(
         config.maxPeers = 0;
     }
 
-    // This will cause servers configured as validators to request that
-    // peers they connect to never report their IP address. We set this
-    // after we set the 'wantIncoming' because we want a "soft" version
-    // of peer privacy unless the operator explicitly asks for it.
-    if (validationPublicKey)
-        config.peerPrivate = true;
-
     // if it's a private peer or we are running as standalone
     // automatic connections would defeat the purpose.
     config.autoConnect = !cfg.standalone() && !cfg.PEER_PRIVATE;
