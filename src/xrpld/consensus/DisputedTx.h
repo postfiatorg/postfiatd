@@ -117,7 +117,7 @@ public:
             (proposing && currentVoteCounter_ < p.avSTALLED_ROUNDS))
             return false;
 
-        // Does this transaction have more than 80% agreement
+        // Does this transaction have more than minCONSENSUS_PCT agreement
 
         // Compute the percentage of nodes voting 'yes' (possibly including us)
         int const support = (yays_ + (proposing && ourVote_ ? 1 : 0)) * 100;
@@ -126,7 +126,7 @@ public:
             // There are no votes, so we know nothing
             return false;
         int const weight = support / total;
-        // Returns true if the tx has more than minCONSENSUS_PCT (80) percent
+        // Returns true if the tx has more than minCONSENSUS_PCT percent
         // agreement. Either voting for _or_ voting against the tx.
         bool const stalled =
             weight > p.minCONSENSUS_PCT || weight < (100 - p.minCONSENSUS_PCT);

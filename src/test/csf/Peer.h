@@ -712,7 +712,7 @@ struct Peer
 
         std::size_t const count = validations.numTrustedForLedger(ledger.id());
         std::size_t const numTrustedPeers = trustGraph.graph().outDegree(this);
-        quorum = static_cast<std::size_t>(std::ceil(numTrustedPeers * 0.8));
+        quorum = static_cast<std::size_t>(std::ceil(numTrustedPeers * 0.67));
         if (count >= quorum && ledger.isAncestor(fullyValidatedLedger))
         {
             issue(FullyValidateLedger{ledger, fullyValidatedLedger});

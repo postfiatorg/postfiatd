@@ -140,10 +140,10 @@ checkConsensusReached(
     }
 
     // We only get stalled when there are disputed transactions and all of them
-    // unequivocally have 80% (minConsensusPct) agreement, either for or
-    // against. That is: either under 20% or over 80% consensus (repectively
-    // "nay" or "yay"). This prevents manipulation by a minority of byzantine
-    // peers of which transactions make the cut to get into the ledger.
+    // unequivocally have minConsensusPct agreement, either for or against.
+    // That is: either under (100 - minConsensusPct)% or over minConsensusPct%
+    // consensus (respectively "nay" or "yay"). This prevents manipulation by
+    // a minority of byzantine peers of which transactions make the cut.
     if (stalled)
     {
         CLOG(clog) << "consensus stalled. ";
@@ -245,8 +245,8 @@ checkConsensus(
             false,
             clog))
     {
-        JLOG(j.warn()) << "We see no consensus, but 80% of nodes have moved on";
-        CLOG(clog) << "We see no consensus, but 80% of nodes have moved on";
+        JLOG(j.warn()) << "We see no consensus, but enough nodes have moved on";
+        CLOG(clog) << "We see no consensus, but enough nodes have moved on";
         return ConsensusState::MovedOn;
     }
 

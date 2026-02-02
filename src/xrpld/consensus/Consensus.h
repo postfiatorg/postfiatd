@@ -85,7 +85,7 @@ shouldCloseLedger(
     @param stalled the network appears to be stalled, where
            neither we nor our peers have changed their vote on any disputes in a
            while. This is undesirable, and should be rare, and will cause us to
-           end consensus without 80% agreement.
+           end consensus without minCONSENSUS_PCT agreement.
     @param parms            Consensus constant parameters
     @param proposing        whether we should count ourselves
     @param j                journal for logging
@@ -522,7 +522,7 @@ private:
      *  no online validators can have a lower sequence number. For intermediate
      *  phases, the threshold is linear between the minimum required for
      *  quorum and 100%. For example, with 3 total phases and a quorum of
-     *  80%, the 2nd phase would be 90%. Once the final phase is reached,
+     *  67%, the 2nd phase would be ~83%. Once the final phase is reached,
      *  if consensus still fails to occur, the cycle is begun again at phase 1.
      *
      * @return Whether to pause to wait for lagging proposers.
@@ -1283,11 +1283,11 @@ Consensus<Adaptor>::shouldPause(
      *  can achieve quorum. Threshold for the maximum phase is 100%
      *  of all trusted validators. Progression from min to max phase is
      *  simply linear. If there are 5 phases (maxPausePhase = 4)
-     *  and minimum quorum is 80%, then thresholds progress as follows:
-     *  0: >=80%
-     *  1: >=85%
-     *  2: >=90%
-     *  3: >=95%
+     *  and minimum quorum is 67%, then thresholds progress as follows:
+     *  0: >=67%
+     *  1: >=75%
+     *  2: >=83%
+     *  3: >=92%
      *  4: =100%
      */
     constexpr static std::size_t maxPausePhase = 4;

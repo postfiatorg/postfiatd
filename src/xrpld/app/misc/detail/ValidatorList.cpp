@@ -1881,8 +1881,9 @@ ValidatorList::calculateQuorum(
             return std::numeric_limits<std::size_t>::max();
     }
 
-    // Use an 80% quorum to balance fork safety, liveness, and required UNL
-    // overlap.
+    // Use a 67% quorum to balance fork safety, liveness, and required UNL
+    // overlap. Note: Original XRPL uses 80%, but this fork uses 67% for
+    // devnet/testnet. For mainnet, this should be reverted to 80%.
     //
     // Theorem 8 of the Analysis of the XRP Ledger Consensus Protocol
     // (https://arxiv.org/abs/1802.07242) says:
@@ -1898,25 +1899,25 @@ ValidatorList::calculateQuorum(
     //
     // Assume ni < nj, meaning and ti,j = ti
     //
-    // For qi = .8*ni, we make ti <= .2*ni
+    // For qi = .67*ni, we make ti <= .33*ni
     // (We could make ti lower and tolerate less UNL overlap. However in
     // order to prioritize safety over liveness, we need ti >= ni - qi)
     //
-    // An 80% quorum allows two UNLs to safely have < .2*ni unique
+    // A 67% quorum allows two UNLs to safely have < .33*ni unique
     // validators between them:
     //
     // pi = ni - Oi,j
     // pj = nj - Oi,j
     //
     // Oi,j > nj/2 + ni − qi + ti,j
-    // ni - pi > (ni - pi + pj)/2 + ni − .8*ni + .2*ni
-    // pi + pj < .2*ni
+    // ni - pi > (ni - pi + pj)/2 + ni − .67*ni + .33*ni
+    // pi + pj < .33*ni
     //
     // Note that the negative UNL protocol introduced the
     // AbsoluteMinimumQuorum which is 60% of the original UNL size. The
     // effective quorum should not be lower than it.
     return static_cast<std::size_t>(std::max(
-        std::ceil(effectiveUnlSize * 0.8f), std::ceil(unlSize * 0.6f)));
+        std::ceil(effectiveUnlSize * 0.67f), std::ceil(unlSize * 0.6f)));
 }
 
 TrustChanges
