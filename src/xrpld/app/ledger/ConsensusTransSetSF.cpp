@@ -26,6 +26,7 @@
 
 #include <xrpl/basics/Log.h>
 #include <xrpl/protocol/HashPrefix.h>
+#include <xrpl/protocol/STTx.h>
 #include <xrpl/protocol/digest.h>
 
 namespace ripple {
@@ -64,6 +65,21 @@ ConsensusTransSetSF::gotNode(
                 stx->getTransactionID() == nodeHash.as_uint256(),
                 "ripple::ConsensusTransSetSF::gotNode : transaction hash "
                 "match");
+
+            // Pseudo-transactions are system-generated with no signatures.
+            // Cache them but don't submit for validation.
+            if (isPseudoTx(*stx))
+            {
+                JLOG(j_.debug())
+                    << "Caching pseudo-transaction from consensus tx set: "
+                    << stx->getTransactionID();
+                std::string reason;
+                auto tx = std::make_shared<Transaction>(stx, reason, app_);
+                if (tx->getStatus() == NEW)
+                    app_.getMasterTransaction().canonicalize(&tx);
+                return;
+            }
+
             auto const pap = &app_;
             app_.getJobQueue().addJob(jtTRANSACTION, "TXS->TXN", [pap, stx]() {
                 pap->getOPs().submitTransaction(stx);
