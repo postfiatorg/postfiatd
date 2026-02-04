@@ -155,13 +155,14 @@ ExclusionManager::removeValidator(AccountID const& validator)
 void
 ExclusionManager::rebuildCache(ReadView const& view)
 {
+    std::lock_guard lock(mutable_);
+
     if (!view.rules().enabled(featurePF_AccountExclusion))
     {
         JLOG(j_.debug()) << "PF_AccountExclusion feature not enabled, skipping cache rebuild";
+        initialized_ = true;
         return;
     }
-
-    std::lock_guard lock(mutable_);
 
     // Clear existing data
     validatorExclusions_.clear();

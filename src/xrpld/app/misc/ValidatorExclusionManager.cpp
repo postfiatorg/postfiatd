@@ -145,6 +145,7 @@ ValidatorExclusionManager::initialize(
     if (!view.rules().enabled(featurePF_AccountExclusion))
     {
         JLOG(j_.info()) << "ValidatorExclusionManager: PF_AccountExclusion feature not enabled";
+        initialized_ = true;
         return;
     }
 
