@@ -180,9 +180,31 @@ Ledger::Ledger(
     info_.drops = INITIAL_XRP;
     info_.closeTimeResolution = ledgerGenesisTimeResolution;
 
-    static auto const id = calcAccountID(
-        generateKeyPair(KeyType::secp256k1, generateSeed("masterpassphrase"))
-            .first);
+    // Select genesis account based on network type:
+    // - PostFiat production networks (mainnet=2026, testnet=2025, devnet=2024)
+    //   use the PostFiat genesis account UNLESS running in standalone mode
+    // - Standalone mode and unit tests: derive from "masterpassphrase"
+    //   (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh)
+    AccountID id;
+    if (config.standalone())
+    {
+        auto const seed = generateSeed("masterpassphrase");
+        auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
+        id = calcAccountID(keypair.first);
+    }
+    else if (
+        config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
+        config.NETWORK_ID == 2026)
+    {
+        // PostFiat production networks
+        id = *parseBase58<AccountID>("r4vhrMChCsaoFsBoCkRTRGUuc1njfr7bmA");
+    }
+    else
+    {
+        auto const seed = generateSeed("masterpassphrase");
+        auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
+        id = calcAccountID(keypair.first);
+    }
     {
         auto const sle = std::make_shared<SLE>(keylet::account(id));
         sle->setFieldU32(sfSequence, 1);

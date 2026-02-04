@@ -94,9 +94,9 @@ Transactor::invokePreflight<Change>(PreflightContext const& ctx)
     }
 
     if (ctx.tx.getTxnType() == ttVALIDATOR_VOTE &&
-        !ctx.rules.enabled(featureValidatorVoteTracking))
+        !ctx.rules.enabled(featurePF_ValidatorVoteTracking))
     {
-        JLOG(ctx.j.warn()) << "Change: ValidatorVoteTracking not enabled";
+        JLOG(ctx.j.warn()) << "Change: PF_ValidatorVoteTracking not enabled";
         return temDISABLED;
     }
 
@@ -551,8 +551,8 @@ Change::applyUNLModify()
 TER
 Change::applyValidatorVote()
 {
-    // Check if ValidatorVoteTracking amendment is enabled
-    if (!view().rules().enabled(featureValidatorVoteTracking))
+    // Check if PF_ValidatorVoteTracking amendment is enabled
+    if (!view().rules().enabled(featurePF_ValidatorVoteTracking))
     {
         return temDISABLED;
     }
@@ -615,8 +615,8 @@ Change::applyValidatorVote()
         view().update(voteStats);
     }
     
-    // Process exclusion list changes if AccountExclusion is enabled
-    if (view().rules().enabled(featureAccountExclusion))
+    // Process exclusion list changes if PF_AccountExclusion is enabled
+    if (view().rules().enabled(featurePF_AccountExclusion))
     {
         bool hasExclusionAdd = ctx_.tx.isFieldPresent(sfExclusionAdd);
         bool hasExclusionRemove = ctx_.tx.isFieldPresent(sfExclusionRemove);

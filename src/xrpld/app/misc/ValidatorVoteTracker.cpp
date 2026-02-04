@@ -159,7 +159,7 @@ ValidatorVoteTracker::cleanup(LedgerIndex currentLedger)
 bool
 ValidatorVoteTracker::isEnabled(Rules const& rules) const
 {
-    return rules.enabled(featureValidatorVoteTracking);
+    return rules.enabled(featurePF_ValidatorVoteTracking);
 }
 
 }  // namespace ripple

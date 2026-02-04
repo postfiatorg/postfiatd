@@ -155,9 +155,9 @@ ExclusionManager::removeValidator(AccountID const& validator)
 void
 ExclusionManager::rebuildCache(ReadView const& view)
 {
-    if (!view.rules().enabled(featureAccountExclusion))
+    if (!view.rules().enabled(featurePF_AccountExclusion))
     {
-        JLOG(j_.debug()) << "AccountExclusion feature not enabled, skipping cache rebuild";
+        JLOG(j_.debug()) << "PF_AccountExclusion feature not enabled, skipping cache rebuild";
         return;
     }
 

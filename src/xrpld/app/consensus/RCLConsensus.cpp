@@ -884,8 +884,8 @@ RCLConsensus::Adaptor::validate(
                     v.setFieldU32(sfLoadFee, fee);
             }
 
-            // AccountExclusion: Include any exclusion list changes in validation
-            if (ledger.ledger_->rules().enabled(featureAccountExclusion))
+            // PF_AccountExclusion: Include any exclusion list changes in validation
+            if (ledger.ledger_->rules().enabled(featurePF_AccountExclusion))
             {
                 // Check if validator has pending exclusion changes
                 if (auto const changes = app_.getValidatorExclusionManager()

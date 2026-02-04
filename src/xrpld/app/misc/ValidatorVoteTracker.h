@@ -83,7 +83,7 @@ public:
 
 private:
     /**
-     * Check if ValidatorVoteTracking amendment is enabled
+     * Check if PF_ValidatorVoteTracking amendment is enabled
      */
     bool
     isEnabled(Rules const& rules) const;

@@ -194,7 +194,7 @@ handleNewValidation(
     {
         if (val->isTrusted())
         {
-            // Record the vote for ValidatorVoteTracking amendment
+            // Record the vote for PF_ValidatorVoteTracking amendment
             // Use the validation's signing hash as proof of the vote
 
             // Check for exclusion list changes in the validation

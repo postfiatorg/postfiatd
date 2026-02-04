@@ -83,7 +83,7 @@ constexpr std::ratio<204, 256> preFixAmendmentMajorityCalcThreshold;
 constexpr std::ratio<67, 100> postFixAmendmentMajorityCalcThreshold;
 
 /** The minimum amount of time an amendment must hold a majority */
-constexpr std::chrono::seconds const defaultAmendmentMajorityTime = std::chrono::hours{2};
+constexpr std::chrono::seconds const defaultAmendmentMajorityTime = std::chrono::weeks{2};
 
 }  // namespace ripple
 

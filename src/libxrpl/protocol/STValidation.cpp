@@ -78,7 +78,7 @@ STValidation::validationFormat()
         {sfBaseFeeDrops,          soeOPTIONAL},
         {sfReserveBaseDrops,      soeOPTIONAL},
         {sfReserveIncrementDrops, soeOPTIONAL},
-        // featureAccountExclusion - validators can add/remove exclusions via validations
+        // featurePF_AccountExclusion - validators can add/remove exclusions via validations
         {sfExclusionAdd,          soeOPTIONAL},
         {sfExclusionRemove,       soeOPTIONAL},
     };

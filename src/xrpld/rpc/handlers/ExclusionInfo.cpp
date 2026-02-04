@@ -45,11 +45,11 @@ doExclusionInfo(RPC::JsonContext& context)
 
     JLOG(context.j.info()) << "ExclusionInfo: Checking ledger " << ledger->seq();
 
-    // Check if AccountExclusion feature is enabled
-    if (!ledger->rules().enabled(featureAccountExclusion))
+    // Check if PF_AccountExclusion feature is enabled
+    if (!ledger->rules().enabled(featurePF_AccountExclusion))
     {
         RPC::inject_error(rpcNOT_ENABLED, result);
-        result[jss::error_message] = "AccountExclusion feature is not enabled";
+        result[jss::error_message] = "PF_AccountExclusion feature is not enabled";
         return result;
     }
 
