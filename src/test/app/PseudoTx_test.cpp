@@ -58,6 +58,21 @@ struct PseudoTx_test : public beast::unit_test::suite
             obj.setFieldU32(sfLedgerSequence, seq);
         }));
 
+        res.emplace_back(STTx(ttUNL_MODIFY, [&](auto& obj) {
+            obj.setAccountID(sfAccount, AccountID());
+            obj.setFieldU8(sfUNLModifyDisabling, 1);
+            obj.setFieldU32(sfLedgerSequence, seq);
+            obj.setFieldVL(sfUNLModifyValidator, Blob(33, 0));
+        }));
+
+        res.emplace_back(STTx(ttVALIDATOR_VOTE, [&](auto& obj) {
+            obj.setAccountID(sfAccount, AccountID());
+            obj.setFieldU32(sfLedgerSequence, seq);
+            obj.setFieldH256(sfLedgerHash, uint256(1));
+            obj.setFieldVL(sfValidatorPublicKey, Blob(33, 0));
+            obj.setFieldH256(sfValidationHash, uint256(2));
+        }));
+
         return res;
     }
 
