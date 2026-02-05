@@ -311,7 +311,7 @@ SHAMapStoreImp::run()
         // will delete up to (not including) lastRotated
         if (readyToRotate)
         {
-            JLOG(journal_.warn())
+            JLOG(journal_.debug())
                 << "rotating  validatedSeq " << validatedSeq << " lastRotated "
                 << lastRotated << " deleteInterval " << deleteInterval_
                 << " canDelete_ " << canDelete_ << " state "
@@ -379,7 +379,7 @@ SHAMapStoreImp::run()
                     clearCaches(validatedSeq);
                 });
 
-            JLOG(journal_.warn()) << "finished rotation " << validatedSeq;
+            JLOG(journal_.debug()) << "finished rotation " << validatedSeq;
         }
     }
 }
