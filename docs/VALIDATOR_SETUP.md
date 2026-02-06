@@ -10,11 +10,12 @@
 
 ## Part 1: Server and user setup
 
-SSH in as root, create a user, then relog as that user:
+SSH in as root, create a user, copy your SSH key to them, then relog:
 
 ```bash
 ssh root@<IP>
 adduser postfiat && usermod -aG sudo postfiat
+cp -r ~/.ssh /home/postfiat/.ssh && chown -R postfiat:postfiat /home/postfiat/.ssh
 # log out, then:
 ssh postfiat@<IP>
 ```
@@ -40,6 +41,7 @@ You are in YOLO mode on Ubuntu 24.04. Do a full PostFiat testnet validator setup
 
 1. sudo apt update && sudo apt install -y git curl python3 docker.io docker-compose-v2
    sudo systemctl enable --now docker && sudo usermod -aG docker $USER
+   If ufw is active, run: sudo ufw allow 2559/tcp
 
 2. mkdir -p ~/repos
    git clone -b testnet https://github.com/postfiatorg/postfiatd ~/repos/postfiatd
