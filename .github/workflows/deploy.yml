@@ -16,6 +16,7 @@ on:
         options:
           - validators
           - rpc
+          - archive
           - all
       reset_vhs:
         description: 'Reset VHS after validator deployment'
@@ -29,6 +30,7 @@ jobs:
     outputs:
       validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
       rpc_hosts: ${{ steps.hosts.outputs.rpc_hosts }}
+      archive_hosts: ${{ steps.hosts.outputs.archive_hosts }}
       vhs_host: ${{ steps.hosts.outputs.vhs_host }}
       loki_url: ${{ steps.hosts.outputs.loki_url }}
     steps:
@@ -37,18 +39,22 @@ jobs:
         env:
           DEVNET_VALIDATORS: ${{ vars.DEVNET_VALIDATOR_HOSTS }}
           DEVNET_RPC: ${{ vars.DEVNET_RPC_HOSTS }}
+          DEVNET_ARCHIVE: ${{ vars.DEVNET_ARCHIVE_HOSTS }}
           DEVNET_VHS: ${{ vars.DEVNET_VHS_HOST }}
           TESTNET_VALIDATORS: ${{ vars.TESTNET_VALIDATOR_HOSTS }}
           TESTNET_RPC: ${{ vars.TESTNET_RPC_HOSTS }}
+          TESTNET_ARCHIVE: ${{ vars.TESTNET_ARCHIVE_HOSTS }}
           TESTNET_VHS: ${{ vars.TESTNET_VHS_HOST }}
         run: |
           if [ "${{ inputs.network }}" = "devnet" ]; then
             echo "validator_hosts=$DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
             echo "rpc_hosts=$DEVNET_RPC" >> $GITHUB_OUTPUT
+            echo "archive_hosts=${DEVNET_ARCHIVE:-[]}" >> $GITHUB_OUTPUT
             echo "vhs_host=$DEVNET_VHS" >> $GITHUB_OUTPUT
           else
             echo "validator_hosts=$TESTNET_VALIDATORS" >> $GITHUB_OUTPUT
             echo "rpc_hosts=$TESTNET_RPC" >> $GITHUB_OUTPUT
+            echo "archive_hosts=${TESTNET_ARCHIVE:-[]}" >> $GITHUB_OUTPUT
             echo "vhs_host=$TESTNET_VHS" >> $GITHUB_OUTPUT
           fi
           echo "loki_url=http://infra-monitoring.${{ inputs.network }}.postfiat.org:3100/loki/api/v1/push" >> $GITHUB_OUTPUT
@@ -67,16 +73,21 @@ jobs:
         env:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
-          VALIDATOR_TOKEN_1: ${{ secrets.DEVNET_VALIDATOR_TOKEN_1 }}
-          VALIDATOR_TOKEN_2: ${{ secrets.DEVNET_VALIDATOR_TOKEN_2 }}
-          VALIDATOR_TOKEN_3: ${{ secrets.DEVNET_VALIDATOR_TOKEN_3 }}
-          VALIDATOR_TOKEN_4: ${{ secrets.DEVNET_VALIDATOR_TOKEN_4 }}
+          DEVNET_VALIDATOR_TOKEN_1: ${{ secrets.DEVNET_VALIDATOR_TOKEN_1 }}
+          DEVNET_VALIDATOR_TOKEN_2: ${{ secrets.DEVNET_VALIDATOR_TOKEN_2 }}
+          DEVNET_VALIDATOR_TOKEN_3: ${{ secrets.DEVNET_VALIDATOR_TOKEN_3 }}
+          DEVNET_VALIDATOR_TOKEN_4: ${{ secrets.DEVNET_VALIDATOR_TOKEN_4 }}
+          TESTNET_VALIDATOR_TOKEN_1: ${{ secrets.TESTNET_VALIDATOR_TOKEN_1 }}
+          TESTNET_VALIDATOR_TOKEN_2: ${{ secrets.TESTNET_VALIDATOR_TOKEN_2 }}
+          TESTNET_VALIDATOR_TOKEN_3: ${{ secrets.TESTNET_VALIDATOR_TOKEN_3 }}
+          TESTNET_VALIDATOR_TOKEN_4: ${{ secrets.TESTNET_VALIDATOR_TOKEN_4 }}
+          TESTNET_VALIDATOR_TOKEN_5: ${{ secrets.TESTNET_VALIDATOR_TOKEN_5 }}
           DEPLOY_HOST: ${{ matrix.host }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,VALIDATOR_TOKEN_1,VALIDATOR_TOKEN_2,VALIDATOR_TOKEN_3,VALIDATOR_TOKEN_4,DEPLOY_HOST
+          envs: NETWORK,LOKI_URL,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,DEPLOY_HOST
           script: |
             set -e
 
@@ -190,24 +201,32 @@ jobs:
             docker compose pull
             docker compose up -d
 
-            # Inject validator token based on host IP (devnet only)
+            # Inject validator token based on host IP and network
+            VALIDATOR_TOKEN=""
             if [ "${NETWORK}" = "devnet" ]; then
-              VALIDATOR_TOKEN=""
               case "${DEPLOY_HOST}" in
-                "66.135.27.77")   VALIDATOR_TOKEN="${VALIDATOR_TOKEN_1}" ;;
-                "108.61.85.238")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_2}" ;;
-                "207.148.22.37")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_3}" ;;
-                "64.176.199.51")  VALIDATOR_TOKEN="${VALIDATOR_TOKEN_4}" ;;
+                "66.135.27.77")   VALIDATOR_TOKEN="${DEVNET_VALIDATOR_TOKEN_1}" ;;
+                "108.61.85.238")  VALIDATOR_TOKEN="${DEVNET_VALIDATOR_TOKEN_2}" ;;
+                "207.148.22.37")  VALIDATOR_TOKEN="${DEVNET_VALIDATOR_TOKEN_3}" ;;
+                "64.176.199.51")  VALIDATOR_TOKEN="${DEVNET_VALIDATOR_TOKEN_4}" ;;
               esac
+            elif [ "${NETWORK}" = "testnet" ]; then
+              case "${DEPLOY_HOST}" in
+                "96.30.199.55")    VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_1}" ;;
+                "144.202.24.188")  VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_2}" ;;
+                "45.32.222.206")   VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_3}" ;;
+                "144.202.31.74")   VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_4}" ;;
+                "144.202.16.242")  VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_5}" ;;
+              esac
+            fi
 
-              if [ -n "${VALIDATOR_TOKEN}" ]; then
-                echo "Injecting validator token..."
-                docker exec postfiatd bash -c "printf '\n[validator_token]\n%s\n' '${VALIDATOR_TOKEN}' >> /etc/postfiatd/postfiatd.cfg"
-                echo "Restarting postfiatd with validator token..."
-                docker compose restart postfiatd
-              else
-                echo "Warning: No validator token found for host ${DEPLOY_HOST}"
-              fi
+            if [ -n "${VALIDATOR_TOKEN}" ]; then
+              echo "Injecting validator token..."
+              docker exec postfiatd bash -c "printf '\n[validator_token]\n%s\n' '${VALIDATOR_TOKEN}' >> /etc/postfiatd/postfiatd.cfg"
+              echo "Restarting postfiatd with validator token..."
+              docker compose restart postfiatd
+            else
+              echo "Warning: No validator token found for host ${DEPLOY_HOST} on ${NETWORK}"
             fi
 
             echo "Waiting for postfiatd to start..."
@@ -256,6 +275,23 @@ jobs:
               ufw allow from ${VHS_HOST} to any port 5005 proto tcp comment 'VHS Admin RPC'
             fi
             ufw --force enable
+
+            # Configure iptables rate limiting for DDoS protection
+            echo "Configuring iptables rate limiting..."
+            # Remove existing rate limit rules if present
+            iptables -D INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m connlimit --connlimit-above 5 -j DROP 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 30/second --limit-burst 10 -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m state --state NEW -j DROP 2>/dev/null || true
+            # Add rate limiting rules (inserted in reverse order so they end up in correct order)
+            # Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state NEW -j DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 30/second --limit-burst 10 -j ACCEPT
+            iptables -I INPUT -p tcp --dport 443 -m connlimit --connlimit-above 5 -j DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Make iptables rules persistent
+            apt-get install -y iptables-persistent 2>/dev/null || true
+            netfilter-persistent save 2>/dev/null || true
 
             # Install Caddy if not present
             if ! command -v caddy &> /dev/null; then
@@ -412,6 +448,259 @@ jobs:
             docker exec postfiatd sed -i 's/^\[port_ws_public\]$/[port_ws_public]\n# Modified by deploy.yml: using ws instead of wss (Caddy handles TLS)/' /etc/postfiatd/postfiatd.cfg
             docker exec postfiatd sed -i '/^\[port_ws_public\]/,/^\[/ s/^protocol = wss$/protocol = ws/' /etc/postfiatd/postfiatd.cfg
 
+            # Configure WebSocket connection limit (100 for medium RPC)
+            echo "Configuring WebSocket connection limit..."
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/,/^\[/ s/^limit = [0-9]*$/limit = 100/' /etc/postfiatd/postfiatd.cfg
+            # If limit doesn't exist, add it after the port_ws_public section header
+            docker exec postfiatd bash -c "grep -q '^limit = ' /etc/postfiatd/postfiatd.cfg || sed -i '/^\[port_ws_public\]/a limit = 100' /etc/postfiatd/postfiatd.cfg"
+
+            # Configure peer protocol ip_limit (max 5 peers per IP)
+            echo "Configuring peer protocol ip_limit..."
+            docker exec postfiatd bash -c "grep -q '^ip_limit = ' /etc/postfiatd/postfiatd.cfg || sed -i '/^\[overlay\]/a ip_limit = 5' /etc/postfiatd/postfiatd.cfg"
+
+            # Configure VHS admin access if VHS_HOST is set
+            if [ -n "${VHS_HOST}" ]; then
+              echo "Configuring VHS admin access for ${VHS_HOST}..."
+              # Add VHS IP to admin whitelist on port 5005
+              docker exec postfiatd sed -i "s/^admin = 127.0.0.1$/admin = 127.0.0.1, ${VHS_HOST}/" /etc/postfiatd/postfiatd.cfg
+            else
+              echo "Warning: VHS_HOST not set, skipping VHS admin configuration"
+            fi
+
+            # Restart postfiatd with updated config
+            echo "Restarting postfiatd with updated config..."
+            docker compose restart postfiatd
+            sleep 15
+            echo "postfiatd restarted with WebSocket proxy config"
+
+            # Test Caddy is working
+            echo "Testing Caddy health endpoint..."
+            if curl -s http://localhost/health | grep -q "200"; then
+              echo "Caddy health check passed"
+            else
+              echo "Warning: Caddy health check failed"
+            fi
+
+  deploy-archive:
+    if: ${{ always() && (inputs.node_type == 'archive' || inputs.node_type == 'all') && !cancelled() }}
+    needs: [prepare, deploy-validator]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare.outputs.archive_hosts) }}
+    steps:
+      - name: Deploy to Archive ${{ matrix.host }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          NETWORK: ${{ inputs.network }}
+          LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
+          VHS_HOST: ${{ needs.prepare.outputs.vhs_host }}
+        with:
+          host: ${{ matrix.host }}
+          username: root
+          key: ${{ secrets.VULTR_SSH_KEY }}
+          envs: NETWORK,LOKI_URL,VHS_HOST
+          script: |
+            set -e
+
+            # Configure UFW firewall for Archive node
+            echo "Configuring UFW firewall..."
+            ufw --force reset
+            ufw default deny incoming
+            ufw default allow outgoing
+            ufw allow 22/tcp comment 'SSH'
+            ufw allow 80/tcp comment 'HTTP (Caddy)'
+            ufw allow 443/tcp comment 'HTTPS (Archive API)'
+            ufw allow 2559/tcp comment 'Peer protocol'
+            # Allow VHS admin access on port 5005 (restricted to VHS IP)
+            if [ -n "${VHS_HOST}" ]; then
+              ufw allow from ${VHS_HOST} to any port 5005 proto tcp comment 'VHS Admin RPC'
+            fi
+            ufw --force enable
+
+            # Configure iptables rate limiting for DDoS protection
+            echo "Configuring iptables rate limiting..."
+            # Remove existing rate limit rules if present
+            iptables -D INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m connlimit --connlimit-above 5 -j DROP 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 30/second --limit-burst 10 -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 443 -m state --state NEW -j DROP 2>/dev/null || true
+            # Add rate limiting rules (inserted in reverse order so they end up in correct order)
+            # Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state NEW -j DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 30/second --limit-burst 10 -j ACCEPT
+            iptables -I INPUT -p tcp --dport 443 -m connlimit --connlimit-above 5 -j DROP
+            iptables -I INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Make iptables rules persistent
+            apt-get install -y iptables-persistent 2>/dev/null || true
+            netfilter-persistent save 2>/dev/null || true
+
+            # Install Caddy if not present
+            if ! command -v caddy &> /dev/null; then
+              echo "Installing Caddy..."
+              apt-get update
+              apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
+              apt-get update
+              apt-get install -y caddy
+            fi
+
+            # Configure Caddy for Archive node
+            echo "Configuring Caddy..."
+            cat > /etc/caddy/Caddyfile << CADDY_EOF
+            # PFT Ledger Archive Node - ${NETWORK}
+            # Managed by deploy.yml workflow
+
+            # JSON-RPC API (HTTPS on port 443)
+            archive.${NETWORK}.postfiat.org {
+                reverse_proxy localhost:5005 {
+                    transport http {
+                        tls_insecure_skip_verify
+                    }
+                }
+            }
+
+            # WebSocket API (WSS proxied through Caddy for valid TLS)
+            ws-archive.${NETWORK}.postfiat.org {
+                reverse_proxy localhost:6005
+            }
+
+            # Health check endpoint
+            :80 {
+                respond /health 200
+            }
+            CADDY_EOF
+
+            systemctl enable caddy
+            systemctl restart caddy
+
+            mkdir -p /opt/postfiatd/logs
+            cd /opt/postfiatd
+
+            docker compose down --remove-orphans 2>/dev/null || true
+
+            cat > docker-compose.yml << 'COMPOSE_EOF'
+            version: '3.8'
+            services:
+              postfiatd:
+                image: agtipft/postfiatd:${NETWORK:-testnet}-full-latest
+                container_name: postfiatd
+                ports:
+                  - "5005:5005"
+                  - "2559:2559"
+                  - "127.0.0.1:6005:6005"
+                  - "6006:6006"
+                  - "50051:50051"
+                volumes:
+                  - postfiatd-config:/etc/postfiatd
+                  - postfiatd-data:/var/lib/postfiatd/db
+                  - ./logs:/var/log/postfiatd
+                user: "0:0"
+                restart: unless-stopped
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "100m"
+                    max-file: "10"
+
+              promtail:
+                image: grafana/promtail:3.0.0
+                container_name: promtail
+                hostname: ${HOSTNAME}
+                volumes:
+                  - ./promtail-config.yml:/etc/promtail/config.yml:ro
+                  - ./logs:/var/log/postfiatd:ro
+                  - promtail-positions:/tmp
+                command: >
+                  -config.file=/etc/promtail/config.yml
+                  -client.url=${LOKI_URL}
+                  -client.external-labels=hostname=${HOSTNAME}
+                restart: unless-stopped
+                depends_on:
+                  - postfiatd
+
+            volumes:
+              postfiatd-config:
+              postfiatd-data:
+              promtail-positions:
+            COMPOSE_EOF
+
+            cat > promtail-config.yml << 'PROMTAIL_EOF'
+            server:
+              http_listen_port: 9080
+              grpc_listen_port: 0
+
+            positions:
+              filename: /tmp/positions.yaml
+
+            clients:
+              - url: http://localhost:3100/loki/api/v1/push
+
+            scrape_configs:
+              - job_name: postfiatd
+                static_configs:
+                  - targets:
+                      - localhost
+                    labels:
+                      service_type: archive
+                      __path__: /var/log/postfiatd/*.log
+
+                pipeline_stages:
+                  - regex:
+                      expression: '^(?P<timestamp>\d{4}-[A-Z][a-z]{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+) UTC (?P<module>[^:]+):(?P<raw_level>\w+) (?P<message>.*)$'
+
+                  - timestamp:
+                      source: timestamp
+                      format: "2006-Jan-02 15:04:05.000000000"
+                      location: UTC
+
+                  - template:
+                      source: level
+                      template: '{{ if eq .raw_level "NFO" }}info{{ else if eq .raw_level "DBG" }}debug{{ else if eq .raw_level "WRN" }}warning{{ else if eq .raw_level "ERR" }}error{{ else if eq .raw_level "FTL" }}fatal{{ else }}{{ .raw_level }}{{ end }}'
+
+                  - labels:
+                      module:
+                      level:
+
+                  - output:
+                      source: message
+            PROMTAIL_EOF
+
+            cat > .env << ENV_EOF
+            NETWORK=${NETWORK}
+            LOKI_URL=${LOKI_URL}
+            HOSTNAME=$(hostname)
+            ENV_EOF
+
+            docker compose pull
+            docker compose up -d
+
+            echo "Waiting for postfiatd to start..."
+            sleep 30
+
+            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+              echo "postfiatd is healthy"
+            else
+              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+            fi
+
+            # Configure WebSocket to use plain ws:// (Caddy handles TLS termination)
+            echo "Configuring WebSocket for Caddy proxy..."
+            docker exec postfiatd sed -i 's/^\[port_ws_public\]$/[port_ws_public]\n# Modified by deploy.yml: using ws instead of wss (Caddy handles TLS)/' /etc/postfiatd/postfiatd.cfg
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/,/^\[/ s/^protocol = wss$/protocol = ws/' /etc/postfiatd/postfiatd.cfg
+
+            # Configure WebSocket connection limit (25 for archive node)
+            echo "Configuring WebSocket connection limit..."
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/,/^\[/ s/^limit = [0-9]*$/limit = 25/' /etc/postfiatd/postfiatd.cfg
+            # If limit doesn't exist, add it after the port_ws_public section header
+            docker exec postfiatd bash -c "grep -q '^limit = ' /etc/postfiatd/postfiatd.cfg || sed -i '/^\[port_ws_public\]/a limit = 25' /etc/postfiatd/postfiatd.cfg"
+
+            # Configure peer protocol ip_limit (max 5 peers per IP)
+            echo "Configuring peer protocol ip_limit..."
+            docker exec postfiatd bash -c "grep -q '^ip_limit = ' /etc/postfiatd/postfiatd.cfg || sed -i '/^\[overlay\]/a ip_limit = 5' /etc/postfiatd/postfiatd.cfg"
+
             # Configure VHS admin access if VHS_HOST is set
             if [ -n "${VHS_HOST}" ]; then
               echo "Configuring VHS admin access for ${VHS_HOST}..."
@@ -437,7 +726,7 @@ jobs:
 
   reset-vhs:
     if: ${{ always() && inputs.reset_vhs && (inputs.node_type == 'validators' || inputs.node_type == 'all') && !cancelled() }}
-    needs: [prepare, deploy-validator, deploy-rpc]
+    needs: [prepare, deploy-validator, deploy-rpc, deploy-archive]
     runs-on: ubuntu-latest
     steps:
       - name: Reset VHS
