@@ -56,7 +56,7 @@
 https://postfiat.org/testnet_vl.json
 
 [validator_list_keys]
-ED6B26F2D0832180FDEA23F626DC40A5297D2C86FD5F22EA8C5373CDFC29876366
+ED3F1E0DA736FCF99BE2880A60DBD470715C0E04DD793FB862236B070571FC09E2
 
 # To use the test network (see https://xrpl.org/connect-your-rippled-to-the-xrp-test-net.html),
 # use the following configuration instead:
