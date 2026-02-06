@@ -312,11 +312,7 @@ jobs:
 
             # JSON-RPC API (HTTPS on port 443)
             rpc.${NETWORK}.postfiat.org {
-                reverse_proxy localhost:5005 {
-                    transport http {
-                        tls_insecure_skip_verify
-                    }
-                }
+                reverse_proxy localhost:5005
             }
 
             # WebSocket API (WSS proxied through Caddy for valid TLS)
@@ -555,11 +551,7 @@ jobs:
 
             # JSON-RPC API (HTTPS on port 443)
             archive.${NETWORK}.postfiat.org {
-                reverse_proxy localhost:5005 {
-                    transport http {
-                        tls_insecure_skip_verify
-                    }
-                }
+                reverse_proxy localhost:5005
             }
 
             # WebSocket API (WSS proxied through Caddy for valid TLS)
