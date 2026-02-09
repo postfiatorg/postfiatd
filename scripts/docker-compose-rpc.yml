@@ -31,8 +31,6 @@ services:
       - promtail-positions:/tmp
     command: >
       -config.file=/etc/promtail/config.yml
-      -client.url=${LOKI_URL}
-      -client.external-labels=hostname=${HOSTNAME}
     restart: unless-stopped
     depends_on:
       - postfiatd
