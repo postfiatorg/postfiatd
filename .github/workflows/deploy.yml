@@ -31,6 +31,7 @@ jobs:
       validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
       rpc_hosts: ${{ steps.hosts.outputs.rpc_hosts }}
       archive_hosts: ${{ steps.hosts.outputs.archive_hosts }}
+      has_archive_hosts: ${{ steps.hosts.outputs.has_archive_hosts }}
       vhs_host: ${{ steps.hosts.outputs.vhs_host }}
       loki_url: ${{ steps.hosts.outputs.loki_url }}
     steps:
@@ -49,13 +50,20 @@ jobs:
           if [ "${{ inputs.network }}" = "devnet" ]; then
             echo "validator_hosts=$DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
             echo "rpc_hosts=$DEVNET_RPC" >> $GITHUB_OUTPUT
-            echo "archive_hosts=${DEVNET_ARCHIVE:-[]}" >> $GITHUB_OUTPUT
+            ARCHIVE="${DEVNET_ARCHIVE:-[]}"
+            echo "archive_hosts=$ARCHIVE" >> $GITHUB_OUTPUT
             echo "vhs_host=$DEVNET_VHS" >> $GITHUB_OUTPUT
           else
             echo "validator_hosts=$TESTNET_VALIDATORS" >> $GITHUB_OUTPUT
             echo "rpc_hosts=$TESTNET_RPC" >> $GITHUB_OUTPUT
-            echo "archive_hosts=${TESTNET_ARCHIVE:-[]}" >> $GITHUB_OUTPUT
+            ARCHIVE="${TESTNET_ARCHIVE:-[]}"
+            echo "archive_hosts=$ARCHIVE" >> $GITHUB_OUTPUT
             echo "vhs_host=$TESTNET_VHS" >> $GITHUB_OUTPUT
+          fi
+          if [ "$ARCHIVE" != "[]" ] && [ -n "$ARCHIVE" ]; then
+            echo "has_archive_hosts=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_archive_hosts=false" >> $GITHUB_OUTPUT
           fi
           echo "loki_url=http://infra-monitoring.${{ inputs.network }}.postfiat.org:3100/loki/api/v1/push" >> $GITHUB_OUTPUT
 
@@ -481,7 +489,7 @@ jobs:
             fi
 
   deploy-archive:
-    if: ${{ always() && (inputs.node_type == 'archive' || inputs.node_type == 'all') && !cancelled() }}
+    if: ${{ always() && (inputs.node_type == 'archive' || inputs.node_type == 'all') && needs.prepare.outputs.has_archive_hosts == 'true' && !cancelled() }}
     needs: [prepare, deploy-validator]
     runs-on: ubuntu-latest
     strategy:
