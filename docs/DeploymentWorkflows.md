@@ -82,7 +82,9 @@ prepare → deploy-validator → deploy-rpc    (waits for validators)
                                             → reset-vhs (waits for all)
 ```
 
-RPC and archive deployments run in parallel, both after validators finish.
+Validators deploy sequentially (`max-parallel: 1`) to maintain network quorum during rolling restarts. RPC and archive deployments run in parallel, both after validators finish.
+
+Each deploy wipes the `postfiatd-config` volume to guarantee a clean config from the Docker image. The validator token is then injected once. This prevents config drift across repeated deploys.
 
 ### When to Use Deploy
 
@@ -115,6 +117,8 @@ On each target host:
 2. `docker compose pull` — pulls the latest image tag
 3. `docker compose up -d` — recreates containers with the new image
 4. Waits 30 seconds, then runs a health check
+
+Validators update sequentially (`max-parallel: 1`) to maintain network quorum.
 
 ### What It Preserves
 
@@ -284,7 +288,7 @@ Set in **Settings → Secrets and variables → Actions → Secrets**.
 
 ### Health check shows "inconclusive"
 - This is normal during initial sync — the node needs time to connect to peers and sync the ledger
-- SSH into the host and check manually: `docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info`
+- SSH into the host and check manually: `docker exec postfiatd postfiatd server_info`
 - Check logs: `docker logs postfiatd --tail 100`
 
 ### Validator token not injected
@@ -296,6 +300,6 @@ Set in **Settings → Secrets and variables → Actions → Secrets**.
 - Check Caddy logs: `journalctl -u caddy --no-pager -n 50`
 
 ### Node stuck syncing after update
-- Check peer connectivity: `docker exec postfiatd /opt/postfiatd/bin/postfiatd peers`
+- Check peer connectivity: `docker exec postfiatd postfiatd peers`
 - Verify the node can reach other validators/peers on port 2559
 - If the ledger is corrupted, run Destroy then Deploy to start fresh

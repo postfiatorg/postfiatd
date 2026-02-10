@@ -105,7 +105,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
-            docker volume rm postfiatd-config 2>/dev/null || true
+            docker volume ls -q --filter name=postfiatd-config | xargs -r docker volume rm 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
@@ -335,7 +335,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
-            docker volume rm postfiatd-config 2>/dev/null || true
+            docker volume ls -q --filter name=postfiatd-config | xargs -r docker volume rm 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
@@ -575,7 +575,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
-            docker volume rm postfiatd-config 2>/dev/null || true
+            docker volume ls -q --filter name=postfiatd-config | xargs -r docker volume rm 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
