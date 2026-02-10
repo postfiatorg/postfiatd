@@ -65,6 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         host: ${{ fromJson(needs.prepare.outputs.validator_hosts) }}
     steps:
@@ -104,6 +105,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
+            docker volume rm postfiatd-config 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
@@ -232,7 +234,7 @@ jobs:
             echo "Waiting for postfiatd to start..."
             sleep 30
 
-            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
               echo "postfiatd is healthy"
             else
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
@@ -333,6 +335,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
+            docker volume rm postfiatd-config 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
@@ -433,7 +436,7 @@ jobs:
             echo "Waiting for postfiatd to start..."
             sleep 30
 
-            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
               echo "postfiatd is healthy"
             else
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
@@ -572,6 +575,7 @@ jobs:
             cd /opt/postfiatd
 
             docker compose down --remove-orphans 2>/dev/null || true
+            docker volume rm postfiatd-config 2>/dev/null || true
 
             cat > docker-compose.yml << 'COMPOSE_EOF'
             version: '3.8'
@@ -672,7 +676,7 @@ jobs:
             echo "Waiting for postfiatd to start..."
             sleep 30
 
-            if docker exec postfiatd /opt/postfiatd/bin/postfiatd server_info 2>/dev/null | grep -q "server_state"; then
+            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
               echo "postfiatd is healthy"
             else
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
