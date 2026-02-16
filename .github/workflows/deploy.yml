@@ -474,6 +474,12 @@ jobs:
               echo "Warning: VHS_HOST not set, skipping VHS admin configuration"
             fi
 
+            # Whitelist Docker bridge IP so the node's resource manager doesn't
+            # rate-limit all Caddy traffic as a single abusive client
+            echo "Configuring secure_gateway for Caddy proxy..."
+            docker exec postfiatd sed -i '/^\[port_rpc_admin_local\]/a secure_gateway = 172.18.0.1' /etc/postfiatd/postfiatd.cfg
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/a secure_gateway = 172.18.0.1' /etc/postfiatd/postfiatd.cfg
+
             # Restart postfiatd with updated config
             echo "Restarting postfiatd with updated config..."
             docker compose restart postfiatd
@@ -713,6 +719,12 @@ jobs:
             else
               echo "Warning: VHS_HOST not set, skipping VHS admin configuration"
             fi
+
+            # Whitelist Docker bridge IP so the node's resource manager doesn't
+            # rate-limit all Caddy traffic as a single abusive client
+            echo "Configuring secure_gateway for Caddy proxy..."
+            docker exec postfiatd sed -i '/^\[port_rpc_admin_local\]/a secure_gateway = 172.18.0.1' /etc/postfiatd/postfiatd.cfg
+            docker exec postfiatd sed -i '/^\[port_ws_public\]/a secure_gateway = 172.18.0.1' /etc/postfiatd/postfiatd.cfg
 
             # Restart postfiatd with updated config
             echo "Restarting postfiatd with updated config..."
