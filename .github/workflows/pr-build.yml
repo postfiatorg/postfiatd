@@ -1,0 +1,65 @@
+name: PR Build Check
+on:
+  pull_request:
+    branches:
+      - main
+      - testnet
+      - devnet
+env:
+  CONAN_HOME: /home/runner/.conan2
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Free up disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes gcc-13 g++-13 libssl-dev libprotobuf-dev protobuf-compiler
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100
+        sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
+
+    - name: Install Conan
+      run: pip install conan
+
+    - name: Configure Conan profile
+      run: conan profile detect --force
+
+    - name: Cache Conan packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.CONAN_HOME }}/p
+        key: conan-${{ hashFiles('conanfile.py') }}
+        restore-keys: conan-
+
+    - name: Install dependencies
+      run: |
+        mkdir -p .build && cd .build
+        conan install .. --output-folder . --build missing \
+          --settings build_type=Release \
+          --settings compiler.version=13 \
+          --settings compiler.cppstd=20 \
+          --settings compiler.libcxx=libstdc++11
+
+    - name: Configure CMake
+      run: |
+        cd .build
+        cmake \
+          -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -Dxrpld=ON \
+          -Dtests=OFF \
+          ..
+
+    - name: Build
+      run: cmake --build .build -j $(nproc)
