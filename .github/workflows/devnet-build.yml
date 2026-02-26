@@ -32,6 +32,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix:
         node_size: [light, medium, full]
     steps:
