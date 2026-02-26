@@ -98,20 +98,18 @@ jobs:
               echo "Running Orchard smoke transaction on validator ${DEPLOY_HOST}..."
               python3 - <<'PY'
             import json
-            import ssl
             import time
             import urllib.request
 
-            url = "https://localhost:5005/"
+            url = "http://localhost:5005/"
             headers = {"Content-Type": "application/json"}
-            ctx = ssl._create_unverified_context()
             secret = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
             source_account = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
 
             def rpc(method, params):
                 body = json.dumps({"method": method, "params": params}).encode()
                 req = urllib.request.Request(url, data=body, headers=headers)
-                with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                with urllib.request.urlopen(req, timeout=30) as resp:
                     return json.load(resp)
 
             feature = rpc("feature", [{"feature": "OrchardPrivacy"}])
