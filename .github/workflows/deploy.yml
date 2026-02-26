@@ -248,6 +248,12 @@ jobs:
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
             fi
 
+            # Devnet fast-path: persist OrchardPrivacy vote explicitly on validators.
+            if [ "${NETWORK}" = "devnet" ]; then
+              echo "Forcing OrchardPrivacy amendment vote to ACCEPT on devnet validator..."
+              docker exec postfiatd postfiatd feature OrchardPrivacy accept || true
+            fi
+
   deploy-rpc:
     if: ${{ always() && (inputs.node_type == 'rpc' || inputs.node_type == 'all') && !cancelled() }}
     needs: [prepare, deploy-validator]
