@@ -24,7 +24,7 @@
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/TxFlags.h>
 #include <xrpl/protocol/st.h>
-#include <xrpld/ledger/View.h>
+#include <xrpl/ledger/View.h>
 #include <xrpld/app/misc/OrchardWallet.h>
 
 namespace ripple {
@@ -81,11 +81,8 @@ ShieldedPayment::preflight(PreflightContext const& ctx)
     if (!ctx.rules.enabled(featureOrchardPrivacy))
         return temDISABLED;
 
-    // Standard preflight checks (account, fee, etc.)
+    // Standard preflight checks are performed by Transactor::invokePreflight().
     JLOG(ctx.j.warn()) << "ShieldedPayment::preflight: CALLED";
-
-    if (auto const ret = preflight1(ctx); !isTesSuccess(ret))
-        return ret;
 
     // Must have OrchardBundle
     if (!ctx.tx.isFieldPresent(sfOrchardBundle))
@@ -203,8 +200,7 @@ ShieldedPayment::preflight(PreflightContext const& ctx)
         }
     }
 
-    // Signature validation
-    return preflight2(ctx);
+    return tesSUCCESS;
 }
 
 //------------------------------------------------------------------------------

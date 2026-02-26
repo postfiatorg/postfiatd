@@ -130,7 +130,7 @@ target_link_libraries(ripple_libs INTERFACE
   secp256k1::secp256k1
   soci::soci
   SQLite::SQLite3
-  orchard_postfiat
+  $<BUILD_INTERFACE:orchard_postfiat>
 )
 
 # Work around changes to Conan recipe for now.
