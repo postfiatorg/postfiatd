@@ -251,7 +251,7 @@ jobs:
             # Devnet fast-path: persist OrchardPrivacy vote explicitly on validators.
             if [ "${NETWORK}" = "devnet" ]; then
               echo "Forcing OrchardPrivacy amendment vote to ACCEPT on devnet validator..."
-              docker exec postfiatd postfiatd feature OrchardPrivacy accept || true
+              docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg feature OrchardPrivacy accept || true
             fi
 
   deploy-rpc:
