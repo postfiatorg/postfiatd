@@ -1,0 +1,70 @@
+name: Halo2 Devnet Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Git ref to build (branch, tag, or SHA)'
+        required: true
+        default: 'privacy'
+        type: string
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: agtipft/postfiatd
+
+jobs:
+  build-halo2-devnet:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        node_size: [light, medium, full]
+    steps:
+      - name: Free up disk space
+        run: |
+          echo "=== BEFORE cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "=== AFTER cleanup ==="
+          df -h
+
+      - name: Checkout source ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set image tags
+        id: tags
+        run: |
+          short_sha="$(git rev-parse --short HEAD)"
+          echo "latest=${REGISTRY}/${IMAGE_NAME}:devnet-halo2-${{ matrix.node_size }}-latest" >> "$GITHUB_OUTPUT"
+          echo "sha=${REGISTRY}/${IMAGE_NAME}:devnet-halo2-${{ matrix.node_size }}-${short_sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: builder
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.latest }}
+            ${{ steps.tags.outputs.sha }}
+          platforms: linux/amd64
+          build-args: |
+            NETWORK=devnet
+            NODE_SIZE=${{ matrix.node_size }}
