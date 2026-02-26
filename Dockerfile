@@ -29,7 +29,7 @@ WORKDIR /postfiat
 # Install build dependencies + logrotate and cron for log management
 RUN apt update
 
-RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make gcc-13 g++-13 libprotobuf-dev protobuf-compiler logrotate cron cargo rustc
+RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make gcc-13 g++-13 libprotobuf-dev protobuf-compiler logrotate cron
 
 # Set GCC 13 as default compiler
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
@@ -48,7 +48,11 @@ WORKDIR /postfiat
 RUN pipx install conan
 RUN pipx ensurepath
 RUN export PATH=$PATH:/root/.local/bin
-ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/root/.cargo/bin:/root/.local/bin:$PATH"
+
+# Install a modern Rust toolchain (apt cargo/rustc is too old for edition2024 crates)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+RUN rustc --version && cargo --version
 
 # Copy source code first (needed for conan profile setup)
 COPY . .
