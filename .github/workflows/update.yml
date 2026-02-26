@@ -97,78 +97,78 @@ jobs:
             if [ "${{ inputs.network }}" = "devnet" ] && [ "${RUN_ORCHARD_SMOKE}" = "true" ] && [ "${DEPLOY_HOST}" = "${SMOKE_VALIDATOR_HOST}" ]; then
               echo "Running Orchard smoke transaction on validator ${DEPLOY_HOST}..."
               python3 - <<'PY'
-import json
-import ssl
-import time
-import urllib.request
+            import json
+            import ssl
+            import time
+            import urllib.request
 
-url = "https://localhost:5005/"
-headers = {"Content-Type": "application/json"}
-ctx = ssl._create_unverified_context()
-secret = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
-source_account = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
+            url = "https://localhost:5005/"
+            headers = {"Content-Type": "application/json"}
+            ctx = ssl._create_unverified_context()
+            secret = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb"
+            source_account = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
 
-def rpc(method, params):
-    body = json.dumps({"method": method, "params": params}).encode()
-    req = urllib.request.Request(url, data=body, headers=headers)
-    with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
-        return json.load(resp)
+            def rpc(method, params):
+                body = json.dumps({"method": method, "params": params}).encode()
+                req = urllib.request.Request(url, data=body, headers=headers)
+                with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
+                    return json.load(resp)
 
-feature = rpc("feature", [{"feature": "OrchardPrivacy"}])
-info = feature["result"]["FFAB002FD32A4CFE1FA902D8A5F507B8B0E860716FC578E1E0BD6DB665BAABAA"]
-if not info.get("enabled"):
-    raise SystemExit("OrchardPrivacy is not enabled on smoke validator")
+            feature = rpc("feature", [{"feature": "OrchardPrivacy"}])
+            info = feature["result"]["FFAB002FD32A4CFE1FA902D8A5F507B8B0E860716FC578E1E0BD6DB665BAABAA"]
+            if not info.get("enabled"):
+                raise SystemExit("OrchardPrivacy is not enabled on smoke validator")
 
-keys = rpc("orchard_generate_keys", [{}])
-recipient = keys["result"]["address"]
-print(f"ORCHARD_SMOKE_RECIPIENT={recipient}")
+            keys = rpc("orchard_generate_keys", [{}])
+            recipient = keys["result"]["address"]
+            print(f"ORCHARD_SMOKE_RECIPIENT={recipient}")
 
-prep = rpc(
-    "orchard_prepare_payment",
-    [{
-        "payment_type": "t_to_z",
-        "source_account": source_account,
-        "recipient": recipient,
-        "amount": "1000000"
-    }],
-)
+            prep = rpc(
+                "orchard_prepare_payment",
+                [{
+                    "payment_type": "t_to_z",
+                    "source_account": source_account,
+                    "recipient": recipient,
+                    "amount": "1000000"
+                }],
+            )
 
-if prep.get("result", {}).get("status") != "success":
-    raise SystemExit("orchard_prepare_payment failed: " + json.dumps(prep))
+            if prep.get("result", {}).get("status") != "success":
+                raise SystemExit("orchard_prepare_payment failed: " + json.dumps(prep))
 
-submit = rpc(
-    "submit",
-    [{
-        "tx_json": prep["result"]["tx_json"],
-        "secret": secret
-    }],
-)
+            submit = rpc(
+                "submit",
+                [{
+                    "tx_json": prep["result"]["tx_json"],
+                    "secret": secret
+                }],
+            )
 
-result = submit.get("result", {})
-tx_hash = result.get("tx_json", {}).get("hash")
-engine_result = result.get("engine_result")
-print(f"ORCHARD_SMOKE_ENGINE_RESULT={engine_result}")
-print(f"ORCHARD_SMOKE_TX_HASH={tx_hash}")
+            result = submit.get("result", {})
+            tx_hash = result.get("tx_json", {}).get("hash")
+            engine_result = result.get("engine_result")
+            print(f"ORCHARD_SMOKE_ENGINE_RESULT={engine_result}")
+            print(f"ORCHARD_SMOKE_TX_HASH={tx_hash}")
 
-if not tx_hash:
-    raise SystemExit("submit returned no hash: " + json.dumps(submit))
-if engine_result != "tesSUCCESS":
-    raise SystemExit("submit failed: " + json.dumps(submit))
+            if not tx_hash:
+                raise SystemExit("submit returned no hash: " + json.dumps(submit))
+            if engine_result != "tesSUCCESS":
+                raise SystemExit("submit failed: " + json.dumps(submit))
 
-validated = False
-for _ in range(40):
-    tx = rpc("tx", [{"transaction": tx_hash}])
-    if tx.get("result", {}).get("validated"):
-        validated = True
-        print(f"ORCHARD_SMOKE_VALIDATED_LEDGER={tx['result'].get('ledger_index')}")
-        break
-    time.sleep(2)
+            validated = False
+            for _ in range(40):
+                tx = rpc("tx", [{"transaction": tx_hash}])
+                if tx.get("result", {}).get("validated"):
+                    validated = True
+                    print(f"ORCHARD_SMOKE_VALIDATED_LEDGER={tx['result'].get('ledger_index')}")
+                    break
+                time.sleep(2)
 
-if not validated:
-    raise SystemExit("transaction was not validated in time")
+            if not validated:
+                raise SystemExit("transaction was not validated in time")
 
-print("ORCHARD_SMOKE_STATUS=SUCCESS")
-PY
+            print("ORCHARD_SMOKE_STATUS=SUCCESS")
+            PY
             fi
 
   update-rpc:
