@@ -23,6 +23,7 @@ This directory contains comprehensive documentation for the Orchard privacy feat
 
 ### 🧪 Testing
 - **[ORCHARD_MANUAL_TESTING.md](ORCHARD_MANUAL_TESTING.md)** - Comprehensive manual testing procedures (~2800 lines)
+- **[ORCHARD_DEVNET_E2E_SMOKE.md](ORCHARD_DEVNET_E2E_SMOKE.md)** - Live devnet smoke runbook (local offline signing + remote submit)
 
 ### 📚 Historical Documentation
 - **[historical/](historical/)** - Archived phase documents (Phase 1-4 completion summaries)
@@ -65,7 +66,8 @@ OrchardQuickStart.md (START HERE)
     ├─> ORCHARD_FEE_CONSIDERATIONS.md (future enhancements)
     │   └─> OrchardFeeStrategy.md (Zcash analysis)
     │
-    └─> ORCHARD_MANUAL_TESTING.md (testing procedures)
+    └─> ORCHARD_MANUAL_TESTING.md (standalone/manual flow)
+    └─> ORCHARD_DEVNET_E2E_SMOKE.md (live devnet tx smoke)
 ```
 
 ---
