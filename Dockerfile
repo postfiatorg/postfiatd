@@ -29,7 +29,7 @@ WORKDIR /postfiat
 # Install build dependencies + logrotate and cron for log management
 RUN apt update
 
-RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make gcc-13 g++-13 libprotobuf-dev protobuf-compiler logrotate cron
+RUN apt install --yes curl git libssl-dev pipx python3.12-dev python3-pip make gcc-13 g++-13 libprotobuf-dev protobuf-compiler logrotate cron cargo rustc
 
 # Set GCC 13 as default compiler
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 && \
