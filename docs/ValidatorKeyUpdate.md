@@ -208,7 +208,7 @@ eyJ... [NEW TOKEN] ...ifQ==
 >
 > **This file is deleted when the Docker container is restarted or recreated.**
 >
-> Before running `docker-compose down` or `docker-compose restart`:
+> Before running `docker compose down` or `docker compose restart`:
 > 1. **Copy the file from the container to a secure location**:
 >    ```bash
 >    docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json
@@ -229,7 +229,7 @@ Exit the container and restart it to apply the changes:
 
 ```bash
 exit
-docker-compose restart
+docker compose restart
 ```
 
 ## Important Considerations
@@ -278,10 +278,10 @@ If your new token is not being accepted:
 
 If your validator doesn't appear in the network after updating:
 
-1. Check container logs: `docker-compose logs -f`
+1. Check container logs: `docker compose logs -f`
 2. Verify the validator token is correctly formatted
 3. Ensure the config file was saved properly
-4. Confirm the container restarted successfully: `docker-compose ps`
+4. Confirm the container restarted successfully: `docker compose ps`
 5. Check network connectivity and peer connections
 
 ### Domain Not Appearing
@@ -302,7 +302,7 @@ If the domain is not showing for your validator:
 
 If you encounter issues not covered in this guide:
 
-1. Check container status: `docker-compose ps`
-2. Review logs: `docker-compose logs -f`
+1. Check container status: `docker compose ps`
+2. Review logs: `docker compose logs -f`
 3. Verify configuration: Check for syntax errors in `postfiatd.cfg`
 4. Consult the community or open an issue on the project repository

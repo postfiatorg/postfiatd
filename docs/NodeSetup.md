@@ -12,49 +12,58 @@ Before starting, ensure you have:
 
 ## Installation Steps
 
-### 1. Install Docker Compose
+### 1. Install Docker
 
-Update your system and install Docker Compose:
+Update your system and install Docker with the Compose plugin:
 
 ```bash
 sudo apt update
-sudo apt install docker-compose
+sudo apt install docker.io docker-compose-v2
 ```
 
 ### 2. Set Up the Node Directory
 
-Create the necessary directory structure and download the configuration.
+Create the directory and download the appropriate Docker Compose file for your node role.
 
-**For Devnet:**
-
-```bash
-mkdir -p /opt/postfiatd
-cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-devnet.yml -O docker-compose.yml
-```
-
-**For Testnet:**
+**Validator node** (light image — minimal history, for consensus participation):
 
 ```bash
 mkdir -p /opt/postfiatd
 cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/testnet/scripts/docker-compose-testnet.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-validator.yml -O docker-compose.yml
 ```
 
-### 3. Start the Node
-
-Launch the Post Fiat node using Docker Compose:
+**RPC node** (medium image — serves API requests):
 
 ```bash
-docker-compose up -d
+mkdir -p /opt/postfiatd
+cd /opt/postfiatd
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-rpc.yml -O docker-compose.yml
 ```
 
-### 4. Verify Installation
+### 3. Configure the Network
+
+Create a `.env` file to select the target network (`devnet`, `testnet`, or `mainnet`):
+
+```bash
+echo "NETWORK=testnet" > .env
+echo "HOSTNAME=$(hostname)" >> .env
+```
+
+### 4. Start the Node
+
+Launch the Post Fiat node:
+
+```bash
+docker compose up -d
+```
+
+### 5. Verify Installation
 
 Check that the Docker container is running properly:
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 ## Node Management
@@ -64,7 +73,7 @@ docker-compose ps
 To monitor node activity:
 
 ```bash
-docker-compose logs
+docker compose logs
 ```
 
 > **Note**: Full logs are also available in `/opt/postfiatd/logs`
@@ -75,7 +84,7 @@ To update the node configuration:
 
 1. **Stop the container**:
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 2. **Edit the configuration file**:
@@ -85,7 +94,7 @@ To update the node configuration:
 
 3. **Restart the container**:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ## Running as a Validator
@@ -200,7 +209,7 @@ This attestation proves that you control both the validator keys and the domain,
 >
 > **This file is deleted when the Docker container is restarted or recreated.**
 >
-> Before running `docker-compose down` or `docker-compose restart`:
+> Before running `docker compose down` or `docker compose restart`:
 > 1. **Copy the file from the container to a secure location**:
 >    ```bash
 >    docker cp postfiatd:/root/.ripple/validator-keys.json ./validator-keys-backup.json
@@ -290,5 +299,5 @@ Sample output:
 
 If you encounter issues:
 
-1. Check container status: `docker-compose ps`
-2. Review logs: `docker-compose logs`
+1. Check container status: `docker compose ps`
+2. Review logs: `docker compose logs`
