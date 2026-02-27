@@ -1,0 +1,58 @@
+name: Docker Build
+on:
+  workflow_call:
+    inputs:
+      network:
+        description: 'Target network (devnet, testnet, mainnet)'
+        required: true
+        type: string
+      source_ref:
+        description: 'Git ref to checkout (branch, tag, or SHA)'
+        required: true
+        type: string
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: agtipft/postfiatd
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        node_size: [light, medium, full]
+    steps:
+    - name: Free up disk space
+      run: |
+        echo "=== BEFORE cleanup ==="
+        df -h
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        echo "=== AFTER cleanup ==="
+        df -h
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.source_ref }}
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        target: builder
+        push: true
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.network }}-${{ matrix.node_size }}-latest
+        platforms: linux/amd64
+        build-args: |
+          NETWORK=${{ inputs.network }}
+          NODE_SIZE=${{ matrix.node_size }}

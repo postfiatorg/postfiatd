@@ -16,49 +16,10 @@ on:
       - 'Dockerfile'
       - 'scripts/docker-entrypoint.sh'
       - 'scripts/logrotate-postfiatd.conf'
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: agtipft/postfiatd
 jobs:
   build-mainnet:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        node_size: [light, medium, full]
-    steps:
-    - name: Free up disk space
-      run: |
-        echo "=== BEFORE cleanup ==="
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        sudo docker image prune --all --force
-        echo "=== AFTER cleanup ==="
-        df -h
-    - name: Checkout mainnet
-      uses: actions/checkout@v4
-      with:
-        ref: mainnet
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        target: builder
-        push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:mainnet-${{ matrix.node_size }}-latest
-        platforms: linux/amd64
-        build-args: |
-          NETWORK=mainnet
-          NODE_SIZE=${{ matrix.node_size }}
+    uses: ./.github/workflows/build.yml
+    with:
+      network: mainnet
+      source_ref: mainnet
+    secrets: inherit

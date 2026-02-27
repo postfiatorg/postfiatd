@@ -213,21 +213,30 @@ On each target host:
 4. Add the IP-to-token mapping in the `deploy.yml` validator token injection block
 5. Run **Deploy Nodes** → select the network, node_type: `validators`
 
+### Testing a feature branch on devnet
+
+1. Run **Docker Build - Feature Branch** → `source_ref`: your branch name (e.g., `privacy`, `halo2-devnet-integration`)
+2. This builds devnet Docker images from your branch code
+3. Run **Update Nodes** → network: `devnet`, node_type: `all`
+4. When done testing, push the `devnet` branch to restore the standard devnet build
+
 ### Reprovisioning a single node type
 
 Run **Deploy Nodes** with the specific `node_type`. Only that type gets redeployed — other node types are unaffected.
 
 ## Build Workflows
 
-Deploy and Update rely on Docker images built by these workflows:
+Deploy and Update rely on Docker images built by these workflows. All build logic lives in a single reusable workflow (`build.yml`), called by thin per-environment wrappers:
 
-| Workflow | Branch Trigger | Image Tags |
-|----------|---------------|------------|
-| `devnet-build.yml` | Push to `devnet` | `agtipft/postfiatd:devnet-{light,medium,full}-latest` |
-| `testnet-build.yml` | Push to `testnet` | `agtipft/postfiatd:testnet-{light,medium,full}-latest` |
-| `mainnet-build.yml` | Push to `main` | `agtipft/postfiatd:mainnet-{light,medium,full}-latest` |
+| Workflow | Trigger | Image Tags |
+|----------|---------|------------|
+| `build.yml` | Called by other workflows | (determined by caller) |
+| `devnet-build.yml` | Push to `devnet` / manual | `agtipft/postfiatd:devnet-{light,medium,full}-latest` |
+| `testnet-build.yml` | Push to `testnet` / manual | `agtipft/postfiatd:testnet-{light,medium,full}-latest` |
+| `mainnet-build.yml` | Push to `mainnet` / manual | `agtipft/postfiatd:mainnet-{light,medium,full}-latest` |
+| `feature-build.yml` | Manual only | `agtipft/postfiatd:devnet-{light,medium,full}-latest` |
 
-All build workflows also support manual `workflow_dispatch` triggers.
+The `feature-build.yml` workflow accepts a `source_ref` input (branch, tag, or SHA) and builds devnet-tagged images from that ref. This allows testing feature branches on devnet without merging into the `devnet` branch.
 
 **Image size variants and their usage:**
 
