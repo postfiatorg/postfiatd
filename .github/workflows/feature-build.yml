@@ -1,0 +1,15 @@
+name: Docker Build - Feature Branch
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Git ref to build (branch, tag, or SHA)'
+        required: true
+        type: string
+jobs:
+  build-feature:
+    uses: ./.github/workflows/build.yml
+    with:
+      network: devnet
+      source_ref: ${{ inputs.source_ref }}
+    secrets: inherit
