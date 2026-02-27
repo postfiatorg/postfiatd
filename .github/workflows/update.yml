@@ -74,11 +74,6 @@ jobs:
               echo "Warning: postfiatd health check inconclusive, container may still be starting"
             fi
 
-            if [ "${{ inputs.network }}" = "devnet" ]; then
-              echo "Forcing OrchardPrivacy amendment vote to ACCEPT on devnet validator..."
-              docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg feature OrchardPrivacy accept || true
-            fi
-
   update-rpc:
     if: ${{ inputs.node_type == 'rpc' || inputs.node_type == 'all' }}
     needs: prepare
