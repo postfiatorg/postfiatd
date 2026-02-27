@@ -235,21 +235,89 @@ XRPNotCreated::finalize(
     ReadView const&,
     beast::Journal const& j)
 {
+    // For ShieldedPayment transactions, XRP can move to/from the shielded pool
+    // The net XRP change = fee + value transferred to shielded pool
+    // (or - value from shielded pool for z→t)
+    XRPAmount expectedChange = fee;
+
+    if (tx.getTxnType() == ttSHIELDED_PAYMENT)
+    {
+        if (tx.isFieldPresent(sfAmount))
+        {
+            // Amount field represents XRP moving into (t→z) or out of (z→t) shielded pool
+            auto amount = tx[sfAmount];
+            if (amount.native())
+            {
+                // Distinguish between t→z and z→t based on Destination field
+                if (tx.isFieldPresent(sfDestination))
+                {
+                    // z→t: XRP moves FROM shielded pool TO destination
+                    // Transparent balance INCREASES by amount (destination credited)
+                    // Fee is paid from shielded pool (no transparent deduction)
+                    // Net transparent change = +amount
+                    // Expected drops_ (negative of net change) = -amount
+                    // But we need to negate it: expectedChange = amount
+                    // Actually: drops_ will be +amount (positive), which is normally invalid
+                    // EXCEPT for z→t where shielded pool is the source
+                    // So we need expectedChange to be NEGATIVE to make the check pass
+                    expectedChange = -amount.xrp();
+                }
+                else
+                {
+                    // t→z: XRP moves FROM account TO shielded pool
+                    // Account balance DECREASES by amount (debited)
+                    // Fee is also paid from account (standard fee deduction)
+                    // Net transparent change = -(amount + fee)
+                    // Expected drops_ = -(amount + fee)
+                    expectedChange = fee + amount.xrp();
+                }
+            }
+        }
+        else
+        {
+            // For z→z (shielded to shielded): no Amount field, no account balance change
+            // The fee is paid from the shielded pool via valueBalance
+            // No transparent XRP moves, so expect zero net change
+            expectedChange = XRPAmount{0};
+        }
+    }
+
     // The net change should never be positive, as this would mean that the
     // transaction created XRP out of thin air. That's not possible.
-    if (drops_ > 0)
+    // EXCEPT for z→t ShieldedPayment where XRP comes from the shielded pool.
+    bool isZtoT = (tx.getTxnType() == ttSHIELDED_PAYMENT &&
+                   tx.isFieldPresent(sfDestination) &&
+                   tx.isFieldPresent(sfAmount));
+
+    if (drops_ > 0 && !isZtoT)
     {
         JLOG(j.fatal()) << "Invariant failed: XRP net change was positive: "
                         << drops_;
         return false;
     }
 
-    // The negative of the net change should be equal to actual fee charged.
-    if (-drops_ != fee.drops())
+    // The negative of the net change should be equal to actual fee charged
+    // (plus any XRP moved to shielded pool for ShieldedPayment)
+    // For z→t, drops_ is positive, so we compare drops_ with -expectedChange
+    if (isZtoT)
     {
-        JLOG(j.fatal()) << "Invariant failed: XRP net change of " << drops_
-                        << " doesn't match fee " << fee.drops();
-        return false;
+        if (drops_ != -expectedChange.drops())
+        {
+            JLOG(j.fatal()) << "Invariant failed: XRP net change of " << drops_
+                            << " doesn't match expected " << -expectedChange.drops()
+                            << " for z→t transaction (fee " << fee.drops() << ")";
+            return false;
+        }
+    }
+    else
+    {
+        if (-drops_ != expectedChange.drops())
+        {
+            JLOG(j.fatal()) << "Invariant failed: XRP net change of " << drops_
+                            << " doesn't match expected " << expectedChange.drops()
+                            << " (fee " << fee.drops() << ")";
+            return false;
+        }
     }
 
     return true;

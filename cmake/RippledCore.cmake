@@ -90,6 +90,7 @@ add_module(xrpl protocol)
 target_link_libraries(xrpl.libxrpl.protocol PUBLIC
   xrpl.libxrpl.crypto
   xrpl.libxrpl.json
+  ripple_libs
 )
 
 # Level 05

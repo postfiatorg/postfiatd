@@ -441,6 +441,46 @@ parseLoan(Json::Value const& params, Json::StaticString const fieldName)
 }
 
 static Expected<uint256, Json::Value>
+parseOrchardAnchor(Json::Value const& params, Json::StaticString const fieldName)
+{
+    if (auto const anchor = LedgerEntryHelpers::parse<uint256>(params))
+    {
+        return keylet::orchardAnchor(*anchor).key;
+    }
+
+    return LedgerEntryHelpers::invalidFieldError(
+        "malformedRequest", fieldName, "hex string");
+}
+
+static Expected<uint256, Json::Value>
+parseOrchardNoteCommitment(
+    Json::Value const& params,
+    Json::StaticString const fieldName)
+{
+    if (auto const commitment = LedgerEntryHelpers::parse<uint256>(params))
+    {
+        return keylet::orchardNoteCommitment(*commitment).key;
+    }
+
+    return LedgerEntryHelpers::invalidFieldError(
+        "malformedRequest", fieldName, "hex string");
+}
+
+static Expected<uint256, Json::Value>
+parseOrchardNullifier(
+    Json::Value const& params,
+    Json::StaticString const fieldName)
+{
+    if (auto const nullifier = LedgerEntryHelpers::parse<uint256>(params))
+    {
+        return keylet::orchardNullifier(*nullifier).key;
+    }
+
+    return LedgerEntryHelpers::invalidFieldError(
+        "malformedRequest", fieldName, "hex string");
+}
+
+static Expected<uint256, Json::Value>
 parseMPToken(Json::Value const& params, Json::StaticString const fieldName)
 {
     if (!params.isObject())

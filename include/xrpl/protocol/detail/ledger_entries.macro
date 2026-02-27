@@ -526,7 +526,31 @@ LEDGER_ENTRY(ltVALIDATOR_VOTE_STATS, 0x008A, ValidatorVoteStats, validator_vote_
     {sfPreviousTxnLgrSeq,    soeREQUIRED},
 }))
 
-/** Reserved: 0x0084 (ltVAULT), 0x0085-0x0087 for future Vault-related objects. */
+/** Reserved: 0x0084 (ltVAULT), 0x0085 for future Vault-related objects. */
+
+/** A ledger object representing a spent Orchard nullifier.
+
+    Nullifiers are used to prevent double-spending of shielded notes.
+    Once a nullifier is spent, it is recorded on the ledger permanently.
+
+    \sa keylet::orchardNullifier
+ */
+LEDGER_ENTRY(ltORCHARD_NULLIFIER, 0x0086, OrchardNullifier, orchard_nullifier, ({
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
+
+/** A ledger object representing an Orchard Merkle tree anchor.
+
+    Anchors represent note-commitment tree state at a specific ledger.
+
+    \sa keylet::orchardAnchor
+ */
+LEDGER_ENTRY(ltORCHARD_ANCHOR, 0x0087, OrchardAnchor, orchard_anchor, ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
+}))
 
 /** A ledger object representing a loan broker
 
@@ -636,6 +660,27 @@ LEDGER_ENTRY(ltLOAN, 0x0089, Loan, loan, ({
     // number of digits after the decimal point (excluding
     // trailing zeros).
     {sfLoanScale,                soeDEFAULT},
+}))
+
+/** A ledger object representing an Orchard note commitment.
+
+    Note commitments represent newly created shielded notes that wallets can
+    scan and decrypt.
+
+    \sa keylet::orchardNoteCommitment
+ */
+LEDGER_ENTRY(
+    ltORCHARD_NOTE_COMMITMENT,
+    0x008B,
+    OrchardNoteCommitment,
+    orchard_note_commitment,
+    ({
+    {sfLedgerSequence,       soeOPTIONAL},
+    {sfOrchardEncryptedNote, soeOPTIONAL},
+    {sfOrchardEphemeralKey,  soeOPTIONAL},
+    {sfOrchardBundle,        soeOPTIONAL},
+    {sfPreviousTxnID,        soeOPTIONAL},
+    {sfPreviousTxnLgrSeq,    soeOPTIONAL},
 }))
 
 #undef EXPAND

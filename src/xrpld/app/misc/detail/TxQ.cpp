@@ -757,26 +757,41 @@ TxQ::apply(
     //  o The transaction will be queued.
 
     // If the account is not currently in the ledger, don't queue its tx.
+    // EXCEPT for z->z ShieldedPayment transactions which don't need an account
     auto const account = (*tx)[sfAccount];
+    bool const isZeroAccountShieldedPayment =
+        (account == beast::zero && tx->getTxnType() == ttSHIELDED_PAYMENT);
+
     Keylet const accountKey{keylet::account(account)};
-    auto const sleAccount = view.read(accountKey);
-    if (!sleAccount)
-        return {terNO_ACCOUNT, false};
+    std::shared_ptr<SLE const> sleAccount;
+
+    if (!isZeroAccountShieldedPayment)
+    {
+        sleAccount = view.read(accountKey);
+        if (!sleAccount)
+            return {terNO_ACCOUNT, false};
+    }
 
     // If the transaction needs a Ticket is that Ticket in the ledger?
-    SeqProxy const acctSeqProx = SeqProxy::sequence((*sleAccount)[sfSequence]);
-    SeqProxy const txSeqProx = tx->getSeqProxy();
-    if (txSeqProx.isTicket() &&
-        !view.exists(keylet::ticket(account, txSeqProx)))
-    {
-        if (txSeqProx.value() < acctSeqProx.value())
-            // The ticket number is low enough that it should already be
-            // in the ledger if it were ever going to exist.
-            return {tefNO_TICKET, false};
+    // Skip for z->z ShieldedPayment (no account)
+    SeqProxy txSeqProx = tx->getSeqProxy();
+    SeqProxy acctSeqProx = SeqProxy::sequence(0);  // Will be set for non-z->z transactions
 
-        // We don't queue transactions that use Tickets unless
-        // we can find the Ticket in the ledger.
-        return {terPRE_TICKET, false};
+    if (!isZeroAccountShieldedPayment)
+    {
+        acctSeqProx = SeqProxy::sequence((*sleAccount)[sfSequence]);
+        if (txSeqProx.isTicket() &&
+            !view.exists(keylet::ticket(account, txSeqProx)))
+        {
+            if (txSeqProx.value() < acctSeqProx.value())
+                // The ticket number is low enough that it should already be
+                // in the ledger if it were ever going to exist.
+                return {tefNO_TICKET, false};
+
+            // We don't queue transactions that use Tickets unless
+            // we can find the Ticket in the ledger.
+            return {terPRE_TICKET, false};
+        }
     }
 
     std::lock_guard lock(mutex_);
@@ -1684,19 +1699,27 @@ TxQ::tryDirectApply(
     beast::Journal j)
 {
     auto const account = (*tx)[sfAccount];
+    bool const isZeroAccountShieldedPayment =
+        (account == beast::zero && tx->getTxnType() == ttSHIELDED_PAYMENT);
     auto const sleAccount = view.read(keylet::account(account));
 
     // Don't attempt to direct apply if the account is not in the ledger.
-    if (!sleAccount)
+    // EXCEPT for z->z ShieldedPayment transactions which don't need an account
+    if (!sleAccount && !isZeroAccountShieldedPayment)
         return {};
 
-    SeqProxy const acctSeqProx = SeqProxy::sequence((*sleAccount)[sfSequence]);
-    SeqProxy const txSeqProx = tx->getSeqProxy();
+    SeqProxy txSeqProx = tx->getSeqProxy();
 
-    // Can only directly apply if the transaction sequence matches the account
-    // sequence or if the transaction uses a ticket.
-    if (txSeqProx.isSeq() && txSeqProx != acctSeqProx)
-        return {};
+    // For z->z ShieldedPayment, skip sequence checks (no account to check against)
+    if (!isZeroAccountShieldedPayment)
+    {
+        SeqProxy const acctSeqProx = SeqProxy::sequence((*sleAccount)[sfSequence]);
+
+        // Can only directly apply if the transaction sequence matches the account
+        // sequence or if the transaction uses a ticket.
+        if (txSeqProx.isSeq() && txSeqProx != acctSeqProx)
+            return {};
+    }
 
     FeeLevel64 const requiredFeeLevel = [this, &view, flags]() {
         std::lock_guard lock(mutex_);

@@ -186,12 +186,24 @@ Transactor::preflight1(PreflightContext const& ctx, std::uint32_t flagMask)
     auto const id = ctx.tx.getAccountID(sfAccount);
     if (id == beast::zero)
     {
-        JLOG(ctx.j.warn()) << "preflight1: bad account id";
-        return temBAD_SRC_ACCOUNT;
+        // Allow zero account for z->z ShieldedPayment transactions
+        // when OrchardPrivacy is enabled (fully shielded transactions)
+        if (ctx.tx.getTxnType() == ttSHIELDED_PAYMENT &&
+            ctx.rules.enabled(featureOrchardPrivacy) &&
+            ctx.tx.isFieldPresent(sfOrchardBundle))
+        {
+            // This is a z->z transaction - validation happens in ShieldedPayment::preflight
+            // No account field needed for fully shielded transactions
+        }
+        else
+        {
+            JLOG(ctx.j.warn()) << "preflight1: bad account id";
+            return temBAD_SRC_ACCOUNT;
+        }
     }
 
-    // Check if the sender account is excluded by consensus
-    if (ctx.app.getExclusionManager().isExcluded(id))
+    // Check if the sender account is excluded by consensus (only if account is present)
+    if (id != beast::zero && ctx.app.getExclusionManager().isExcluded(id))
     {
         JLOG(ctx.j.warn()) << "preflight1: sender account is excluded by consensus: "
                           << toBase58(id);
@@ -411,9 +423,23 @@ Transactor::checkFee(PreclaimContext const& ctx, XRPAmount baseFee)
     auto const id = ctx.tx.isFieldPresent(sfDelegate)
         ? ctx.tx.getAccountID(sfDelegate)
         : ctx.tx.getAccountID(sfAccount);
+
+    // For z->z ShieldedPayment with zero account, fee is paid from shielded pool
+    // Skip account existence check in this case
+    if (id == beast::zero && ctx.tx.getTxnType() == ttSHIELDED_PAYMENT)
+    {
+        // Fee must be paid from shielded pool (checked in ShieldedPayment::preclaim)
+        return tesSUCCESS;
+    }
+
     auto const sle = ctx.view.read(keylet::account(id));
     if (!sle)
+    {
+        JLOG(ctx.j.warn())
+            << "checkFee: terNO_ACCOUNT for account " << toBase58(id)
+            << " txType=" << ctx.tx.getTxnType();
         return terNO_ACCOUNT;
+    }
 
     auto const balance = (*sle)[sfBalance].xrp();
 
@@ -454,6 +480,16 @@ Transactor::payFee()
     }
     else
     {
+        // For z->z ShieldedPayment with zero account, fee is paid from shielded pool
+        // The fee is extracted from the OrchardBundle's valueBalance
+        // No account deduction needed here
+        if (account_ == beast::zero && ctx_.tx.getTxnType() == ttSHIELDED_PAYMENT)
+        {
+            // Fee is paid from shielded pool via valueBalance
+            // The valueBalance already accounts for the fee being burned
+            return tesSUCCESS;
+        }
+
         auto const sle = view().peek(keylet::account(account_));
         if (!sle)
             return tefINTERNAL;  // LCOV_EXCL_LINE
@@ -478,13 +514,21 @@ Transactor::checkSeqProxy(
 {
     auto const id = tx.getAccountID(sfAccount);
 
+    // For z->z ShieldedPayment with zero account, skip sequence validation
+    // Authorization comes from OrchardBundle cryptographic signatures
+    if (id == beast::zero && tx.getTxnType() == ttSHIELDED_PAYMENT)
+    {
+        // z->z transaction: no account, no sequence number validation needed
+        return tesSUCCESS;
+    }
+
     auto const sle = view.read(keylet::account(id));
 
     if (!sle)
     {
-        JLOG(j.trace())
-            << "applyTransaction: delay: source account does not exist "
-            << toBase58(id);
+        JLOG(j.warn())
+            << "checkSeqProxy: terNO_ACCOUNT for account " << toBase58(id)
+            << " txType=" << tx.getTxnType();
         return terNO_ACCOUNT;
     }
 
@@ -547,13 +591,29 @@ Transactor::checkPriorTxAndLastLedger(PreclaimContext const& ctx)
 {
     auto const id = ctx.tx.getAccountID(sfAccount);
 
+    // For z->z ShieldedPayment with zero account, skip account validation
+    // Authorization comes from OrchardBundle cryptographic signatures
+    if (id == beast::zero && ctx.tx.getTxnType() == ttSHIELDED_PAYMENT)
+    {
+        // z->z transaction: no account, no prior txn validation needed
+        // Still check LastLedgerSequence if present
+        if (ctx.tx.isFieldPresent(sfLastLedgerSequence) &&
+            (ctx.view.seq() > ctx.tx.getFieldU32(sfLastLedgerSequence)))
+            return tefMAX_LEDGER;
+
+        if (ctx.view.txExists(ctx.tx.getTransactionID()))
+            return tefALREADY;
+
+        return tesSUCCESS;
+    }
+
     auto const sle = ctx.view.read(keylet::account(id));
 
     if (!sle)
     {
-        JLOG(ctx.j.trace())
-            << "applyTransaction: delay: source account does not exist "
-            << toBase58(id);
+        JLOG(ctx.j.warn())
+            << "checkPriorTxAndLastLedger: terNO_ACCOUNT for account " << toBase58(id)
+            << " txType=" << ctx.tx.getTxnType();
         return terNO_ACCOUNT;
     }
 
@@ -656,8 +716,11 @@ Transactor::ticketDelete(
 void
 Transactor::preCompute()
 {
+    // Allow zero account for z→z ShieldedPayment transactions
+    // These are authorized by OrchardBundle signatures, not account signatures
     XRPL_ASSERT(
-        account_ != beast::zero,
+        account_ != beast::zero ||
+        ctx_.tx.getTxnType() == ttSHIELDED_PAYMENT,
         "ripple::Transactor::preCompute : nonzero account");
 }
 

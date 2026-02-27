@@ -185,6 +185,11 @@ enum TEFcodes : TERUnderlyingType {
     tefNO_TICKET,
     tefNFTOKEN_IS_NOT_TRANSFERABLE,
     tefINVALID_LEDGER_FIX_TYPE,
+
+    // Orchard privacy errors
+    tefORCHARD_DUPLICATE_NULLIFIER,  // Nullifier already spent (double-spend)
+    tefORCHARD_INVALID_ANCHOR,       // Merkle tree anchor not found
+    tefORCHARD_INVALID_PROOF,        // Zero-knowledge proof verification failed
 };
 
 //------------------------------------------------------------------------------

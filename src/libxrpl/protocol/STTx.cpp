@@ -283,6 +283,16 @@ STTx::checkSign(
     RequireFullyCanonicalSig requireCanonicalSig,
     Rules const& rules) const
 {
+    // Shielded z->z transactions can be authorized by OrchardBundle proofs
+    // without a traditional account signature.
+    if (
+        getTxnType() == ttSHIELDED_PAYMENT && isFieldPresent(sfOrchardBundle) &&
+        isFieldPresent(sfSigningPubKey) && getFieldVL(sfSigningPubKey).empty() &&
+        !isFieldPresent(sfSigners) && !isFieldPresent(sfTxnSignature))
+    {
+        return {};
+    }
+
     if (auto const ret = checkSign(requireCanonicalSig, rules, *this); !ret)
         return ret;
 

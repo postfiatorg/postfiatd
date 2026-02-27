@@ -21,7 +21,9 @@
 #include <xrpld/app/ledger/Ledger.h>
 #include <xrpld/app/ledger/LedgerReplay.h>
 #include <xrpld/app/ledger/OpenLedger.h>
+#include <xrpld/app/main/Application.h>
 #include <xrpld/app/misc/CanonicalTXSet.h>
+#include <xrpld/app/misc/OrchardWallet.h>
 #include <xrpld/app/tx/apply.h>
 
 #include <xrpl/protocol/Feature.h>
@@ -51,6 +53,17 @@ buildLedgerImpl(
     {
         built->updateNegativeUNL();
     }
+
+    // CRITICAL: Checkpoint Orchard wallet BEFORE applying transactions
+    // Matching Zcash's EXACT approach (wallet.cpp:2896-2898):
+    // 1. CheckpointNoteCommitmentTree(height) - captures tree state BEFORE block's transactions
+    // 2. AppendNoteCommitments(height, block) - adds block's commitments to tree
+    // This means: checkpoint(N) captures tree state at END of ledger N-1
+    // Zcash: wallet.CheckpointNoteCommitmentTree -> wallet.AppendNoteCommitments
+    // PostFiat: wallet.checkpoint(ledger_seq) -> applyTxs (which appends commitments)
+    auto& wallet = app.getOrchardWallet();
+    wallet.checkpoint(built->info().seq);
+    JLOG(j.debug()) << "Orchard: Checkpointed wallet at ledger " << built->info().seq << " (before transactions)";
 
     // Set up to write SHAMap changes to our database,
     //   perform updates, extract changes

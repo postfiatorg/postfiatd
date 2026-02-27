@@ -42,6 +42,7 @@
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/app/misc/LoadFeeTrack.h>
 #include <xrpld/app/misc/NetworkOPs.h>
+#include <xrpld/app/misc/OrchardWallet.h>
 #include <xrpld/app/misc/SHAMapStore.h>
 #include <xrpld/app/misc/TxQ.h>
 #include <xrpld/app/misc/ValidatorKeys.h>
@@ -242,6 +243,9 @@ public:
     io_latency_sampler m_io_latency_sampler;
 
     std::unique_ptr<GRPCServer> grpcServer_;
+
+    // Orchard server-side wallet
+    std::unique_ptr<OrchardWallet> orchardWallet_;
 
     //--------------------------------------------------------------------------
 
@@ -479,6 +483,7 @@ public:
               std::chrono::milliseconds(100),
               get_io_service())
         , grpcServer_(std::make_unique<GRPCServer>(*this))
+        , orchardWallet_(std::make_unique<OrchardWallet>())
     {
         initAccountIdCache(config_->getValueFor(SizedItem::accountIdCacheSize));
 
@@ -1165,6 +1170,12 @@ public:
     trapTxID() const override
     {
         return trapTxID_;
+    }
+
+    OrchardWallet&
+    getOrchardWallet() override
+    {
+        return *orchardWallet_;
     }
 
 private:
