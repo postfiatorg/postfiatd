@@ -299,6 +299,11 @@ jobs:
             iptables -I INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
             iptables -I INPUT -p tcp --dport 443 -m connlimit --connlimit-above 50 -j DROP
             iptables -I INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Whitelist VHS to bypass rate limiting (persistent WebSocket connections)
+            if [ -n "${VHS_HOST}" ]; then
+              iptables -D INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT 2>/dev/null || true
+              iptables -I INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT
+            fi
             # Make iptables rules persistent
             apt-get install -y iptables-persistent 2>/dev/null || true
             netfilter-persistent save 2>/dev/null || true
@@ -545,6 +550,11 @@ jobs:
             iptables -I INPUT -p tcp --dport 443 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
             iptables -I INPUT -p tcp --dport 443 -m connlimit --connlimit-above 50 -j DROP
             iptables -I INPUT -p tcp --dport 443 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Whitelist VHS to bypass rate limiting (persistent WebSocket connections)
+            if [ -n "${VHS_HOST}" ]; then
+              iptables -D INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT 2>/dev/null || true
+              iptables -I INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT
+            fi
             # Make iptables rules persistent
             apt-get install -y iptables-persistent 2>/dev/null || true
             netfilter-persistent save 2>/dev/null || true
