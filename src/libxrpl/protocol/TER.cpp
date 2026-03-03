@@ -151,6 +151,9 @@ transResults()
         MAKE_ERROR(tefNO_TICKET,                   "Ticket is not in ledger."),
         MAKE_ERROR(tefNFTOKEN_IS_NOT_TRANSFERABLE, "The specified NFToken is not transferable."),
         MAKE_ERROR(tefINVALID_LEDGER_FIX_TYPE,     "The LedgerFixType field has an invalid value."),
+        MAKE_ERROR(tefORCHARD_DUPLICATE_NULLIFIER, "Orchard nullifier already spent (double-spend detected)."),
+        MAKE_ERROR(tefORCHARD_INVALID_ANCHOR,      "Orchard anchor not found in recent ledger history."),
+        MAKE_ERROR(tefORCHARD_INVALID_PROOF,       "Orchard zero-knowledge proof verification failed."),
 
         MAKE_ERROR(telLOCAL_ERROR,            "Local failure."),
         MAKE_ERROR(telBAD_DOMAIN,             "Domain too long."),

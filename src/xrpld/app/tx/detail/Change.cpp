@@ -35,6 +35,8 @@
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpld/app/misc/TxQ.h>
 
+#include "orchard-postfiat/src/ffi/bridge.rs.h"
+
 #include <string_view>
 
 namespace ripple {
@@ -360,6 +362,21 @@ Change::applyAmendment()
 
         if (amendment == fixTrustLinesToSelf)
             activateTrustLinesToSelfFix();
+
+        // Initialize empty anchor when OrchardPrivacy is activated
+        if (amendment == featureOrchardPrivacy)
+        {
+            // Get the proper empty anchor from Orchard library
+            auto emptyAnchorBytes = orchard_test_get_empty_anchor();
+            uint256 emptyAnchor;
+            std::memcpy(emptyAnchor.data(), emptyAnchorBytes.data(), 32);
+
+            auto sleAnchor = std::make_shared<SLE>(keylet::orchardAnchor(emptyAnchor));
+            sleAnchor->setFieldU32(sfLedgerSequence, view().seq());
+            view().insert(sleAnchor);
+
+            JLOG(j_.info()) << "OrchardPrivacy amendment activated: initialized empty anchor";
+        }
 
         ctx_.app.getAmendmentTable().enable(amendment);
 

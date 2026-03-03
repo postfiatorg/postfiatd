@@ -373,6 +373,28 @@ permissionedDomain(AccountID const& account, std::uint32_t seq) noexcept;
 
 Keylet
 permissionedDomain(uint256 const& domainID) noexcept;
+
+/** Keylet for an Orchard nullifier (spent shielded note).
+    @param nullifier The 32-byte nullifier hash
+    @return Keylet for the nullifier ledger object
+*/
+Keylet
+orchardNullifier(uint256 const& nullifier) noexcept;
+
+/** Keylet for an Orchard anchor (Merkle tree root).
+    @param anchor The 32-byte anchor hash
+    @return Keylet for the anchor ledger object
+*/
+Keylet
+orchardAnchor(uint256 const& anchor) noexcept;
+
+/** Keylet for an Orchard note commitment (shielded output).
+    @param commitment The 32-byte note commitment (cmx)
+    @return Keylet for the note commitment ledger object
+*/
+Keylet
+orchardNoteCommitment(uint256 const& commitment) noexcept;
+
 }  // namespace keylet
 
 // Everything below is deprecated and should be removed in favor of keylets:
