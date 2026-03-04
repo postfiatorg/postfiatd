@@ -297,6 +297,52 @@ This is the highest bar of any approach. The combination of economic bonds (Sybi
 
 ---
 
+## Community Impact
+
+This is the most community-empowering approach. Community members with GPU access can participate in two ways: as Oracle Node operators (actively scoring validators and earning Task Node rewards) or as independent verifiers (spot-checking any Oracle Node's commitments without bonding PFT or running continuous infrastructure).
+
+**The hardware barrier creates a participation gap.** Running an Oracle Node requires a GPU capable of running the pinned model — either owned hardware or cloud GPU rental. For a 7B model this is accessible (~$0.50/hr cloud, or a consumer GPU), but for larger models the cost rises significantly. This means the Oracle Node set will skew toward well-resourced participants: institutions, professional node operators, and technically engaged community members. Casual participants are priced out of active scoring.
+
+**This mirrors Bitcoin mining** — trustless in design, but participation requires resources. The community may accept this trade-off because the alternative (centralized scoring in Approach 1/3) is worse, and the cloud API approaches (Approach 1/2) have their own barrier (API key costs + cloud provider dependency). The key question is whether enough Oracle Nodes participate to make the distributed model meaningful. If only 5-7 nodes can afford to run, the system is nominally distributed but practically concentrated.
+
+**Community trust is highest here.** No single entity controls scoring. Every score is backed by a logit commitment that any GPU owner can verify. The full audit trail (data, commitments, scores, verification results, aggregation) is on IPFS. Community members who cannot verify directly can see that multiple independent parties verified each other — this is more trustworthy than trusting one foundation's Opacity proofs.
+
+**Open-weight model visibility is a major advantage.** The community can inspect the model, study its behavior, propose alternatives, and run their own experiments. This level of transparency is impossible with proprietary cloud APIs. Community governance over model selection becomes natural — the model is public, the prompts are public, and anyone can benchmark alternatives.
+
+---
+
+## Institutional Impact
+
+This is the strongest approach for institutions that care about decentralization, verifiability, and regulatory defensibility. No single entity controls the scoring outcome, and every score is mathematically provable.
+
+**Institutions can run their own Oracle Nodes.** This is the only approach (alongside Approach 2) where institutions get direct influence over scoring — not just the ability to audit, but the ability to participate as scorers. For universities, research labs, and large validators, running an Oracle Node is a meaningful way to contribute to network governance. The GPU requirement is not a barrier for these institutions.
+
+**Regulatory positioning is strongest.** When explaining to regulators how validator selection works, "multiple independent parties run the same AI model, prove their computation mathematically, and the median result is used" is a strong narrative. No single entity can manipulate the outcome. The decentralized structure reduces regulatory concentration risk — regulators cannot coerce a single scoring entity because no single entity controls the result.
+
+**The operational complexity may deter some institutions.** Running an Oracle Node requires maintaining GPU infrastructure (or cloud GPU accounts), keeping model weights synced, participating in scoring rounds on schedule, and maintaining liveness. Institutions that prefer "set and forget" infrastructure (Approach 1) or lightweight API-based participation (Approach 2) may find this burdensome.
+
+**The unproven determinism is the biggest institutional concern.** Institutions that conduct due diligence will identify the cross-hardware determinism problem as an unresolved risk. If spot-checks produce false positives, legitimate Oracle Nodes get excluded from aggregation — undermining the distributed model. Institutions will want to see this problem solved with published benchmarks before committing resources to Oracle Node operation.
+
+**Best for:** institutions that want direct participation in network governance, can afford GPU resources, and value the strongest possible decentralization narrative. Less suitable for institutions seeking minimal operational overhead or those uncomfortable with emerging (not yet battle-tested) proof mechanisms.
+
+---
+
+## Balancing Community and Institutional Needs
+
+Approaches 1-3 each sacrifice something one audience cares about. Approach 4 is the first that can satisfy both — but only if the barriers are managed:
+
+| Concern | Community | Institutions | How Approach 4 Addresses It |
+|---------|-----------|-------------|---------------------------|
+| Trust | "Can we verify the foundation isn't cheating?" | "Can we prove to regulators no single entity controls this?" | Multiple scorers + logit proofs eliminate single-entity trust |
+| Participation | "Can we help score, not just watch?" | "Can we run our own scorer?" | Both can operate Oracle Nodes |
+| Accessibility | "Do I need expensive hardware?" | "Is the operational burden reasonable?" | Cloud GPU rental lowers the floor; institutions already have resources |
+| Transparency | "Can we see how scores are made?" | "Can we audit the methodology?" | Open-weight model, public prompts, published commitments |
+| Risk | "What if the proof system doesn't work?" | "Is this proven technology?" | Determinism research must be resolved first |
+
+The practical path is to **ship Approach 1 first** (fastest, simplest, satisfies minimum transparency requirements), then progress through Approach 2 or 3 toward Approach 4 as the proof-of-logits technology matures. This lets the community and institutions see incremental trust improvements rather than waiting for the ideal system.
+
+---
+
 ## Cost Profile
 
 | Cost Category | Bearer | Estimate |

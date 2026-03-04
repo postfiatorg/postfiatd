@@ -212,6 +212,32 @@ The trust model is: **centralized scorer with mathematically verifiable computat
 
 ---
 
+## Community Impact
+
+Proof-of-logits gives the community something Approach 1 cannot: the ability to independently verify that the foundation actually performed the computation it claims. In Approach 1, community members can check Opacity proofs (which confirm an API was called), but they cannot re-run the proprietary model to verify the result. Here, anyone with a GPU can download the open-weight model, re-run a spot-check, and mathematically confirm the foundation was honest.
+
+**The hardware barrier is the main limitation.** Most community members do not have GPU access. This creates a two-tier community: those who can verify (GPU owners, cloud GPU renters, institutions) and those who must trust the verifiers. In practice, this is acceptable — a single honest verifier catching a mismatch is enough to expose dishonesty, and the result is publicly visible to everyone.
+
+**Community perception is likely positive but cautious.** The open-weight model and published logit commitments signal strong transparency intent. The community can read every score's reasoning, inspect the model, and audit the prompts — all impossible with proprietary cloud APIs. However, the foundation remains the single scorer. Community members who want distributed control (multiple independent scorers) will see this as an improvement over Approach 1 but not a final destination. Framing Approach 3 as a stepping stone toward Approach 4 helps manage this expectation.
+
+**Participation opportunities are limited.** Community members cannot score — only audit. This is the same as Approach 1. The difference is that auditing is more meaningful here (mathematical verification vs. reading Opacity proofs). For community members who want active participation in scoring, Approach 2 or 4 is necessary.
+
+---
+
+## Institutional Impact
+
+Institutions that value mathematical rigor will find this approach more compelling than Approach 1. The proof-of-logits model is conceptually similar to financial auditing — the foundation publishes its work, and anyone can spot-check it. Institutions with GPU resources (universities, research labs, large validators) can run independent audits.
+
+**The single-scorer centralization is still a concern.** Institutions evaluating PostFiat for regulatory compliance or governance purposes may flag that one entity controls all scoring decisions, even if those decisions are verifiable. This is the same objection as Approach 1, softened by stronger proofs but not eliminated.
+
+**The unproven technology is a risk factor.** Proof-of-logits is not battle-tested at scale. Institutions that prefer conservative, proven mechanisms may view Opacity/TLSNotary proofs (Approach 1/2) as more reliable, even though they prove less. The determinism problem adds uncertainty — if spot-checks produce false positives, the verification story weakens. Institutions will want to see the determinism research resolved before committing confidence to this approach.
+
+**Regulatory clarity is straightforward.** One accountable entity (the foundation) makes all scoring decisions. This is simple to explain to regulators. The verifiability of computation is an additional positive — it demonstrates that the foundation cannot fabricate results, which strengthens the governance narrative.
+
+**Best for:** technically sophisticated institutions that value auditability and are comfortable with newer cryptographic proof methods. Less suitable for institutions that prioritize operational simplicity or battle-tested mechanisms.
+
+---
+
 ## Cost Profile
 
 | Cost Category | Bearer | Estimate |

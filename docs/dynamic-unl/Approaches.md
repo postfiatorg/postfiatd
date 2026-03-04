@@ -172,3 +172,40 @@ Multiple independent Oracle Nodes each run the same open-weight LLM on their own
 | **Community** | Audit only | Audit + participate | Audit with GPU | Audit + participate with GPU |
 | **Institutions** | Simple but centralized | Distributed trust, can participate | Provable but centralized | Strongest trust, highest cost |
 | **Existing design** | Design_FoundationCloudAPI | Design_DistributedCloudAPI | Design_FoundationLocalHardware | Design_DistributedLocalHardware |
+
+---
+
+## Community and Institutional Impact
+
+### Community
+
+| Dimension | Approach 1 | Approach 2 | Approach 3 | Approach 4 |
+|-----------|-----------|-----------|-----------|-----------|
+| **Can verify scores** | Yes — check Opacity proofs | Yes — check TLSNotary proofs | Yes — spot-check logits (needs GPU) | Yes — spot-check logits (needs GPU) |
+| **Can participate in scoring** | No | Yes — run an Oracle Node | No | Yes — run an Oracle Node |
+| **Hardware barrier** | None | VPS + API key | GPU for verification only | GPU for scoring + verification |
+| **Transparency** | API call proven, model is proprietary black box | API call proven, model is proprietary black box | Model is open-weight, fully inspectable | Model is open-weight, fully inspectable |
+| **What community must trust** | Foundation didn't cherry-pick API calls | Enough Oracle Nodes are honest | Foundation didn't re-run and pick preferred result | Enough Oracle Nodes are honest |
+| **Overall** | Weakest — passive auditing of opaque model | Good — active participation, but API dependency | Medium — strong proofs, but single scorer | Strongest — active participation + verifiable computation |
+
+### Institutions
+
+| Dimension | Approach 1 | Approach 2 | Approach 3 | Approach 4 |
+|-----------|-----------|-----------|-----------|-----------|
+| **Can run own scorer** | No | Yes — Oracle Node | No | Yes — Oracle Node |
+| **Regulatory narrative** | "One accountable entity, provably transparent" | "Multiple independent scorers with economic bonds" | "One entity, but computation is mathematically verifiable" | "Fully distributed, mathematically verifiable, no single point of control" |
+| **Operational burden** | None | Low (VPS + API key) | None (audit only) | High (GPU infrastructure + liveness) |
+| **Proof maturity** | Battle-tested (MPC-TLS) | Battle-tested (MPC-TLS) | Unproven (proof-of-logits) | Unproven (proof-of-logits) |
+| **Single-entity risk** | Yes — foundation controls scoring | Reduced — distributed scoring | Yes — foundation controls scoring | Eliminated — no single scorer |
+| **Overall** | Simplest, but centralization concern | Good balance of trust and simplicity | Appealing to technical institutions, but still centralized | Strongest trust model, highest operational cost |
+
+### What Each Audience Prefers
+
+| Audience | Best Approach | Why | Acceptable Compromise |
+|----------|-------------|-----|----------------------|
+| **Community (general)** | Approach 2 | Active participation without GPU barrier | Approach 1 as starting point |
+| **Community (technical)** | Approach 4 | Full verification + participation + open model | Approach 3 for verification without participation |
+| **Institutions (conservative)** | Approach 2 | Distributed trust with proven technology (MPC-TLS) | Approach 1 for simplicity |
+| **Institutions (technical)** | Approach 4 | Strongest regulatory narrative + direct participation | Approach 3 for auditability without operational burden |
+
+Both audiences converge on Approach 4 as the ideal end state. The practical difference is the path to get there: conservative institutions and the general community prefer stepping through Approach 1 → 2 (proven technology, lower barriers), while technical audiences are willing to accept Approach 3 as an intermediate step toward 4.
