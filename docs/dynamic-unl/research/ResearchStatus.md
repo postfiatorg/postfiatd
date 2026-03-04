@@ -120,8 +120,8 @@ The four architectural approaches for Dynamic UNL scoring are defined in [Approa
 |----------|-----------|--------------|-------------|-----------------|
 | 1 | Foundation | Cloud API | Opacity | Design_FoundationCloudAPI |
 | 2 | Distributed Nodes | Cloud API | TLSNotary | Design_DistributedCloudAPI |
-| 3 | Foundation | Local | Proof-of-logits | None yet |
-| 4 | Distributed Nodes | Local | Proof-of-logits | None yet |
+| 3 | Foundation | Local | Proof-of-logits | Design_FoundationLocalHardware |
+| 4 | Distributed Nodes | Local | Proof-of-logits | Design_DistributedLocalHardware |
 
 ---
 

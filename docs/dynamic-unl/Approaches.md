@@ -124,7 +124,7 @@ The foundation runs an open-weight LLM on its own hardware (or rented GPU instan
 
 **Institutional impact:** Appealing to technically sophisticated institutions that value mathematical proofs over economic/social trust. Institutions with GPU resources can independently audit. However, the single-scorer centralization remains a concern. The determinism problem adds uncertainty — institutions may prefer the proven guarantees of MPC-TLS proofs (Approach 1 or 2) over the unproven guarantees of proof-of-logits.
 
-**Existing design:** No design document yet.
+**Existing design:** Design_FoundationLocalHardware.
 
 ---
 
@@ -152,7 +152,7 @@ Multiple independent Oracle Nodes each run the same open-weight LLM on their own
 
 **Institutional impact:** Most attractive from a trust and compliance perspective. No single entity controls scoring, and every score is mathematically verifiable. Institutions with technical resources can run their own Oracle Nodes, giving them direct participation. The decentralized, provable model is the strongest argument in regulatory discussions. However, the hardware cost and operational complexity may deter institutions that prefer simpler setups. The unproven determinism guarantees add risk compared to the battle-tested MPC-TLS approach.
 
-**Existing design:** No design document yet.
+**Existing design:** Design_DistributedLocalHardware.
 
 ---
 
@@ -171,4 +171,4 @@ Multiple independent Oracle Nodes each run the same open-weight LLM on their own
 | **Key risk** | Single point of trust | Quorum + API dependency | Determinism unsolved | Determinism + high barrier |
 | **Community** | Audit only | Audit + participate | Audit with GPU | Audit + participate with GPU |
 | **Institutions** | Simple but centralized | Distributed trust, can participate | Provable but centralized | Strongest trust, highest cost |
-| **Existing design** | Design_FoundationCloudAPI | Design_DistributedCloudAPI | None | None |
+| **Existing design** | Design_FoundationCloudAPI | Design_DistributedCloudAPI | Design_FoundationLocalHardware | Design_DistributedLocalHardware |
