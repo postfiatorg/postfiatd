@@ -14,7 +14,7 @@ Dynamic UNL replaces this with an automated, transparent, LLM-driven system wher
 | Accountability | None on-chain | Full audit trail on-chain + IPFS |
 | Validator criteria | Undisclosed | Published scoring criteria and reasoning |
 | Update mechanism | Publisher signs list | On-chain hash + score-based selection |
-| Proof of computation | None | MPC-TLS cryptographic proof of LLM computation |
+| Proof of computation | None | MPC-TLS cryptographic proof of data collection and LLM computation |
 | Identity | Optional domain | Mandatory KYC/KYB + institutional domain verification |
 | Validator incentive | No fees | Transaction fees paid to validators |
 
@@ -139,7 +139,8 @@ KYC (Know Your Customer) / KYB (Know Your Business) verification is handled by *
 1. Validator candidate initiates KYC via the onboarding portal (embedded SumSub WebSDK)
 2. Candidate uploads government-issued ID and completes liveness verification
 3. SumSub automatically reviews documents and sends webhook with result
-4. On approval, the result is published on-chain by the foundation's master account as a memo transaction:
+4. On approval, the foundation queries the SumSub API to confirm the result — this query is attested by **Opacity Network** (a decentralized MPC-TLS notary network built on TLSNotary) to prove the data genuinely came from SumSub
+5. The result is published on-chain by the foundation's master account as a memo transaction:
 
 ```json
 {
@@ -147,11 +148,14 @@ KYC (Know Your Customer) / KYB (Know Your Business) verification is handled by *
   "validator_address": "rXXX...",
   "identity_type": "kyc",
   "proof_hash": "<sumsub_applicant_id>",
-  "proof_type": "sumsub_kyc",
+  "proof_type": "sumsub_kyc_opacity",
+  "proof_cid": "<IPFS CID of Opacity proof>",
   "decision": "approved",
   "verified_at": "2025-06-15T12:00:00Z"
 }
 ```
+
+The Opacity proof stored on IPFS cryptographically proves the SumSub API returned an approval for this applicant. Anyone can fetch the proof via the CID and verify it independently.
 
 KYC status is binary: approved or not. Without approval, a validator cannot be scored.
 
@@ -170,8 +174,10 @@ This is a custom PostFiat verification mechanism where an institution proves own
    _postfiat.stanford.edu TXT "pf-verify=<token> sig=<signature_hex>"
    ```
 3. The signature is over the message `pf-verify:<token>:<domain>` using the validator's Ed25519 or secp256k1 key
-4. System verifies the DNS record exists, extracts the signature, verifies it against the validator's public key
-5. On success, published on-chain:
+4. Foundation queries the DNS record via **DNS-over-HTTPS** (DoH) using Cloudflare (`cloudflare-dns.com/dns-query`) or Google (`dns.google/resolve`)
+5. This DoH query is attested by **Opacity Network**, producing a cryptographic proof that the DNS provider's API returned the expected TXT record
+6. Foundation verifies the signature against the validator's public key
+7. On success, published on-chain with Opacity proof on IPFS:
 
 ```json
 {
@@ -180,10 +186,13 @@ This is a custom PostFiat verification mechanism where an institution proves own
   "identity_type": "university",
   "identifier": "stanford.edu",
   "proof_hash": "<sha256_of_verification_data>",
-  "proof_type": "dns_txt",
+  "proof_type": "dns_txt_opacity",
+  "proof_cid": "<IPFS CID of Opacity proof>",
   "verified_at": "2025-06-15T12:00:00Z"
 }
 ```
+
+Anyone can fetch the Opacity proof from IPFS and verify that the DoH provider genuinely returned the DNS record at the time of verification.
 
 Institutional domain verification is not mandatory for UNL inclusion but positively influences the validator's score — it demonstrates the validator is operated by a legitimate, identifiable institution.
 
@@ -213,9 +222,11 @@ KYC/KYB gate (binary: eligible or not)
         │
         ↓ only verified entities proceed
         │
-Data pipeline (deterministic, automated)
-        │   Computes objective metrics from on-chain data and monitoring services
-        │   Outputs structured validator profile (JSON) for each eligible validator
+Data pipeline (foundation, Opacity-attested)
+        │   Queries VHS, Network Monitoring, MaxMind, SumSub
+        │   Each query attested by Opacity Network (decentralized MPC-TLS)
+        │   Builds validator profile JSON for each eligible validator
+        │   Publishes snapshot + Opacity proofs → IPFS
         │
         ↓
         │
@@ -253,15 +264,20 @@ The LLM sees all candidates together in a single call per step:
 
 ### Data Pipeline: What Feeds the LLM
 
-The data pipeline queries existing PostFiat infrastructure and builds a structured JSON profile for each validator. The LLM does not compute raw metrics — it receives them precomputed.
+The foundation collects data from existing PostFiat infrastructure and builds a structured JSON profile for each validator. The LLM does not compute raw metrics — it receives them precomputed. Each data fetch is attested by **Opacity Network** — a decentralized MPC-TLS notary network built on TLSNotary — to prove the data genuinely came from the claimed source. Without these proofs, the foundation could alter data between fetching and publishing.
 
-**Data sources (all already collected):**
+**Data sources and their Opacity attestation:**
 
-| Source | Data |
-|--------|------|
-| VHS PostgreSQL | Agreement scores (1h/24h/30d), uptime, latency, peer connections, server version, manifests, amendment voting, fee votes, geographic location (MaxMind), domain verification, WebSocket health |
-| Network Monitoring PostgreSQL | Alert history (agreement drops, offline events, version mismatches), severity, resolution times, consecutive missed checks |
-| On-chain identity records | KYC/KYB status, institutional domain verification status |
+| Source | Data | Proof |
+|--------|------|-------|
+| VHS API | Agreement scores (1h/24h/30d), uptime, latency, peer connections, server version, manifests, amendment voting, fee votes, domain verification, WebSocket health | Opacity Network attests VHS API response |
+| Network Monitoring API | Alert history (agreement drops, offline events, version mismatches), severity, resolution times, consecutive missed checks | Opacity Network attests Network Monitoring API response |
+| MaxMind GeoIP2 API | Continent, country, city, ISP, datacenter for each validator | Opacity Network attests MaxMind API response |
+| On-chain identity records | KYC/KYB status, institutional domain verification status | Directly verifiable from ledger (no attestation needed) |
+
+**Why VHS and Network Monitoring need Opacity proofs:** Although these are PostFiat's own services with public APIs, the data snapshot is consumed by the LLM and must be provably authentic. Opacity proofs on the API responses prove the snapshot matches what the services actually returned — the foundation cannot alter the inputs between fetching and scoring.
+
+**Fallback:** If Opacity Network is unavailable, the foundation may use a public third-party TLSNotary notary server (e.g., PSE's reference notary). Proofs generated via fallback are clearly marked in the proof metadata (`notary_type: "tlsnotary_fallback"`). Fallback proofs provide weaker trust guarantees (single notary instead of decentralized network).
 
 **MaxMind upgrade required:** The VHS currently uses GeoLite2 (free tier) for geographic data. This must be upgraded to **MaxMind GeoIP2** (paid tier) for accurate datacenter/hosting provider identification, reliable ISP data, and precise city-level geolocation. Scoring decisions that affect UNL composition depend on this accuracy.
 
@@ -400,17 +416,32 @@ LLMs are non-deterministic. The same inputs may produce slightly different score
 
 ---
 
-## 5. Proof of Computation
+## 5. Proof of Computation and Data Integrity
 
 ### The Trust Problem
 
-Publishing inputs, prompts, and outputs proves transparency but doesn't prove the LLM was actually called. Without cryptographic proof, the foundation could fabricate plausible-looking scores. The community needs hard evidence.
+Publishing inputs, prompts, and outputs proves transparency but doesn't prove either that (a) the data fed to the LLM was genuinely collected from the claimed sources, or (b) the LLM was actually called. Without cryptographic proof at both stages, the foundation could fabricate plausible-looking inputs, scores, or both. The community needs hard evidence covering the entire pipeline end-to-end: **proven data in → proven LLM call → proven scores out**.
 
-### Solution: MPC-TLS via Opacity Network
+### Solution: Opacity Network MPC-TLS Proofs at Every Stage
 
-Opacity Network provides cryptographic proof of LLM API interactions using zkTLS with Multi-Party Computation over TLS (MPC-TLS).
+Opacity Network provides cryptographic proof of HTTPS interactions using zkTLS with Multi-Party Computation over TLS (MPC-TLS). The foundation uses Opacity proofs at two stages:
 
-**How it works:**
+**Stage 1 — Data collection proofs:**
+
+```
+Scoring service fetches data from VHS / Network Monitoring / MaxMind / SumSub
+        ↓
+Each API call goes through Opacity's MPC-TLS notary network
+        ↓
+Opacity produces a cryptographic proof per data source that:
+  • A real HTTPS request was made to the specific API endpoint
+  • The specific response was received (not tampered with)
+  • The data genuinely came from that API, not fabricated locally
+        ↓
+Data snapshot + all Opacity proofs published to IPFS
+```
+
+**Stage 2 — LLM scoring proofs:**
 
 ```
 Scoring service sends prompt to LLM
@@ -429,13 +460,13 @@ Opacity produces a cryptographic proof that:
   • The response genuinely came from that API, not fabricated locally
 ```
 
-**Verification:** Anyone can verify the Opacity proof. Forgery is cryptographically infeasible.
+**Verification:** Anyone can verify all Opacity proofs (both data collection and LLM calls). Forgery is cryptographically infeasible. The combination of Stage 1 and Stage 2 proofs establishes an unbroken chain of trust from raw data sources through to final scores.
 
 ### Infrastructure Requirements
 
 **Cloudflare AI Gateway:** A free proxy that sits between the scoring service and the LLM provider. The scoring service changes its base URL to route through Cloudflare rather than calling the LLM API directly. Supports Anthropic, OpenAI, and other major providers. Free tier covers 100K requests/day (more than sufficient). A Cloudflare account is required to create a gateway instance.
 
-**Opacity Network:** Provides the MPC-TLS notary network and proof generation. TypeScript SDK available. The scoring service integrates the Opacity adapter to generate proofs alongside each LLM call.
+**Opacity Network:** Provides the MPC-TLS notary network and proof generation. TypeScript SDK available. The scoring service integrates the Opacity adapter to generate proofs for both data collection API calls and LLM scoring calls.
 
 **LLM Provider:** The actual model provider (e.g., Anthropic for Claude). The scoring service uses its own API key. Cloudflare proxies the call transparently — same models, same API, just a different base URL.
 
@@ -449,11 +480,12 @@ Every scoring run publishes the complete audit trail, even if the UNL doesn't ch
 
 | Artifact | Where Published |
 |----------|----------------|
-| Validator profiles (LLM inputs) | IPFS |
+| Data snapshot (validator profiles) | IPFS |
+| Opacity proofs of data collection (VHS, Network Monitoring, MaxMind, SumSub) | IPFS |
 | Scoring configuration (model version, prompt versions, pipeline version) | IPFS |
 | Step 1 LLM output (individual scores + reasoning) | IPFS |
 | Step 2 LLM output (adjusted scores + reasoning) | IPFS |
-| Opacity MPC-TLS proofs (Step 1 and Step 2) | IPFS |
+| Opacity MPC-TLS proofs (Step 1 and Step 2 LLM calls) | IPFS |
 | Final UNL JSON | IPFS + HTTPS endpoint |
 | UNL hash + IPFS CID + sequence + config version | On-chain transaction |
 
@@ -474,16 +506,18 @@ The IPFS CID is published on-chain alongside the UNL hash, creating a link from 
    └── Extract: UNL hash, IPFS CID, sequence, scoring config version
 
 2. Fetch from IPFS using the CID
-   └── Get: validator profiles, prompts, LLM outputs, proofs, UNL JSON
+   └── Get: data snapshot, data collection proofs, prompts, LLM outputs, LLM proofs, UNL JSON
 
-3. Verify UNL hash
+3. Verify data collection proofs
+   └── Verify Opacity proofs for each data source (VHS, Network Monitoring, MaxMind, SumSub)
+   └── Confirm the data in the snapshot matches what the APIs actually returned
+
+4. Verify UNL hash
    └── Compute sha512Half(UNL JSON from IPFS) == hash from on-chain tx
 
-4. Verify Opacity proofs
+5. Verify LLM scoring proofs
    └── Confirm LLM API calls actually happened (not fabricated)
-
-5. Verify inputs
-   └── Cross-check validator profiles against VHS public API data
+   └── Verify the LLM received the published data snapshot as input
 
 6. Review reasoning
    └── Read the LLM's explanation for each validator's score
@@ -507,7 +541,7 @@ Validators on PostFiat earn transaction fees as compensation for running infrast
 
 ### Guiding Principle
 
-The PostFiat Foundation is the steward of the Dynamic UNL system. At launch, it holds centralized authority exercised transparently. This authority is designed to be progressively transferred to community governance. Even while centralized, every action is publicly visible and auditable via on-chain transactions, IPFS publications, and the open-source scoring repository.
+The PostFiat Foundation is the steward of the Dynamic UNL system. At launch, it holds centralized authority exercised transparently. This authority is designed to be progressively transferred to community governance. Even while centralized, every action is publicly visible and auditable via on-chain transactions, IPFS publications, Opacity proofs of data collection and LLM calls, and the open-source scoring repository.
 
 ### Foundation Powers
 
@@ -587,12 +621,18 @@ The scoring service is a new, standalone, open-source repository that orchestrat
 ### What It Does (Per Scoring Run)
 
 ```
-PHASE 1: DATA COLLECTION
-├── Query VHS PostgreSQL (agreement, topology, manifests, ballots, geo)
-├── Query Network Monitoring PostgreSQL (alerts, snapshots)
-├── Query on-chain identity records (KYC, institutional domain verification)
-├── Check KYC/KYB status via third-party provider API
-└── Build validator profile JSON for each eligible validator
+PHASE 1: DATA COLLECTION (Opacity-attested)
+├── Query VHS API (agreement, topology, manifests, ballots, geo)
+│   └── Attested by Opacity Network → Store Opacity Proof
+├── Query Network Monitoring API (alerts, snapshots)
+│   └── Attested by Opacity Network → Store Opacity Proof
+├── Query MaxMind GeoIP2 API (continent, country, city, ISP, datacenter)
+│   └── Attested by Opacity Network → Store Opacity Proof
+├── Query SumSub API for active validator KYC status
+│   └── Attested by Opacity Network → Store Opacity Proof
+├── Query on-chain identity records (no attestation needed — ledger data)
+├── Build validator profile JSON for each eligible validator
+└── Publish data snapshot + all Opacity proofs → IPFS
 
 PHASE 2: LLM STEP 1 — INDIVIDUAL SCORES
 ├── Construct system prompt (hardcoded, version-controlled)
@@ -615,7 +655,7 @@ PHASE 4: UNL CONSTRUCTION
 └── Compute sha512Half of UNL JSON
 
 PHASE 5: PUBLICATION
-├── IPFS: publish all artifacts (inputs, config, outputs, proofs, UNL JSON)
+├── IPFS: publish all artifacts (data snapshot, data collection proofs, config, LLM outputs, LLM proofs, UNL JSON)
 ├── HTTPS: upload UNL JSON to endpoint
 └── On-chain: send tx with hash + IPFS CID + sequence + config version
 ```
@@ -672,14 +712,15 @@ postfiatorg/
 ├── validator-history-service       [EXISTS — MODIFY]
 │   └── MaxMind GeoIP2 upgrade      Replace GeoLite2 with paid tier
 │
-├── scoring-onboarding              [EXISTS — NO CHANGES]
-│   └── KYC/KYB + domain verification already implemented
+├── scoring-onboarding              [EXISTS — MODIFY]
+│   ├── KYC/KYB + domain verification already implemented
+│   └── Add Opacity proof generation for KYC and domain verification
 │
 ├── dynamic-unl-scoring             [NEW REPOSITORY]
-│   ├── Data pipeline               Collects metrics, builds profiles
-│   ├── LLM orchestration           Step 1 + Step 2 calls
-│   ├── Opacity integration         MPC-TLS proof generation
-│   ├── IPFS publication            Audit trail storage
+│   ├── Data pipeline               Collects metrics with Opacity proofs, builds profiles
+│   ├── LLM orchestration           Step 1 + Step 2 calls with Opacity proofs
+│   ├── Opacity integration         MPC-TLS proofs for data collection + LLM calls
+│   ├── IPFS publication            Data snapshot + proofs + audit trail
 │   ├── UNL publication             HTTPS + on-chain hash
 │   ├── Prompts                     Version-controlled
 │   └── CI/CD + manual trigger      Deployment + foundation controls
@@ -694,54 +735,54 @@ postfiatorg/
 ### Cross-Service Data Flow
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                                                                        │
-│  ┌──────────┐  SQL   ┌─────────────────────┐  SQL   ┌──────────────┐   │
-│  │   VHS    │◄────── │  SCORING SERVICE    │──────▶ │  Network     │   │
-│  │ Postgres │        │  (new repo)         │        │  Monitoring  │   │
-│  └──────────┘        │                     │        │  Postgres    │   │
-│                      │                     │        └──────────────┘   │
-│  ┌──────────┐  API   │                     │                           │
-│  │ KYC/KYB  │◄────── │                     │                           │
-│  │ (SumSub) │        │                     │                           │
-│  └──────────┘        │                     │                           │
-│                      │         │           │                           │
-│                      └─────────┼───────────┘                           │
-│                                │                                       │
-│               ┌────────────────┼────────────────┐                      │
-│               │                │                │                      │
-│               ▼                ▼                ▼                      │
-│        ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│        │ Cloudflare │  │  Opacity   │  │   IPFS     │                  │
-│        │ AI Gateway │  │  Network   │  │            │                  │
-│        │     │      │  │ (proofs)   │  │ (audit     │                  │
-│        │     ▼      │  │            │  │  trail)    │                  │
-│        │  LLM API   │  │            │  │            │                  │
-│        └────────────┘  └────────────┘  └────────────┘                  │
-│                                │                │                      │
-│                                └────────┬───────┘                      │
-│                                         │                              │
-│                                         ▼                              │
-│                              ┌────────────────────┐                    │
-│                              │   PFT LEDGER       │                    │
-│                              │   (on-chain tx     │                    │
-│                              │    with hash +     │                    │
-│                              │    IPFS CID)       │                    │
-│                              └─────────┬──────────┘                    │
-│                                        │                               │
-│                                        ▼                               │
-│                              ┌────────────────────┐                    │
-│                              │   ALL NODES        │                    │
-│                              │   (postfiatd)      │                    │
-│                              │                    │                    │
-│                              │   UNLHashWatcher   │                    │
-│                              │   DynamicUNLManager│                    │
-│                              │   ValidatorSite    │                    │
-│                              │   ValidatorList    │                    │
-│                              │   Consensus        │                    │
-│                              └────────────────────┘                    │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                                                                          │
+│  ┌──────────┐       ┌─────────────────────┐       ┌──────────────┐      │
+│  │   VHS    │  API  │  SCORING SERVICE    │  API  │  Network     │      │
+│  │          │──────▶│  (new repo)         │◀──────│  Monitoring  │      │
+│  └──────────┘       │                     │       └──────────────┘      │
+│                     │                     │                              │
+│  ┌──────────┐  API  │                     │  API  ┌──────────────┐      │
+│  │ SumSub   │──────▶│                     │◀──────│  MaxMind     │      │
+│  │ KYC/KYB  │       │                     │       │  GeoIP2      │      │
+│  └──────────┘       └──────────┬──────────┘       └──────────────┘      │
+│                                │                                         │
+│           All data fetches attested by OPACITY NETWORK (decentralized)  │
+│                                │                                         │
+│               ┌────────────────┼────────────────┐                        │
+│               │                │                │                        │
+│               ▼                ▼                ▼                        │
+│        ┌────────────┐  ┌────────────┐  ┌────────────┐                    │
+│        │ Cloudflare │  │  Opacity   │  │   IPFS     │                    │
+│        │ AI Gateway │  │  Network   │  │            │                    │
+│        │     │      │  │ (proofs    │  │ (data      │                    │
+│        │     ▼      │  │  for data  │  │  snapshot  │                    │
+│        │  LLM API   │  │  + LLM)   │  │  + proofs  │                    │
+│        └────────────┘  └────────────┘  │  + audit   │                    │
+│                                        │  trail)    │                    │
+│                                        └──────┬─────┘                    │
+│                                               │                          │
+│                                               ▼                          │
+│                              ┌────────────────────┐                      │
+│                              │   PFT LEDGER       │                      │
+│                              │   (on-chain tx     │                      │
+│                              │    with hash +     │                      │
+│                              │    IPFS CID)       │                      │
+│                              └─────────┬──────────┘                      │
+│                                        │                                 │
+│                                        ▼                                 │
+│                              ┌────────────────────┐                      │
+│                              │   ALL NODES        │                      │
+│                              │   (postfiatd)      │                      │
+│                              │                    │                      │
+│                              │   UNLHashWatcher   │                      │
+│                              │   DynamicUNLManager│                      │
+│                              │   ValidatorSite    │                      │
+│                              │   ValidatorList    │                      │
+│                              │   Consensus        │                      │
+│                              └────────────────────┘                      │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -752,7 +793,7 @@ postfiatorg/
 
 | Component | Description | Effort |
 |-----------|-------------|--------|
-| **Scoring service repository** | Data pipeline, LLM orchestration, Opacity integration, IPFS publication, UNL publication, CI/CD | ~50% of total work |
+| **Scoring service repository** | Data pipeline with Opacity-attested collection, LLM orchestration with Opacity proofs, IPFS publication, UNL publication, CI/CD | ~50% of total work |
 | **UNLHashWatcher** (postfiatd) | On-chain hash monitoring. Already prototyped on `feature/dynamic-unl` branch. | Included below |
 | **DynamicUNLManager** (postfiatd) | Score-based validator selection. Already prototyped. | Included below |
 | **featureDynamicUNL amendment** | Amendment definition. Already prototyped. | Included below |
@@ -763,6 +804,7 @@ postfiatorg/
 |-----------|-------------|--------|
 | **postfiatd** (BuildLedger, Application, ValidatorSite) | Integration of new components into existing code paths. ValidatorSite integration is the main unprototyped piece. | ~20% of total work |
 | **VHS MaxMind upgrade** | Replace GeoLite2 with GeoIP2 paid tier. Configuration + API key change. | ~5% of total work |
+| **scoring-onboarding** | Add Opacity proof generation for KYC (SumSub API verification) and institutional domain verification (DoH query). Update on-chain memo format to include `proof_cid`. | ~5% of total work |
 
 ### External Service Setup
 
@@ -775,7 +817,7 @@ postfiatorg/
 ### No Changes Needed
 
 - network-monitoring, infra-monitoring, explorer, testnet-bot, layer-one-agent
-- scoring-onboarding (KYC/KYB and domain verification already built)
+- scoring-onboarding (KYC/KYB and domain verification already built — only needs Opacity proof additions)
 - Existing validator/RPC/archive node infrastructure (just needs updated binary)
 - Consensus engine, RPC handlers, transaction processors, overlay, nodestore
 
@@ -791,12 +833,12 @@ STEP 1 — Parallel Start
 └── External: set up Cloudflare AI Gateway + Opacity accounts
 
 STEP 2 — Scoring Service Development (after Step 1)
-├── Data pipeline (depends on VHS with GeoIP2 data)
-├── LLM orchestration (depends on Cloudflare AI Gateway)
-├── Opacity integration (depends on Opacity account)
-├── IPFS publication
+├── Data pipeline with Opacity-attested collection (depends on VHS with GeoIP2 data + Opacity account)
+├── LLM orchestration with Opacity proofs (depends on Cloudflare AI Gateway + Opacity account)
+├── IPFS publication (data snapshot + all proofs)
 ├── UNL publication (on-chain + HTTPS)
-└── Prompt design and testing
+├── Prompt design and testing
+└── Update scoring-onboarding with Opacity proof generation for KYC and domain verification
 
 STEP 3 — Integration Testing (after Step 2)
 ├── Full pipeline test on devnet
