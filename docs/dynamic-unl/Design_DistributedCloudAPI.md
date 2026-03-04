@@ -1,6 +1,6 @@
 # Dynamic UNL: Upgraded Design Plan
 
-This document supersedes `DesignPlan_v1.md`. Key changes: distributed LLM scoring via Oracle Nodes, TLSNotary proofs on all data sources, Opacity Network for data collection attestation, foundation TLSNotary server for Oracle Node LLM call attestation, and commit-reveal mechanism for submission integrity.
+This document builds on `Design_FoundationCloudAPI.md` with key changes: distributed LLM scoring via Oracle Nodes, TLSNotary proofs on all data sources, Opacity Network for data collection attestation, foundation TLSNotary server for Oracle Node LLM call attestation, and commit-reveal mechanism for submission integrity.
 
 ---
 
