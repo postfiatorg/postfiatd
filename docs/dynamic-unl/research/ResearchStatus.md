@@ -112,94 +112,36 @@ The bond prevents Sybil attacks. KYC is still useful for reputation scoring and 
 
 ---
 
-## Architecture Decision Framework
+## Approaches
 
-Three approaches, from easiest to hardest. They build on each other — nothing is wasted.
+The four architectural approaches for Dynamic UNL scoring are defined in [Approaches.md](../Approaches.md). They differ along two primary axes: **who scores** (foundation vs. distributed nodes) and **where the LLM runs** (cloud API vs. local inference). The proof method follows from the LLM execution: cloud API → MPC-TLS proof (Opacity/TLSNotary), local inference → proof-of-logits.
 
-### Approach A: Remote API + TLSNotary
-
-Scoring nodes call a remote LLM API and prove the call happened.
-
-- **Proves**: the API was genuinely called (not that the computation was correct)
-- **Effort**: medium — design is complete in DesignPlan_v2.md
-- **Cost**: each node pays per API call (adds up with many nodes)
-- **Hardware**: any cheap VPS
-- **Decentralization**: moderate — everyone depends on the same LLM provider
-- **Ships**: fastest
-
-### Approach B: Open-Weight API via OpenRouter + TLSNotary
-
-Same as A, but using an open-weight model through OpenRouter. Since the model weights are public, anyone can re-run the inference to audit the results.
-
-- **Proves**: the API was called + anyone can verify by re-running
-- **Effort**: minimal change from A — just swap the model endpoint
-- **Cost**: cheaper than A (open-weight models cost less)
-- **Hardware**: any cheap VPS
-- **Decentralization**: better than A — dishonest results are independently detectable
-- **Ships**: same speed as A
-- **Requires**: an open-weight model that scores well enough (open question #4)
-
-### Approach C: Local Inference + Proof of Logits
-
-Validators run the model themselves and prove computation via logit hashes. Other validators spot-check. Inspired by Ambient but built from scratch for our use case.
-
-- **Proves**: the actual computation happened correctly
-- **Effort**: high — must build logit commitment, spot-check verification, challenge protocol. No existing code to reuse.
-- **Cost**: low per round (no API fees, just hardware time)
-- **Hardware**: depends on model size. 7B-32B: consumer hardware or ~$1/hr cloud. 70B+: mid-tier cloud.
-- **Decentralization**: strongest — no external dependencies
-- **Ships**: slowest — months of work, cross-hardware determinism is an unsolved problem
-- **Requires**: open-weight model quality (#4) + determinism (#5) + significant engineering
-
-### Decision Tree
-
-```
-Can an open-weight model score well enough?
-│
-├─ NO → Ship Approach A. Local inference path is blocked.
-│
-└─ YES
-    │
-    Can we get reliable determinism across hardware (>0.99 correlation)?
-    │
-    ├─ NO → Ship Approach B. Open model + API + TLSNotary.
-    │        Anyone can audit by re-running. Good enough.
-    │
-    └─ YES
-         │
-         Do we have the time and funding to build it?
-         │
-         ├─ NO → Ship B now, build toward C later.
-         │
-         └─ YES → Build Approach C. The strongest possible architecture.
-```
-
-### Recommended Path
-
-**Build A → B → C in order.** Start building A now (it's fully designed). Run the two critical benchmarks (#4 model quality, #5 determinism) in parallel — they take days, not months. Their results tell us how far we can go.
-
-All infrastructure from A (commit-reveal, Opacity, TLSNotary server, IPFS, on-chain hashing) carries forward to B and C. Only the inference and verification layer changes.
+| Approach | Who Scores | LLM Execution | Proof Method | Existing Design |
+|----------|-----------|--------------|-------------|-----------------|
+| 1 | Foundation | Cloud API | Opacity | DesignPlan_v1 |
+| 2 | Distributed Nodes | Cloud API | TLSNotary | DesignPlan_v2 |
+| 3 | Foundation | Local | Proof-of-logits | None yet |
+| 4 | Distributed Nodes | Local | Proof-of-logits | None yet |
 
 ---
 
 ## Research Priority
 
-Ordered to answer the decision tree questions first:
+Ordered by what blocks approach selection and design decisions:
 
 | # | What | Why |
 |---|------|-----|
-| **1** | Benchmark open-weight models on our scoring task | Determines if B and C are possible at all |
-| **2** | Test cross-hardware determinism with our prompts | Determines if C is possible |
+| **1** | Benchmark open-weight models on our scoring task | Determines if local inference approaches (3, 4) are viable |
+| **2** | Test cross-hardware determinism with our prompts | Determines if proof-of-logits verification works reliably |
 | **3** | Find out Opacity pricing | Needed for all approaches (data collection) |
 | **4** | Test Opacity SDK end-to-end | Confirm it actually works |
-| **5** | Set up TLSNotary server | Needed for A and B |
-| **6** | Calculate LLM costs (API vs local vs OpenRouter) | Economics of A vs B vs C |
-| 7 | Test OpenRouter with TLSNotary | Validates Approach B |
-| 8 | PFT bond amount analysis | Can adjust later |
-| 9 | Test scoring round timing on devnet | Can adjust later |
-| 10 | Measure actual proof sizes | Measured during #4 and #5 |
-| 11 | Compare IPFS pinning services | Commodity decision |
-| 12 | Define scoring node hardware requirements | Falls out of model choice |
-| 13 | Test scoring quality without identity data | Can ship with current plan first |
-| 14 | Confirm LLM provider version pinning policy | Quick check, or irrelevant if going open-weight |
-| 15 | Decide prompt governance model | Governance question, not blocking |
+| **5** | Set up TLSNotary server | Needed for Approach 2 |
+| **6** | Calculate LLM costs (API vs local) | Economics of cloud vs local approaches |
+| 7 | PFT bond amount analysis | Needed for Approach 2 and 4 |
+| 8 | Test scoring round timing on devnet | Can adjust later |
+| 9 | Measure actual proof sizes | Measured during #4 and #5 |
+| 10 | Compare IPFS pinning services | Commodity decision |
+| 11 | Define scoring node hardware requirements | Falls out of model and approach choice |
+| 12 | Test scoring quality without identity data | Can ship with current plan first |
+| 13 | Confirm LLM provider version pinning policy | Quick check, or irrelevant if going open-weight |
+| 14 | Decide prompt governance model | Governance question, not blocking |
