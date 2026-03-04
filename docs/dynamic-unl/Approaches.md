@@ -1,6 +1,6 @@
 # Dynamic UNL: Approaches
 
-High-level architectural approaches for the Dynamic UNL scoring system. Each approach describes a fundamentally different way to organize validator scoring. Specific designs (DesignPlan_v1, DesignPlan_v2, and future plans) are detailed implementations of one of these approaches.
+High-level architectural approaches for the Dynamic UNL scoring system. Each approach describes a fundamentally different way to organize validator scoring. Specific designs (Design_FoundationCloudAPI, Design_DistributedCloudAPI, and future plans) are detailed implementations of one of these approaches.
 
 ---
 
@@ -52,7 +52,7 @@ The foundation runs the scoring service. It collects data, calls a cloud LLM API
 
 **Complexity:** Lowest. Single scoring service, no distributed coordination, no commit-reveal, no bond mechanism, no quorum rules. Straightforward pipeline: collect data → call LLM → publish.
 
-**Time to ship:** Fastest. The design is fully specified (see DesignPlan_v1).
+**Time to ship:** Fastest. The design is fully specified (see Design_FoundationCloudAPI).
 
 **Centralization:** Most centralized. A single entity collects data, scores validators, and publishes the UNL. Every step is provable and auditable, but the foundation controls the process.
 
@@ -68,7 +68,7 @@ The foundation runs the scoring service. It collects data, calls a cloud LLM API
 
 **Institutional impact:** Simple and auditable, which institutions appreciate. However, institutions may hesitate to rely on a network where a single entity controls validator selection — even with transparency. Regulatory clarity is straightforward (one accountable entity) but the centralization may be seen as a risk.
 
-**Existing design:** DesignPlan_v1.
+**Existing design:** Design_FoundationCloudAPI.
 
 ---
 
@@ -96,7 +96,7 @@ Multiple independent Oracle Nodes each call a cloud LLM API with the same data a
 
 **Institutional impact:** Attractive trust model. Multiple independent scorers with economic bonds demonstrate seriousness. Institutions can participate as Oracle Node operators, giving them direct influence over scoring quality. The distributed model is more defensible from a regulatory perspective (no single entity makes the decision). Foundation's notary censorship risk is a concern but is publicly detectable.
 
-**Existing design:** DesignPlan_v2.
+**Existing design:** Design_DistributedCloudAPI.
 
 ---
 
@@ -171,4 +171,4 @@ Multiple independent Oracle Nodes each run the same open-weight LLM on their own
 | **Key risk** | Single point of trust | Quorum + API dependency | Determinism unsolved | Determinism + high barrier |
 | **Community** | Audit only | Audit + participate | Audit with GPU | Audit + participate with GPU |
 | **Institutions** | Simple but centralized | Distributed trust, can participate | Provable but centralized | Strongest trust, highest cost |
-| **Existing design** | DesignPlan_v1 | DesignPlan_v2 | None | None |
+| **Existing design** | Design_FoundationCloudAPI | Design_DistributedCloudAPI | None | None |
