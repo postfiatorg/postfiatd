@@ -261,23 +261,116 @@ This is the hardest unsolved problem in the proof-of-logits approach.
 
 ---
 
+## Architecture Decision Framework
+
+There are three viable approaches for the Dynamic UNL scoring system. They are not mutually exclusive — they form a natural progression from easiest/weakest to hardest/strongest. The decision on which to target (and when) depends on research outcomes that are not yet known.
+
+### Approach A: Remote API + TLSNotary (DesignPlan_v2.md)
+
+Oracle Nodes call a remote LLM API (Anthropic/OpenAI) and prove the call via TLSNotary. Foundation attests Oracle Node calls; Opacity attests foundation data collection.
+
+| Dimension | Assessment |
+|-----------|------------|
+| **What it proves** | The LLM API was genuinely called. Does NOT prove the computation was correct or that the provider returned consistent results. |
+| **Implementation effort** | Medium. TLSNotary notary server setup, Opacity integration, commit-reveal protocol, Oracle Node client. All designed in DesignPlan_v2.md. |
+| **Trust assumptions** | LLM provider (Anthropic/OpenAI) returns honest results. Foundation's TLSNotary notary is honest (mitigated by Oracle Node ≠ Foundation separation). Opacity's notary network is honest (mitigated by EigenLayer staking). |
+| **Cost per round** | N Oracle Nodes × 2 API calls × frontier model pricing. Non-trivial at scale. |
+| **Hardware for operators** | Commodity VPS. No GPU needed. |
+| **Decentralization** | Moderate. Multiple Oracle Nodes, but all depend on the same LLM provider and on the foundation's notary server. |
+| **Time to ship** | Fastest. Design is complete. |
+| **Open blockers** | Opacity pricing (#1), Opacity SDK test (#2), TLSNotary server setup (#3). |
+
+### Approach B: Remote Open-Weight API via OpenRouter + TLSNotary
+
+Same as Approach A, but Oracle Nodes call an open-weight model (Qwen, Llama, DeepSeek) through OpenRouter instead of a proprietary model. TLSNotary proves the call.
+
+| Dimension | Assessment |
+|-----------|------------|
+| **What it proves** | Same as A — the API was called. But the model weights are publicly known, so anyone can re-run the same inference to verify the output is plausible. |
+| **Implementation effort** | Low incremental over A. Swap the API endpoint and model name. |
+| **Trust assumptions** | OpenRouter serves the claimed model honestly. Same TLSNotary/Opacity assumptions as A. |
+| **Cost per round** | Lower than A. Open-weight models on OpenRouter are cheaper than frontier proprietary models. |
+| **Hardware for operators** | Commodity VPS. No GPU needed. |
+| **Decentralization** | Slightly better than A. Model weights are public, so dishonest API responses can be independently detected by re-running. |
+| **Time to ship** | Same as A (minor config change). |
+| **Open blockers** | Same as A, plus: open-weight model scoring quality benchmark (#5a). |
+
+### Approach C: Local Inference + Proof of Logits
+
+Validators run a pinned open-weight model locally. They publish scores alongside logit hashes. Other validators spot-check random token positions and challenge on mismatch. Inspired by Ambient's Continuous Proof of Logits, but adapted for PostFiat's weekly scoring cadence and smaller network.
+
+| Dimension | Assessment |
+|-----------|------------|
+| **What it proves** | The actual computation — the model genuinely produced the output. Fundamentally stronger than proving an API call. |
+| **Implementation effort** | High. Build: logit commitment scheme, spot-check verification, challenge/dispute protocol, scoring node qualification, deterministic inference stack. No existing code to reuse (Ambient's code is Solana-specific Rust, not portable). |
+| **Trust assumptions** | Model weights are hash-pinned (public, verifiable). Inference is near-deterministic (logit correlation >0.99 required). Hardware homogeneity constraints may apply. |
+| **Cost per round** | Low marginal cost. One-time model download. RunPod cron job ($1-25/run) or local hardware (Mac Mini/Studio, amortized). No per-call API fees. |
+| **Hardware for operators** | Depends on model size. 7B-32B: consumer hardware or cheap cloud. 70B+: mid-tier cloud. 100B+: datacenter GPUs. |
+| **Decentralization** | Strongest. No LLM provider dependency. No foundation notary in the scoring path. Validators are fully independent. |
+| **Time to ship** | Longest. Months of research and implementation. Cross-hardware determinism is an unsolved problem at production scale. |
+| **Open blockers** | Open-weight model quality (#5a), cross-hardware determinism (#5c), logit verification implementation (no code exists, must be built from scratch based on Ambient's published concepts). |
+
+### Decision Tree
+
+```
+Q1: Can an open-weight model produce acceptable scoring quality?
+    │
+    ├── NO → Approach A (proprietary API + TLSNotary). Ship it.
+    │         Open-weight models aren't good enough.
+    │         Local inference path is blocked regardless of determinism.
+    │
+    └── YES
+         │
+         Q2: Is cross-hardware logit correlation achievable (>0.99)?
+              │
+              ├── NO → Approach B (open-weight via OpenRouter + TLSNotary).
+              │         Good model quality but can't prove computation locally.
+              │         Still better than A: anyone can re-run to audit.
+              │
+              └── YES
+                   │
+                   Q3: Is the implementation effort justified given timeline/funding?
+                        │
+                        ├── NO → Approach B now, Approach C later.
+                        │         Ship B quickly, build toward C over time.
+                        │
+                        └── YES → Approach C (local inference + proof of logits).
+                                  The strongest architecture. Worth the effort
+                                  if funding and timeline allow.
+```
+
+### Recommended Path
+
+**Ship in order: A → B → C.** Each phase is independently valuable and the system can operate at any phase indefinitely.
+
+1. **Start building Approach A now** (DesignPlan_v2.md). It's fully designed and has the fewest unknowns. Gets Dynamic UNL live on devnet/testnet while harder research continues.
+2. **Run the two critical benchmarks in parallel** (#5a model quality, #5c determinism). These take days, not months. Their results determine whether B and C are viable.
+3. **If benchmarks pass**: transition to B (quick, just swap the model), then build toward C (the endgame).
+4. **If benchmarks fail**: stay on A. It's still a massive improvement over XRPL's opaque manual UNL selection.
+
+No approach is wasted — A's infrastructure (commit-reveal, Opacity, TLSNotary server, IPFS publication, on-chain hash) is reused by B and C. The only thing that changes between approaches is how the LLM inference is executed and verified.
+
+---
+
 ## Research Priority Order
 
-| Priority | Item | Blocking? |
-|----------|------|-----------|
-| 1 | Open-weight model quality benchmark (#5a) | Yes — determines entire architecture direction |
-| 2 | Cross-hardware determinism testing (#5c) | Yes — validates proof-of-logits feasibility |
-| 3 | Opacity pricing (#1) | Yes — affects data collection architecture |
-| 4 | Opacity SDK integration test (#2) | Yes — validates core assumption |
-| 5 | TLSNotary notary-server setup (#3) | Yes — needed for Phase 2 |
-| 6 | LLM costs: API vs local vs OpenRouter (#6) | Yes — affects Oracle Node economics |
-| 7 | Phased implementation strategy (#13) | No — planning, not blocking |
-| 8 | OpenRouter as intermediate step (#14) | No — optimization |
-| 9 | TLSNotary fork decision (#4) | No — depends on #5 results |
-| 10 | Proof size measurement (#10) | No — measured during #2 and #4 |
-| 11 | Identity requirements (#15) | No — can ship with current plan, revisit later |
-| 12 | PFT bond justification (#7) | No — can be adjusted before mainnet |
-| 13 | Commit-reveal timing (#8) | No — validated during devnet testing |
-| 14 | IPFS pinning service (#9) | No — commodity decision |
-| 15 | Scoring node hardware (#11) | No — derived from model choice |
-| 16 | LLM model stability (#12) | No — irrelevant if moving to local inference |
+Research is ordered to answer the decision tree questions as fast as possible:
+
+| Priority | Item | Purpose |
+|----------|------|---------|
+| **1** | Open-weight model quality benchmark (#5a) | **Answers Q1.** Determines if B and C are viable at all. |
+| **2** | Cross-hardware determinism testing (#5c) | **Answers Q2.** Determines if C is viable. |
+| **3** | Opacity pricing (#1) | Needed for A/B/C (data collection attestation is common to all). |
+| **4** | Opacity SDK integration test (#2) | Validates Opacity works in practice. |
+| **5** | TLSNotary notary-server setup (#3) | Needed for A and B. Also useful fallback infra for C. |
+| **6** | LLM costs: API vs local vs OpenRouter (#6) | Informs economics of A vs B vs C. |
+| 7 | Phased implementation strategy (#13) | Planning. |
+| 8 | OpenRouter as intermediate step (#14) | Validates B specifically. |
+| 9 | TLSNotary fork decision (#4) | Depends on #5 results. |
+| 10 | Proof size measurement (#10) | Measured during #4 and #5. |
+| 11 | Identity requirements (#15) | Can ship with current plan, revisit later. |
+| 12 | PFT bond justification (#7) | Can be adjusted before mainnet. |
+| 13 | Commit-reveal timing (#8) | Validated during devnet testing. |
+| 14 | IPFS pinning service (#9) | Commodity decision. |
+| 15 | Scoring node hardware (#11) | Derived from model choice. |
+| 16 | LLM model stability (#12) | Irrelevant if moving to local inference. |
