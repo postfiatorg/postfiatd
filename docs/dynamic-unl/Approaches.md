@@ -58,9 +58,9 @@ The foundation runs the scoring service. It collects data, calls a cloud LLM API
 
 **Cost to foundation:** LLM API fees per round (2 calls × model pricing), Opacity Network fees for data collection and LLM proofs, IPFS pinning, infrastructure hosting.
 
-**Cost to nodes:** None. There are no scoring nodes — only the foundation scores.
+**Cost to nodes:** None. There are no Oracle Nodes — only the foundation scores.
 
-**Node rewards:** Not applicable. No external scoring nodes participate.
+**Node rewards:** Not applicable. No external Oracle Nodes participate.
 
 **Key risk:** Single point of trust and failure. If the foundation is compromised, coerced, or acts maliciously, scoring is compromised — even though the community can detect it after the fact via the published audit trail.
 
@@ -116,7 +116,7 @@ The foundation runs an open-weight LLM on its own hardware (or rented GPU instan
 
 **Cost to nodes:** None for passive observation. To challenge a score (spot-check), a community member or institution needs access to the same model on compatible GPU hardware — a meaningful barrier for casual participants.
 
-**Node rewards:** Not applicable. No external scoring nodes participate. Challengers are not formally rewarded (challenge is a community service, similar to how anyone can audit financial statements).
+**Node rewards:** Not applicable. No external Oracle Nodes participate. Challengers are not formally rewarded (challenge is a community service, similar to how anyone can audit financial statements).
 
 **Key risk:** Cross-hardware determinism is the blocking prerequisite. If two machines running the same model on different GPU types produce different logits, spot-checks produce false positives. This could be mitigated by standardizing on a specific GPU type, but that limits who can verify. The determinism problem is the subject of active research (see ResearchStatus.md).
 
@@ -130,7 +130,7 @@ The foundation runs an open-weight LLM on its own hardware (or rented GPU instan
 
 ## Approach 4: Distributed Nodes + Local Inference
 
-Multiple independent scoring nodes each run the same open-weight LLM on their own hardware. Each node publishes logit commitments proving their computation. Other nodes spot-check each other. Scores are aggregated via median. This combines the distributed trust of Approach 2 with the computational proofs of Approach 3.
+Multiple independent Oracle Nodes each run the same open-weight LLM on their own hardware. Each node publishes logit commitments proving their computation. Other nodes spot-check each other. Scores are aggregated via median. This combines the distributed trust of Approach 2 with the computational proofs of Approach 3.
 
 **Trust model:** Strongest. No dependency on cloud APIs, no single scorer, and computation is mathematically verifiable. Each node runs the model independently, commits logit hashes, and is subject to random spot-checks by other nodes. Dishonest nodes risk detection and potential slashing. The combination of distributed scoring + proof-of-logits means no single entity can manipulate the outcome without being caught.
 
@@ -146,11 +146,11 @@ Multiple independent scoring nodes each run the same open-weight LLM on their ow
 
 **Node rewards:** Scoring node operators are compensated via the Task Node product. The higher hardware costs make adequate compensation important for network participation.
 
-**Key risk:** Cross-hardware determinism (same as Approach 3, but worse — multiple independent operators with different hardware make determinism harder to guarantee). High hardware barrier may limit the number of scoring nodes, threatening quorum. If too few nodes can afford to participate, the system degrades toward centralization in practice even if decentralized in design.
+**Key risk:** Cross-hardware determinism (same as Approach 3, but worse — multiple independent operators with different hardware make determinism harder to guarantee). High hardware barrier may limit the number of Oracle Nodes, threatening quorum. If too few nodes can afford to participate, the system degrades toward centralization in practice even if decentralized in design.
 
-**Community impact:** Highest trust — scoring is distributed and mathematically provable. Community members with GPU access can participate as scoring nodes or independently verify any score. However, the hardware barrier creates a participation gap: well-resourced community members can fully engage, while others must trust the system passively. This is analogous to Bitcoin mining — trustless in design, but participation requires resources.
+**Community impact:** Highest trust — scoring is distributed and mathematically provable. Community members with GPU access can participate as Oracle Nodes or independently verify any score. However, the hardware barrier creates a participation gap: well-resourced community members can fully engage, while others must trust the system passively. This is analogous to Bitcoin mining — trustless in design, but participation requires resources.
 
-**Institutional impact:** Most attractive from a trust and compliance perspective. No single entity controls scoring, and every score is mathematically verifiable. Institutions with technical resources can run their own scoring nodes, giving them direct participation. The decentralized, provable model is the strongest argument in regulatory discussions. However, the hardware cost and operational complexity may deter institutions that prefer simpler setups. The unproven determinism guarantees add risk compared to the battle-tested MPC-TLS approach.
+**Institutional impact:** Most attractive from a trust and compliance perspective. No single entity controls scoring, and every score is mathematically verifiable. Institutions with technical resources can run their own Oracle Nodes, giving them direct participation. The decentralized, provable model is the strongest argument in regulatory discussions. However, the hardware cost and operational complexity may deter institutions that prefer simpler setups. The unproven determinism guarantees add risk compared to the battle-tested MPC-TLS approach.
 
 **Existing design:** No design document yet.
 
@@ -160,7 +160,7 @@ Multiple independent scoring nodes each run the same open-weight LLM on their ow
 
 | Dimension | Approach 1 | Approach 2 | Approach 3 | Approach 4 |
 |-----------|-----------|-----------|-----------|-----------|
-| **Who scores** | Foundation | Oracle Nodes | Foundation | Scoring Nodes |
+| **Who scores** | Foundation | Oracle Nodes | Foundation | Oracle Nodes |
 | **Where LLM runs** | Cloud API | Cloud API | Local hardware | Local hardware |
 | **How proven** | Opacity (MPC-TLS) | TLSNotary (MPC-TLS) | Proof-of-logits | Proof-of-logits |
 | **Complexity** | Low | High | Medium-high | Highest |
