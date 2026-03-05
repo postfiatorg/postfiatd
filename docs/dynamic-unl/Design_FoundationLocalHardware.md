@@ -1,28 +1,26 @@
 # Dynamic UNL: Foundation + Local Inference Design
 
-The foundation runs an open-weight LLM on its own hardware and proves computation via proof-of-logits. This is Approach 3 in [Approaches.md](Approaches.md) — it replaces cloud API dependency with local inference and replaces MPC-TLS proofs of API calls with cryptographic commitments of model internals.
+The foundation runs an open-weight LLM on its own hardware and proves computation via proof-of-logits. This is Approach 3 in [Approaches.md](Approaches.md) — it replaces cloud API dependency with local inference and uses cryptographic commitments of model internals to prove computation.
 
 ---
 
 ## How This Differs from Design_FoundationCloudAPI
 
-Design_FoundationCloudAPI (Approach 1) proves scoring by showing that a cloud LLM API was genuinely called via Opacity Network (MPC-TLS). The proof says: "this API was called with this prompt and returned this response."
-
-This design replaces that proof with something stronger. The foundation runs the model locally and publishes cryptographic commitments of the model's internal outputs (logits) at every token position. Anyone with GPU access can spot-check any position by re-running a single forward pass and comparing hashes. The proof says: "this specific computation was performed with this specific model."
+Design_FoundationCloudAPI (Approach 1) uses a cloud LLM API. This design replaces that with local inference — the foundation runs the model on its own hardware and publishes cryptographic commitments of the model's internal outputs (logits) at every token position. Anyone with GPU access can spot-check any position by re-running a single forward pass and comparing hashes. The proof says: "this specific computation was performed with this specific model."
 
 Key differences:
 
 | Aspect | Approach 1 (Cloud API) | Approach 3 (Local Inference) |
 |--------|----------------------|----------------------------|
 | LLM execution | Cloud API (Anthropic, OpenAI) | Foundation-owned or rented GPU |
-| Proof method | Opacity Network (MPC-TLS on API call) | Proof-of-logits (cryptographic commitment of model internals) |
-| What proof demonstrates | "An API was called" | "This computation was performed" |
-| Verification | Anyone can verify Opacity proof (no hardware needed) | Anyone with compatible GPU can spot-check (~0.1% of inference cost) |
+| Proof method | None (trust foundation) | Proof-of-logits (cryptographic commitment of model internals) |
+| What proof demonstrates | N/A | "This computation was performed" |
+| Verification | Read published reasoning on IPFS | Anyone with compatible GPU can spot-check (~0.1% of inference cost) |
 | Cherry-picking resistance | Weak — foundation can call API multiple times, publish preferred result | Stronger — re-running from scratch and committing different logits requires full re-computation, detectable if anyone checks |
 | Model constraint | Any model (proprietary or open-weight) | Open-weight models only (verifiers must run the same model) |
-| External dependency | Cloud API availability + Opacity Network | None (self-contained) |
+| External dependency | Cloud API availability | None (self-contained) |
 
-Everything else — data collection (Opacity-attested), on-chain publication, node-side components, identity gate, IPFS audit trail — is identical. See [Approaches.md](Approaches.md) Common Infrastructure.
+Everything else — data collection, on-chain publication, node-side components, identity gate, IPFS audit trail — is identical. See [Approaches.md](Approaches.md) Common Infrastructure.
 
 ---
 
@@ -117,7 +115,7 @@ A single spot-check requires one forward pass up to position `i`. For a response
 ### What Proof-of-Logits Does NOT Prove
 
 - It does not prove the foundation only ran the model once (cherry-picking is still possible — the foundation could run inference multiple times and publish the preferred result's commitment)
-- It does not prove the foundation used the best available data (data integrity is handled separately via Opacity)
+- It does not prove the foundation used the best available data (data integrity is handled by publishing the snapshot to IPFS for cross-checking)
 - It does not guarantee deterministic reproduction (see Determinism section below)
 
 Cherry-picking is harder than in Approach 1 because each run requires full GPU inference (not a cheap API call) and each run produces a completely new logit commitment. The foundation cannot mix and match — it must commit to a single complete run.
@@ -150,7 +148,7 @@ There is no formal on-chain challenge or slashing mechanism. Verification is com
 
 ## Data Collection
 
-Data collection is identical across all approaches. The foundation collects validator performance data from VHS, Network Monitoring, MaxMind GeoIP2, and SumSub. Every API call is attested by Opacity Network. The resulting data snapshot and proofs are published to IPFS.
+Data collection is identical across all approaches. The foundation collects validator performance data from VHS, MaxMind GeoIP2, and SumSub. The resulting data snapshot is published to IPFS for anyone to inspect and cross-check.
 
 See [Approaches.md](Approaches.md) Common Infrastructure for details.
 
@@ -161,14 +159,14 @@ See [Approaches.md](Approaches.md) Common Infrastructure for details.
 | Artifact | Where Published |
 |----------|----------------|
 | Data snapshot (validator profiles) | IPFS |
-| Opacity proofs of data collection | IPFS |
+| Data collection methodology and sources | IPFS |
 | Scoring configuration (model version, weight hash, prompt versions) | IPFS |
 | Logit commitment (ordered list of position hashes) | IPFS |
 | LLM output (scores + reasoning for Step 1 and Step 2) | IPFS |
 | Final UNL JSON | IPFS + HTTPS endpoint |
 | UNL hash + audit trail IPFS CID + sequence + config version | On-chain transaction |
 
-The logit commitment is the key addition compared to Approach 1. It replaces the Opacity proof of the LLM API call.
+The logit commitment is the key addition compared to Approach 1.
 
 ---
 
@@ -203,10 +201,10 @@ The foundation is the single scorer — the same level of centralization as Appr
 |----------|----------------------|----------------------------|
 | Proof type | "An API was called" | "This computation was performed" |
 | Cherry-picking | Easy — API calls are cheap, call multiple times | Harder — each run requires full GPU inference |
-| Fabrication | Impossible (MPC-TLS prevents) | Impossible (logit commitment prevents) |
-| Verification cost | Free (verify Opacity proof) | ~0.1% of inference cost per spot-check |
-| Verification barrier | None (anyone can verify proofs) | GPU access required |
-| External dependency | Cloud API + Opacity Network | None |
+| Fabrication | Not provable | Impossible (logit commitment prevents) |
+| Verification cost | None (trust foundation) | ~0.1% of inference cost per spot-check |
+| Verification barrier | None (read published reasoning) | GPU access required |
+| External dependency | Cloud API | None |
 
 The trust model is: **centralized scorer with mathematically verifiable computation, community-audited.** Stronger than "centralized scorer with API call proof" (Approach 1), but weaker than "distributed scorers" (Approach 2/4).
 
@@ -214,13 +212,13 @@ The trust model is: **centralized scorer with mathematically verifiable computat
 
 ## Community Impact
 
-Proof-of-logits gives the community something Approach 1 cannot: the ability to independently verify that the foundation actually performed the computation it claims. In Approach 1, community members can check Opacity proofs (which confirm an API was called), but they cannot re-run the proprietary model to verify the result. Here, anyone with a GPU can download the open-weight model, re-run a spot-check, and mathematically confirm the foundation was honest.
+Proof-of-logits gives the community something Approach 1 cannot: the ability to independently verify that the foundation actually performed the computation it claims. In Approach 1, community members can read the published reasoning but cannot independently verify the computation. Here, anyone with a GPU can download the open-weight model, re-run a spot-check, and mathematically confirm the foundation was honest.
 
 **The hardware barrier is the main limitation.** Most community members do not have GPU access. This creates a two-tier community: those who can verify (GPU owners, cloud GPU renters, institutions) and those who must trust the verifiers. In practice, this is acceptable — a single honest verifier catching a mismatch is enough to expose dishonesty, and the result is publicly visible to everyone.
 
 **Community perception is likely positive but cautious.** The open-weight model and published logit commitments signal strong transparency intent. The community can read every score's reasoning, inspect the model, and audit the prompts — all impossible with proprietary cloud APIs. However, the foundation remains the single scorer. Community members who want distributed control (multiple independent scorers) will see this as an improvement over Approach 1 but not a final destination. Framing Approach 3 as a stepping stone toward Approach 4 helps manage this expectation.
 
-**Participation opportunities are limited.** Community members cannot score — only audit. This is the same as Approach 1. The difference is that auditing is more meaningful here (mathematical verification vs. reading Opacity proofs). For community members who want active participation in scoring, Approach 2 or 4 is necessary.
+**Participation opportunities are limited.** Community members cannot score — only audit. This is the same as Approach 1. The difference is that auditing is more meaningful here (mathematical verification vs. reading published reasoning). For community members who want active participation in scoring, Approach 2 or 4 is necessary.
 
 ---
 
@@ -230,7 +228,7 @@ Institutions that value mathematical rigor will find this approach more compelli
 
 **The single-scorer centralization is still a concern.** Institutions evaluating PostFiat for regulatory compliance or governance purposes may flag that one entity controls all scoring decisions, even if those decisions are verifiable. This is the same objection as Approach 1, softened by stronger proofs but not eliminated.
 
-**The unproven technology is a risk factor.** Proof-of-logits is not battle-tested at scale. Institutions that prefer conservative, proven mechanisms may view Opacity/TLSNotary proofs (Approach 1/2) as more reliable, even though they prove less. The determinism problem adds uncertainty — if spot-checks produce false positives, the verification story weakens. Institutions will want to see the determinism research resolved before committing confidence to this approach.
+**The unproven technology is a risk factor.** Proof-of-logits is not battle-tested at scale. Institutions that prefer conservative, proven mechanisms may view simpler auditable systems (Approach 1/2) as more reliable. The determinism problem adds uncertainty — if spot-checks produce false positives, the verification story weakens. Institutions will want to see the determinism research resolved before committing confidence to this approach.
 
 **Regulatory clarity is straightforward.** One accountable entity (the foundation) makes all scoring decisions. This is simple to explain to regulators. The verifiability of computation is an additional positive — it demonstrates that the foundation cannot fabricate results, which strengthens the governance narrative.
 
@@ -243,7 +241,7 @@ Institutions that value mathematical rigor will find this approach more compelli
 | Cost Category | Bearer | Estimate |
 |--------------|--------|----------|
 | GPU hardware/rental | Foundation | $0.50-15/hr depending on model size |
-| Data collection (Opacity) | Foundation | Per-round Opacity fees (same as all approaches) |
+| Data collection | Foundation | Operational cost |
 | IPFS pinning | Foundation | Commodity cost |
 | Infrastructure (servers, monitoring) | Foundation | Operational cost |
 | LLM API fees | None | Replaced by local inference |

@@ -6,16 +6,6 @@ What we know, what we don't, and what to do next.
 
 ## What We Know
 
-### How to prove API calls are real (TLSNotary + Opacity)
-
-TLSNotary lets two parties jointly participate in an HTTPS connection so that one can prove to the other that a real API call happened. The proof can show the full request and response while hiding secrets like API keys. It only supports TLS 1.2 today, but all major LLM providers still support 1.2.
-
-Opacity Network is a production service built on top of TLSNotary. Instead of running your own proof server, you use Opacity's decentralized network of proof servers. They're backed by economic guarantees (operators lose money if they cheat). No tokens needed to use it — just an API key from their developer portal.
-
-We looked at 7 alternatives (Reclaim, zkPass, Pluto, Primus Labs, DECO, Nillion). Opacity is the best fit. Primus Labs is a decent backup. If all third parties fail, we can always run our own TLSNotary server.
-
-**Decision made:** Use Opacity to prove the foundation's data collection calls (so we can't fake the data we feed to the LLM). Use our own TLSNotary server to prove Oracle Nodes' LLM API calls (the trust separation between Oracle Node and foundation is already built into the protocol).
-
 ### How Ambient does proof of logits
 
 Ambient is a blockchain ($74M+ raised, a16z-backed) where the "mining" is running LLM inference. Their approach:
@@ -52,21 +42,12 @@ Testing with 150+ runs showed >0.93 correlation in controlled conditions. Needs 
 
 ## What We Don't Know Yet
 
-### 1. Opacity pricing
-We know it's API-key-only (no tokens), but the actual pricing isn't public. We generate proofs for 4-5 data sources every scoring round. Need to sign up and find out the real cost. If it's too expensive, we fall back to running our own TLSNotary server.
-
-### 2. Does Opacity actually work for us?
-Need to build a quick test: call the VHS API through Opacity, generate a proof, verify it. Measure how long it takes, how big the proof is, and whether it breaks.
-
-### 3. Can we run a TLSNotary server?
-Need to set up the reference TLSNotary server, test it with a simulated Oracle Node, and figure out what customizations we need (authentication, rate limiting, monitoring). Then decide: fork the project or wrap it with a proxy.
-
-### 4. Can an open-weight model score validators well enough?
+### 1. Can an open-weight model score validators well enough?
 The current design uses Claude (proprietary, can't run locally). To move toward local inference, we need an open-weight model (Qwen 3.5, Llama 4, DeepSeek) that produces scoring quality comparable to Claude. This needs a benchmark: run our actual scoring prompts through candidates and compare results.
 
 If no open model is good enough, the local inference path is dead and we stay with API-based scoring.
 
-### 5. Can we achieve reliable determinism for proof of logits?
+### 2. Can we achieve reliable determinism for proof of logits?
 The >0.93 correlation from 150+ controlled runs is promising but not enough. We need >0.99 for spot-check verification to work. Need to test with our actual scoring prompts on real hardware.
 
 Possible approaches if perfect determinism isn't achievable:
@@ -75,7 +56,7 @@ Possible approaches if perfect determinism isn't achievable:
 - Use optimistic verification — assume honesty, slash on challenge
 - Use OpenRouter so everyone hits the same API endpoint (hybrid approach)
 
-### 6. How much does each scoring round cost?
+### 3. How much does each scoring round cost?
 With N nodes × 2 API calls × model pricing per round:
 - Claude Opus: expensive
 - Open-weight via OpenRouter: cheaper
@@ -83,45 +64,37 @@ With N nodes × 2 API calls × model pricing per round:
 
 Need real numbers to evaluate.
 
-### 7. Is 100,000 PFT the right bond amount?
+### 4. Is 100,000 PFT the right bond amount?
 Too low = easy to create fake nodes. Too high = nobody participates. Need to analyze PFT economics.
 
-### 8. Are the scoring round timing windows right?
+### 5. Are the scoring round timing windows right?
 Current plan: ~13 hours total (snapshot → scoring → commit → reveal → aggregation). Need real-world testing.
 
-### 9. Which IPFS pinning service?
+### 6. Which IPFS pinning service?
 Pinata, web3.storage, Filebase, or self-hosted. Need to compare cost and reliability.
 
-### 10. How big are the proofs?
-Nobody has published actual TLSNotary/Opacity proof sizes. Need to generate real proofs and measure.
-
-### 11. What hardware do scoring nodes need?
+### 7. What hardware do scoring nodes need?
 Depends on which approach we pick: a basic VPS for API-based, or GPU hardware for local inference.
 
-### 12. Can LLM providers silently change a model?
-Anthropic uses date-pinned versions (e.g. `claude-opus-4-6-20250620`). Need to confirm this means the weights are frozen. This question goes away if we switch to open-weight models (we pin the exact weight file by hash).
-
-### 13. Who controls the scoring prompt?
+### 8. Who controls the scoring prompt?
 Foundation publishes it in the open-source repo. Later, governance can take over. This works for all approaches.
 
-### 14. Can we use OpenRouter as a stepping stone?
-All scoring nodes call the same open-weight model through OpenRouter. TLSNotary proves each call. Gives us consistent results + provability without requiring local GPUs. Good intermediate step.
-
-### 15. Do we still need KYC if validators post an economic bond?
+### 9. Do we still need KYC if validators post an economic bond?
 The bond prevents Sybil attacks. KYC is still useful for reputation scoring and entity concentration limits, but might not be mandatory. Need to test if the LLM can score well without identity data.
 
 ---
 
 ## Approaches
 
-The four architectural approaches for Dynamic UNL scoring are defined in [Approaches.md](../Approaches.md). They differ along two primary axes: **who scores** (foundation vs. distributed nodes) and **where the LLM runs** (cloud API vs. local inference). The proof method follows from the LLM execution: cloud API → MPC-TLS proof (Opacity/TLSNotary), local inference → proof-of-logits.
+The four architectural approaches for Dynamic UNL scoring are defined in [Approaches.md](../Approaches.md). They differ along two primary axes: **who scores** (foundation vs. distributed nodes) and **where the LLM runs** (cloud API vs. local inference). The chosen architecture ([Design_PhasedValidatorScoring](../Design_PhasedValidatorScoring.md)) uses a phased rollout from foundation scoring to validator-driven scoring with local inference and proof-of-logits.
 
 | Approach | Who Scores | LLM Execution | Proof Method | Existing Design |
 |----------|-----------|--------------|-------------|-----------------|
-| 1 | Foundation | Cloud API | Opacity | Design_FoundationCloudAPI |
-| 2 | Distributed Nodes | Cloud API | TLSNotary | Design_DistributedCloudAPI |
+| 1 | Foundation | Cloud API | Published audit trail | Design_FoundationCloudAPI |
+| 2 | Distributed Nodes | Cloud API | Commit-reveal + median | Design_DistributedCloudAPI |
 | 3 | Foundation | Local | Proof-of-logits | Design_FoundationLocalHardware |
 | 4 | Distributed Nodes | Local | Proof-of-logits | Design_DistributedLocalHardware |
+| **Chosen** | **Foundation → Validators** | **Local** | **Output convergence + proof-of-logits** | **Design_PhasedValidatorScoring** |
 
 ---
 
@@ -131,17 +104,12 @@ Ordered by what blocks approach selection and design decisions:
 
 | # | What | Why |
 |---|------|-----|
-| **1** | Benchmark open-weight models on our scoring task | Determines if local inference approaches (3, 4) are viable |
-| **2** | Test cross-hardware determinism with our prompts | Determines if proof-of-logits verification works reliably |
-| **3** | Find out Opacity pricing | Needed for all approaches (data collection) |
-| **4** | Test Opacity SDK end-to-end | Confirm it actually works |
-| **5** | Set up TLSNotary server | Needed for Approach 2 |
-| **6** | Calculate LLM costs (API vs local) | Economics of cloud vs local approaches |
-| 7 | PFT bond amount analysis | Needed for Approach 2 and 4 |
-| 8 | Test scoring round timing on devnet | Can adjust later |
-| 9 | Measure actual proof sizes | Measured during #4 and #5 |
-| 10 | Compare IPFS pinning services | Commodity decision |
-| 11 | Define scoring node hardware requirements | Falls out of model and approach choice |
-| 12 | Test scoring quality without identity data | Can ship with current plan first |
-| 13 | Confirm LLM provider version pinning policy | Quick check, or irrelevant if going open-weight |
-| 14 | Decide prompt governance model | Governance question, not blocking |
+| **1** | Benchmark open-weight models on our scoring task | Determines if local inference produces quality scores |
+| **2** | Test output convergence across same GPU type | Determines if Layer 1 (output convergence) works |
+| **3** | Test logit-level determinism with SGLang/Ingonyama/LayerCast | Determines if Layer 2 (proof-of-logits) works |
+| **4** | Calculate local inference costs (RunPod, owned hardware) | Economics of validator GPU sidecar |
+| 5 | Test scoring round timing on testnet | Can adjust later |
+| 6 | Compare IPFS pinning services | Commodity decision |
+| 7 | Define mandatory GPU type | Falls out of determinism testing |
+| 8 | Test scoring quality without identity data | Can ship with current plan first |
+| 9 | Decide prompt governance model | Governance question, not blocking |
