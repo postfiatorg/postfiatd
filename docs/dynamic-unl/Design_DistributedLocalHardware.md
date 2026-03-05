@@ -6,25 +6,25 @@ Multiple independent Oracle Nodes each run the same open-weight LLM on their own
 
 ## How This Differs from Design_DistributedCloudAPI
 
-Design_DistributedCloudAPI (Approach 2) uses cloud LLM APIs with TLSNotary proofs. Each Oracle Node calls a cloud API, and the foundation's TLSNotary notary server proves the call happened.
+Design_DistributedCloudAPI (Approach 2) uses cloud LLM APIs. Each Oracle Node calls a cloud API.
 
-This design replaces cloud APIs with local inference and replaces TLSNotary proofs with proof-of-logits. Oracle Nodes run the model themselves and publish cryptographic commitments of the model's internal outputs (logits). Other nodes spot-check each other's commitments.
+This design replaces cloud APIs with local inference and uses proof-of-logits to prove computation. Oracle Nodes run the model themselves and publish cryptographic commitments of the model's internal outputs (logits). Other nodes spot-check each other's commitments.
 
 Key differences:
 
 | Aspect | Approach 2 (Cloud API) | Approach 4 (Local Inference) |
 |--------|----------------------|----------------------------|
 | LLM execution | Cloud API (each Oracle Node calls API) | Local GPU (each Oracle Node runs model) |
-| Proof method | TLSNotary (MPC-TLS on API call) | Proof-of-logits (cryptographic commitment of model internals) |
-| Proof verification | Foundation's TLSNotary notary | Cross-node spot-checking (any node or observer) |
-| Foundation notary dependency | Yes — foundation operates TLSNotary notary (censorship vector) | No — removed entirely |
+| Proof method | None (trust Oracle Node + API provider) | Proof-of-logits (cryptographic commitment of model internals) |
+| Proof verification | Read published reasoning | Cross-node spot-checking (any node or observer) |
+| Foundation dependency | Cloud API provider availability | None — self-contained |
 | Cloud API dependency | Yes — all nodes depend on API provider availability | No — self-contained |
 | Hardware requirements | VPS with HTTPS capability | GPU hardware or cloud GPU rental |
 | What proof demonstrates | "An API was called" | "This computation was performed" |
 
 Everything else from Approach 2 carries over: PFT bond, commit-reveal, quorum rules, median aggregation, liveness requirements. See [Design_DistributedCloudAPI.md](Design_DistributedCloudAPI.md) for full details on these mechanisms.
 
-Data collection remains identical across all approaches — foundation with Opacity attestation. See [Approaches.md](Approaches.md) Common Infrastructure.
+Data collection remains identical across all approaches. See [Approaches.md](Approaches.md) Common Infrastructure.
 
 ---
 
@@ -165,11 +165,11 @@ These costs must be offset by Task Node rewards. If the model is small enough (7
 
 ## Scoring Round Lifecycle
 
-Adapted from Approach 2. Phases are the same, but Oracle Nodes run local inference instead of calling a cloud API, and cross-verification replaces TLSNotary proof verification.
+Adapted from Approach 2. Phases are the same, but Oracle Nodes run local inference instead of calling a cloud API, and cross-verification via proof-of-logits replaces trust in API providers.
 
 ```
 Phase 1: Data Snapshot (Foundation)
-│   Foundation collects validator data (Opacity-attested)
+│   Foundation collects validator data
 │   Publishes snapshot + proofs → IPFS
 │
 ↓
@@ -184,7 +184,7 @@ Phase 2: Round Announcement (Foundation, On-Chain)
 Phase 3: Local Inference (Each Oracle Node, Independent)
 │   Each Oracle Node:
 │   ├── Fetches snapshot from IPFS
-│   ├── Verifies Opacity proofs on data
+│   ├── Verifies data snapshot against on-chain hash
 │   ├── Loads pinned model (verified by weight hash)
 │   ├── Runs Step 1 inference (individual scoring)
 │   │   └── Saves logit hashes at every token position
@@ -234,7 +234,7 @@ Phase durations carry from Approach 2. The main difference is Phase 3: local inf
 | Artifact | Where Published |
 |----------|----------------|
 | Data snapshot (validator profiles) | IPFS |
-| Opacity proofs of data collection | IPFS |
+| Data collection methodology and sources | IPFS |
 | Scoring configuration (model version, weight hash, prompt versions) | IPFS |
 | Round announcement (snapshot CID, round number, model version, deadlines) | On-chain transaction |
 | Each Oracle Node's commit hash | On-chain transaction (one per Oracle Node) |
@@ -282,7 +282,7 @@ The strongest trust model of all four approaches. No single scorer, no cloud API
 | Proof | Proof-of-logits (each node commits to model internals) |
 | Verification | Cross-node spot-checking + community verification |
 | Aggregation | Median across valid submissions |
-| Single point of failure | None for scoring. Foundation still collects data (Opacity-attested). |
+| Single point of failure | None for scoring. Foundation still collects data (published transparently). |
 
 **To manipulate the scoring outcome, an attacker must:**
 
@@ -293,7 +293,7 @@ The strongest trust model of all four approaches. No single scorer, no cloud API
 
 This is the highest bar of any approach. The combination of economic bonds (Sybil resistance) + logit commitments (computational honesty) + median aggregation (outlier resistance) provides defense in depth.
 
-**Remaining centralization:** The foundation still controls data collection. This is Opacity-attested and consistent across all approaches. The aggregation step is deterministic (median computation) — anyone can recompute it from the published Oracle Node submissions.
+**Remaining centralization:** The foundation still controls data collection. This is published transparently and consistent across all approaches. The aggregation step is deterministic (median computation) — anyone can recompute it from the published Oracle Node submissions.
 
 ---
 
@@ -305,7 +305,7 @@ This is the most community-empowering approach. Community members with GPU acces
 
 **This mirrors Bitcoin mining** — trustless in design, but participation requires resources. The community may accept this trade-off because the alternative (centralized scoring in Approach 1/3) is worse, and the cloud API approaches (Approach 1/2) have their own barrier (API key costs + cloud provider dependency). The key question is whether enough Oracle Nodes participate to make the distributed model meaningful. If only 5-7 nodes can afford to run, the system is nominally distributed but practically concentrated.
 
-**Community trust is highest here.** No single entity controls scoring. Every score is backed by a logit commitment that any GPU owner can verify. The full audit trail (data, commitments, scores, verification results, aggregation) is on IPFS. Community members who cannot verify directly can see that multiple independent parties verified each other — this is more trustworthy than trusting one foundation's Opacity proofs.
+**Community trust is highest here.** No single entity controls scoring. Every score is backed by a logit commitment that any GPU owner can verify. The full audit trail (data, commitments, scores, verification results, aggregation) is on IPFS. Community members who cannot verify directly can see that multiple independent parties verified each other — this is more trustworthy than trusting one foundation's published results.
 
 **Open-weight model visibility is a major advantage.** The community can inspect the model, study its behavior, propose alternatives, and run their own experiments. This level of transparency is impossible with proprietary cloud APIs. Community governance over model selection becomes natural — the model is public, the prompts are public, and anyone can benchmark alternatives.
 
@@ -347,7 +347,7 @@ The practical path is to **ship Approach 1 first** (fastest, simplest, satisfies
 
 | Cost Category | Bearer | Estimate |
 |--------------|--------|----------|
-| Data collection (Opacity) | Foundation | Per-round Opacity fees |
+| Data collection | Foundation | Operational cost |
 | Aggregation service | Foundation | Operational cost |
 | Cross-verification (minimum spot-checks) | Foundation | GPU cost for spot-checking |
 | IPFS pinning | Foundation | Commodity cost |
