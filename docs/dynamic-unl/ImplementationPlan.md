@@ -1,0 +1,1929 @@
+# Dynamic UNL: Implementation Milestones
+
+Detailed implementation plan for [Design_PhasedValidatorScoring.md](Design_PhasedValidatorScoring.md). Each phase contains milestones with concrete steps, time estimates, difficulty ratings, dependencies, and infrastructure details.
+
+**Difficulty scale:** ★☆☆☆☆ Trivial | ★★☆☆☆ Easy | ★★★☆☆ Medium | ★★★★☆ Hard | ★★★★★ Very Hard
+
+**Time estimates** assume a solo developer with heavy LLM-assisted development (Claude Code, Codex).
+
+**Reference design:** All architectural decisions, trust models, and protocol details are defined in [Design_PhasedValidatorScoring.md](Design_PhasedValidatorScoring.md). This document covers *how* and *when* to build it, not *what* to build.
+
+---
+
+## Overview
+
+```
+Phase 0                Phase 1                  Phase 2                    Phase 3
+Research &             Foundation               Validator                  Full Verification
+Validation             Scoring                  Verification               Proof of Logits
+
+~1 week                ~4-6 weeks               ~6-8 weeks                 ~5-7 weeks
+
+┌────────────┐    ┌──────────────────┐    ┌────────────────────┐    ┌──────────────────┐
+│Model select│    │Data collection   │    │Commit-reveal proto │    │Logit commitment  │
+│GPU setup   │───►│LLM scoring       │───►│GPU sidecar         │───►│Spot-check tools  │
+│Determinism │    │VL generation     │    │Convergence monitor │    │Authority transfer│
+│research    │    │IPFS + on-chain   │    │Validator onboarding│    │Identity portal   │
+│            │    │Deploy + test     │    │Deploy + test       │    │Full system test  │
+└────────────┘    └──────────────────┘    └────────────────────┘    └──────────────────┘
+      │                   │                        │                        │
+      ▼                   ▼                        ▼                        ▼
+  Decision Gate:      Decision Gate:           Decision Gate:          Dynamic UNL
+  Go/No-Go on        Phase 1 stable           Convergence             fully operational,
+  local inference     on testnet               proven                  foundation replaced
+```
+
+**Total estimated time:** ~17-23 weeks (4-5.5 months)
+
+---
+
+## Repositories
+
+| Repository | Language | Purpose | Created In |
+|---|---|---|---|
+| `postfiatd` (existing) | C++ | Node-side changes: memo watching, VL fetching, amendment (Phase 2+) | — |
+| `dynamic-unl-scoring` (new) | Python (FastAPI) | Scoring pipeline: data collection, LLM inference, VL generation, IPFS, on-chain | Phase 1 |
+| `validator-scoring-sidecar` (new) | Python | GPU sidecar: model loading, inference, commit-reveal, logit capture | Phase 2 |
+
+---
+
+## Infrastructure
+
+### Instances (Vultr)
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                         DEVNET ENVIRONMENT                         │
+│                                                                    │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐   │
+│  │ Validator 1 │ │ Validator 2 │ │ Validator 3 │ │ Validator 4 │   │
+│  │  (existing) │ │  (existing) │ │  (existing) │ │  (existing) │   │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘   │
+│                                                                    │
+│  ┌─────────────┐ ┌─────────────┐                                   │
+│  │   RPC Node  │ │     VHS     │                                   │
+│  │  (existing) │ │  (existing) │                                   │
+│  └─────────────┘ └─────────────┘                                   │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Scoring Service (NEW)                                       │  │
+│  │  Vultr Cloud Compute Regular                                 │  │
+│  │  2 vCPU | 4 GB RAM | 80 GB SSD                               │  │
+│  │  Ubuntu 22.04 LTS | ~$18/month                               │  │
+│  │  Runs: dynamic-unl-scoring (FastAPI)                         │  │
+│  │  Connects to: VHS, IPFS, PFTL RPC, RunPod                    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│                        TESTNET ENVIRONMENT                         │
+│                                                                    │
+│  ┌─────────────┐ ┌─────────────┐           ┌─────────────┐         │
+│  │ Foundation  │ │  External   │    ...    │  External   │         │
+│  │ Validators  │ │ Validator 1 │           │ Validator N │         │
+│  │  (5, ours)  │ │ (~25 total) │           │             │         │
+│  └─────────────┘ └─────────────┘           └─────────────┘         │
+│                                                                    │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐                   │
+│  │   RPC Node  │ │     VHS     │ │  IPFS Node  │                   │
+│  │  (existing) │ │  (existing) │ │  (existing) │                   │
+│  └─────────────┘ └─────────────┘ └─────────────┘                   │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  Scoring Service (NEW)                                       │  │
+│  │  Vultr Cloud Compute Regular                                 │  │
+│  │  2 vCPU | 4 GB RAM | 80 GB SSD                               │  │
+│  │  Ubuntu 22.04 LTS | ~$18/month                               │  │
+│  │  Runs: dynamic-unl-scoring (FastAPI)                         │  │
+│  │  Connects to: VHS, IPFS, PFTL RPC, RunPod                    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────┐
+│                    SHARED (BOTH ENVIRONMENTS)                      │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  RunPod Serverless Endpoint (NEW)                            │  │
+│  │  Model: TBD (selected in Phase 0, e.g. Qwen 3.5 32B)         │  │
+│  │  Backend: vLLM or SGLang                                     │  │
+│  │  Pay-per-use: ~$0.00025/sec active | $0 idle                 │  │
+│  │  Estimated monthly: ~$5-15 (weekly scoring, both envs)       │  │
+│  │  Single endpoint shared by devnet + testnet scoring          │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  IPFS Node (existing)                                        │  │
+│  │  https://ipfs-testnet.postfiat.org/ipfs/                     │  │
+│  │  Shared by devnet + testnet (content-addressed, no conflict) │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Scoring Service Instance Setup (Vultr)
+
+Step-by-step for provisioning each scoring service instance:
+
+1. **Create instance** on Vultr: Cloud Compute → Regular Performance → 2 vCPU / 4 GB / 80 GB SSD → Ubuntu 22.04 → same region as other infra
+2. **DNS**: Point `scoring-devnet.postfiat.org` and `scoring-testnet.postfiat.org` to their IPs
+3. **Initial setup**: SSH in, install Docker + Docker Compose, install Caddy (reverse proxy + auto HTTPS)
+4. **Deploy**: Docker Compose with the `dynamic-unl-scoring` service + PostgreSQL
+5. **Environment variables**: PFTL RPC URL, wallet secret, VHS URL, MaxMind key, IPFS credentials, RunPod API key, IPFS gateway URL
+6. **Caddy config**: Reverse proxy to the FastAPI service on port 8000, auto-TLS via Let's Encrypt
+7. **Monitoring**: Basic health check endpoint, log rotation, optional uptime monitoring
+
+### RunPod Serverless Setup
+
+Step-by-step for deploying the LLM inference endpoint:
+
+1. **Create RunPod account** at runpod.io, add payment method
+2. **Create serverless endpoint**: Templates → vLLM Inference → Configure
+3. **Model configuration**:
+   - Model ID: HuggingFace model path (e.g., `Qwen/Qwen2.5-32B-Instruct` — TBD in Phase 0)
+   - GPU type: Select based on model size (e.g., A40 48GB for 32B model)
+   - Max workers: 1 (scoring is sequential, one request at a time)
+   - Min workers: 0 (scale to zero when idle — pay nothing between scoring rounds)
+   - Idle timeout: 5 minutes (worker shuts down after inactivity)
+4. **Settings**:
+   - Temperature: 0 (greedy decoding)
+   - Max tokens: 4096 (sufficient for scoring output)
+   - Response format: JSON mode enabled
+5. **Get endpoint URL and API key**: Save for scoring service configuration
+6. **Test**: Send a test prompt via curl, verify response format
+
+### Monthly Cost Summary
+
+| Item | Devnet | Testnet | Total |
+|---|---|---|---|
+| Scoring Service (Vultr) | ~$18 | ~$18 | $36 |
+| RunPod Serverless (shared) | — | — | ~$5-15 |
+| IPFS (existing) | $0 | $0 | $0 |
+| VHS (existing) | $0 | $0 | $0 |
+| MaxMind GeoIP2 (Phase 0) | — | — | ~$0-25 |
+| **Total new monthly cost** | | | **~$41-76** |
+
+---
+
+## Phase 0: Research & Validation
+
+**Duration:** ~1 week | **Difficulty:** ★★★☆☆ Medium
+
+**Goal:** Validate that the phased design is feasible before writing production code. Select the model, set up GPU infrastructure, document determinism research for Phase 2+.
+
+```
+Milestone 0.1          Milestone 0.2          Milestone 0.3         Milestone 0.4
+Model Selection        RunPod Setup           Determinism           MaxMind
+& Benchmarking         & Testing              Research              Upgrade
+
+~2-3 days              ~1-2 days              ~2 days               ~2 hours
+★★★☆☆                 ★★☆☆☆                 ★★★★☆                ★☆☆☆☆
+      │                      │                      │                    │
+      └──────────┬───────────┘                      │                    │
+                 │                                  │                    │
+                 ▼                                  │                    │
+         Decision Gate ◄────────────────────────────┘                    │
+         Go/No-Go on                                                     │
+         local inference ◄───────────────────────────────────────────────┘
+```
+
+---
+
+### Milestone 0.1: Model Selection & Benchmarking
+
+**Duration:** ~2-3 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** None
+
+**Goal:** Select an open-weight model that produces validator scoring quality comparable to the current approach. This is a collaborative effort — leveraging deep knowledge of open-source LLMs to quickly narrow down candidates.
+
+**Steps:**
+
+**0.1.1 — Define scoring benchmark** (0.5 day)
+- Create a benchmark dataset: take real validator data from VHS (anonymized if needed) for 15-30 validators
+- Define evaluation criteria: score consistency (same input → similar scores across runs), reasoning quality (does the model explain its scores coherently), score differentiation (does it distinguish good from bad validators meaningfully)
+- Write the scoring prompt based on the design spec: all validator data packets in a single prompt, structured JSON output with score (0-100) + reasoning per validator
+
+**0.1.2 — Select candidate models** (collaborative, 0.5-1 day)
+- Target model class: 7B-32B parameters (fits on a single GPU, RunPod serverless compatible)
+- Candidate families to evaluate:
+  - Qwen 2.5/3.x (32B, 14B, 7B)
+  - Llama 4 Scout / Llama 3.x (70B if budget allows, 8B for baseline)
+  - DeepSeek V3/R1 distilled variants
+  - Mistral/Mixtral (if applicable)
+- For each candidate: note parameter count, quantization options (GGUF Q4, Q8, FP16), VRAM requirements, RunPod serverless compatibility
+
+**0.1.3 — Run benchmark across candidates** (1 day)
+- For each candidate model:
+  - Deploy temporarily on RunPod serverless (or use HuggingFace Inference API for quick tests)
+  - Run the scoring prompt 5 times with the benchmark dataset
+  - Record: scores, reasoning, JSON format compliance, latency, cost per run
+  - Test with temperature 0 / greedy decoding
+- Compare results across models and across runs of the same model
+
+**0.1.4 — Select and document final model** (0.5 day)
+- Choose the model based on: scoring quality, consistency, cost, RunPod availability
+- Document the selection with rationale
+- Record: exact model ID, quantization, VRAM requirement, expected RunPod GPU type, per-run cost estimate
+- Compute SHA-256 of the model weight file (for pinning in production)
+
+**Deliverables:**
+- Benchmark dataset (JSON file with validator profiles)
+- Benchmark results comparison document
+- Final model selection with rationale
+- Model configuration (ID, quantization, GPU type, cost)
+
+---
+
+### Milestone 0.2: RunPod Setup & Testing
+
+**Duration:** ~1-2 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestone 0.1 (model selected)
+
+**Goal:** Set up the RunPod serverless endpoint with the selected model and verify it works end-to-end.
+
+**Steps:**
+
+**0.2.1 — Create RunPod account and billing** (1 hour)
+- Sign up at runpod.io
+- Add payment method
+- Note: RunPod charges per second of active GPU time, no charge when idle
+
+**0.2.2 — Deploy serverless endpoint** (2-4 hours)
+- Navigate to Serverless → New Endpoint
+- Select template: vLLM (recommended) or SGLang
+- Configure:
+  ```
+  Model:           <selected model from 0.1>
+  GPU Type:        <determined by model VRAM needs>
+  Max Workers:     1
+  Min Workers:     0 (scale to zero)
+  Idle Timeout:    300 seconds
+  Container Disk:  20 GB (for model weights)
+  Volume Disk:     50 GB (persistent model cache)
+  ```
+- Deploy and wait for the endpoint to become active
+
+**0.2.3 — Test the endpoint** (2-4 hours)
+- Test with curl:
+  ```bash
+  curl -X POST "https://api.runpod.ai/v2/<endpoint_id>/runsync" \
+    -H "Authorization: Bearer <api_key>" \
+    -H "Content-Type: application/json" \
+    -d '{"input": {"prompt": "<scoring prompt>", "max_tokens": 4096, "temperature": 0}}'
+  ```
+- Verify: response format (JSON), scoring output structure, latency, cold start time
+- Test cold start: wait for worker to scale down, send request, measure time to first response
+- Test with the full benchmark prompt (all validator profiles)
+
+**0.2.4 — Document endpoint configuration** (1-2 hours)
+- Record endpoint ID, API key (store securely)
+- Document cold start behavior and expected latency
+- Note any configuration adjustments needed
+
+**Deliverables:**
+- Active RunPod serverless endpoint
+- Endpoint URL and API key (stored securely)
+- Test results document with latency measurements
+
+---
+
+### Milestone 0.3: Determinism Research Documentation
+
+**Duration:** ~2 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestone 0.1 (model selected)
+
+**Goal:** Document the state of LLM inference determinism research to inform Phase 2 and Phase 3 implementation. This is research and documentation, not implementation.
+
+**Note:** This does not block Phase 1. Phase 1 runs fine without determinism — only the foundation scores. This research is preparation for Phase 2+ where multiple validators must produce identical outputs.
+
+**Steps:**
+
+**0.3.1 — Survey deterministic inference solutions** (1 day)
+- Research and document current state of:
+  - **SGLang deterministic mode**: how it works, what it guarantees, performance overhead (~34%), which models/GPUs supported
+  - **Ingonyama deterministic kernels**: CUDA-core-only approach, bypasses Tensor Cores, tested GPU types (RTX 3090/4080/L4)
+  - **LayerCast**: FP16 storage + FP32 computation, memory trade-offs
+  - **vLLM deterministic options**: if any exist
+- For each solution: document compatibility with the selected model, GPU requirements, known limitations
+
+**0.3.2 — Document the mandatory GPU type decision** (0.5 day)
+- Based on the selected model and determinism solutions, identify candidate mandatory GPU types
+- Consider: availability on RunPod, cost, community accessibility
+- Candidates likely: NVIDIA A40, L4, RTX 4090 (consumer), A100 40GB
+- Document trade-offs (cost vs availability vs determinism guarantees)
+- The final GPU choice will be made when Phase 2 implementation begins, after empirical testing
+
+**0.3.3 — Document open questions for Phase 2** (0.5 day)
+- What empirical tests need to run before Phase 2 starts:
+  - Same model + same prompt → same output text? (Layer 1 requirement)
+  - Same model + same prompt → same logit hashes? (Layer 2 requirement)
+  - What correlation threshold is acceptable?
+- Reference existing research findings (>0.93 correlation from 150+ runs, need >0.99)
+- Link to [ResearchStatus.md](research/ResearchStatus.md)
+
+**Deliverables:**
+- Updated determinism research document (extends [ResearchStatus.md](research/ResearchStatus.md))
+- Mandatory GPU type candidates with trade-off analysis
+- Phase 2 empirical test plan
+
+---
+
+### Milestone 0.4: MaxMind GeoIP2 Upgrade
+
+**Duration:** ~2 hours | **Difficulty:** ★☆☆☆☆ Trivial | **Dependencies:** None
+
+**Goal:** Upgrade from MaxMind GeoLite (free, limited) to GeoIP2 (paid, accurate) for validator geolocation data. Also update references in other repos that use MaxMind.
+
+**Steps:**
+
+**0.4.1 — Evaluate MaxMind GeoIP2 plans** (30 min)
+- Compare GeoLite2 (current, free) vs GeoIP2 Precision Insights
+- GeoIP2 provides: accurate ISP identification, datacenter detection, connection type — all needed for diversity scoring
+- Pricing: GeoIP2 Web Service starts free for low volume (1,000 lookups/day free tier), pay-as-you-go after
+- For weekly scoring of ~35 validators: well within free tier
+
+**0.4.2 — Set up GeoIP2 account and update repos** (1.5 hours)
+- Sign up at maxmind.com for GeoIP2 Precision Web Service
+- Generate API key (account ID + license key)
+- Test API with a known validator IP
+- Store credentials securely
+- Update any other repos that reference MaxMind GeoLite to use the new key/service
+
+**Deliverables:**
+- MaxMind GeoIP2 account with API key
+- Verified API access
+- Other repos updated
+
+---
+
+### Phase 0 Decision Gate
+
+**Criteria for proceeding to Phase 1:**
+
+| Criterion | Required | Status |
+|---|---|---|
+| Open-weight model selected that produces acceptable scoring quality | Yes | |
+| RunPod serverless endpoint active and tested | Yes | |
+| Model weight SHA-256 hash recorded | Yes | |
+| MaxMind GeoIP2 access confirmed | Yes | |
+| Determinism research documented (informational, not blocking) | No | |
+
+**If the model benchmark fails** (no open-weight model scores well enough): iterate on prompt engineering, try larger models, or try different quantizations until acceptable quality is reached. The open-weight local inference path is the only path — there is no fallback to proprietary models.
+
+---
+
+## Phase 1: Foundation Scoring
+
+**Duration:** ~4-6 weeks | **Difficulty:** ★★★★☆ Hard
+
+**Goal:** Build and deploy the foundation's automated scoring pipeline. The pipeline collects validator data, calls the LLM, generates a signed VL, publishes the audit trail to IPFS, and publishes the UNL hash on-chain. Validators consume the VL exactly as they do today — no node changes required.
+
+```
+                    Milestone 1.1
+                    Repo Setup
+                    ~1-2 days
+                         │
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+         M 1.2       M 1.3       M 1.4
+         Data        LLM         VL
+         Collection  Scoring     Generation
+         ~3-4 days   ~4-5 days   ~3-4 days
+              │          │          │
+              └──────────┼──────────┘
+                         ▼
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+         M 1.5       M 1.6       M 1.7
+         IPFS        On-Chain    Infra
+         Publish     Memo        Deploy
+         ~2-3 days   ~2-3 days   ~2-3 days
+              │          │          │
+              └──────────┼──────────┘
+                         ▼
+                    M 1.8
+                    Devnet
+                    Testing
+                    ~5-7 days
+                         │
+                         ▼
+                    M 1.9
+                    Testnet
+                    Deploy
+                    ~3-4 days
+```
+
+---
+
+### Milestone 1.1: Scoring Service Repository Setup
+
+**Duration:** ~1-2 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Phase 0 complete
+
+**Goal:** Create the `dynamic-unl-scoring` repository with project structure, CI/CD, and development environment.
+
+**Steps:**
+
+**1.1.1 — Create repository** (1 hour)
+- Create `dynamic-unl-scoring` under `postfiatorg` GitHub org
+- Initialize with: Python 3.12+, FastAPI, Docker, docker-compose
+
+**1.1.2 — Project structure** (2-4 hours)
+```
+dynamic-unl-scoring/
+├── app/
+│   ├── main.py                    # FastAPI app entry point
+│   ├── config.py                  # Pydantic settings (env vars)
+│   ├── dependencies.py            # Dependency injection
+│   ├── api/
+│   │   ├── scoring.py             # Trigger scoring round endpoint
+│   │   ├── status.py              # Health check, round status
+│   │   └── admin.py               # Manual trigger, retry endpoints
+│   ├── services/
+│   │   ├── data_collector.py      # VHS + MaxMind + on-chain data
+│   │   ├── llm_scorer.py          # RunPod inference integration
+│   │   ├── vl_generator.py        # Signed VL JSON generation
+│   │   ├── ipfs_publisher.py      # IPFS pinning
+│   │   ├── onchain_publisher.py   # Memo transaction submission
+│   │   └── scoring_orchestrator.py # Orchestrates full pipeline
+│   ├── models/                    # Pydantic data models
+│   │   ├── validator.py           # Validator profile schema
+│   │   ├── scoring.py             # Score output schema
+│   │   └── round.py               # Scoring round schema
+│   ├── pftl/
+│   │   ├── client.py              # XRPL transaction client
+│   │   └── publisher.py           # Memo builder (pattern from scoring-onboarding)
+│   └── scheduler.py               # APScheduler for weekly runs
+├── migrations/                    # PostgreSQL migrations
+├── scripts/
+│   └── trigger_round.py           # CLI to trigger manual scoring round
+├── tests/
+├── Dockerfile
+├── docker-compose.yml             # App + PostgreSQL
+├── env.example
+├── requirements.txt
+└── README.md
+```
+
+**1.1.3 — Base configuration** (2-4 hours)
+- Pydantic settings class with all environment variables:
+  ```
+  # PFTL
+  PFTL_RPC_URL, PFTL_WALLET_SECRET, PFTL_NETWORK (devnet/testnet)
+
+  # VHS
+  VHS_API_URL (e.g., https://vhs.testnet.postfiat.org)
+
+  # MaxMind
+  MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY
+
+  # RunPod
+  RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
+
+  # IPFS
+  IPFS_API_URL, IPFS_API_USERNAME, IPFS_API_PASSWORD, IPFS_GATEWAY_URL
+
+  # Scoring
+  SCORING_CADENCE_HOURS (default: 168 = weekly)
+  MODEL_VERSION, MODEL_WEIGHT_HASH
+
+  # VL Publisher
+  VL_PUBLISHER_TOKEN (base64 — same token used by generate_vl.py)
+  VL_OUTPUT_URL (where the signed VL is served)
+  ```
+- Docker Compose with FastAPI app + PostgreSQL 16
+- Health check endpoint at `/health`
+
+**1.1.4 — CI/CD pipeline** (2-4 hours)
+- GitHub Actions: lint, test, Docker build
+- Deployment workflow (similar pattern to other repos): SSH to Vultr, docker compose pull, restart
+
+**Deliverables:**
+- Repository with working project skeleton
+- Docker Compose that starts the app + database
+- CI/CD pipeline
+- `env.example` with all required variables documented
+
+---
+
+### Milestone 1.2: Data Collection Pipeline
+
+**Duration:** ~3-4 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 1.1
+
+**Goal:** Build the service that collects all validator data needed for scoring and produces a structured JSON snapshot.
+
+**Data flow:**
+```
+┌───────────┐     ┌─────────────┐     ┌──────────────────┐
+│  VHS API  │────►│             │     │                  │
+│           │     │             │     │                  │
+├───────────┤     │   Data      │     │   Structured     │
+│  MaxMind  │────►│   Collector │────►│   JSON Snapshot  │
+│  GeoIP2   │     │   Service   │     │   (all validators│
+├───────────┤     │             │     │    with profiles)│
+│  On-Chain │────►│             │     │                  │
+│  Identity │     │             │     │                  │
+└───────────┘     └─────────────┘     └──────────────────┘
+```
+
+**Steps:**
+
+**1.2.1 — VHS data collection** (1-2 days)
+- Implement `VHSClient` class that calls the VHS API:
+  - `GET /v1/network/validators` — all known validators
+  - `GET /v1/network/validator/:publicKey` — per-validator details (agreement 1h/24h/30d)
+  - `GET /v1/network/topology/nodes` — peer connections, latency
+  - `GET /v1/network/amendments/vote/:network` — amendment voting
+- Parse responses into Pydantic `ValidatorProfile` models
+- Handle: pagination (if any), timeouts, retries, VHS downtime
+
+**1.2.2 — MaxMind geolocation** (1 day)
+- Implement `GeoIPClient` class that calls MaxMind GeoIP2 Precision Web Service
+- For each validator IP: get continent, country, city, ISP, datacenter, connection type
+- Cache results (geoIP data doesn't change frequently — cache for 24h)
+- Handle: rate limits, API errors, unknown IPs
+
+**1.2.3 — On-chain identity data** (1 day)
+- Implement `IdentityClient` class
+- Read identity verification memo transactions from the PFTL chain:
+  - Use the PFTL RPC `account_tx` method to fetch transactions from the scoring-onboarding publisher address
+  - Parse memo data (hex → JSON) for `pf_identity_v1` and `pf_wallet_auth_v1` memos
+  - Extract: KYC status, domain verification, social verification per validator address
+- Index results into the local PostgreSQL database for fast lookup in future rounds
+- Alternatively: if scoring-onboarding DB is accessible, query it directly
+
+**1.2.4 — Snapshot assembly** (0.5-1 day)
+- Combine all data sources into a unified `ScoringSnapshot` model:
+  ```json
+  {
+    "round_number": 1,
+    "snapshot_ledger_index": 12345,
+    "snapshot_timestamp": "2026-03-15T00:00:00Z",
+    "model_version": "Qwen2.5-32B-Instruct",
+    "model_weight_hash": "sha256:abc123...",
+    "prompt_version": "v1.0.0",
+    "validators": [
+      {
+        "public_key": "nHUDXa2b...",
+        "agreement_1h": 0.98,
+        "agreement_24h": 0.97,
+        "agreement_30d": 0.95,
+        "uptime_30d": 0.99,
+        "latency_ms": 45,
+        "peer_count": 21,
+        "server_version": "2.4.0",
+        "amendment_votes": ["featureX", "featureY"],
+        "fee_vote": 10,
+        "continent": "North America",
+        "country": "US",
+        "city": "New York",
+        "isp": "DigitalOcean",
+        "datacenter": "NYC1",
+        "kyc_status": "approved",
+        "domain_verified": "example.com",
+        "social_verified": "@handle"
+      }
+    ]
+  }
+  ```
+- Write snapshot to local file and prepare for IPFS pinning
+- Compute SHA-256 hash of the snapshot JSON (for on-chain reference)
+
+**Deliverables:**
+- `DataCollectorService` that produces a complete `ScoringSnapshot`
+- VHS, MaxMind, and Identity client implementations
+- Snapshot JSON schema documented
+- Unit tests with mocked API responses
+
+---
+
+### Milestone 1.3: LLM Scoring Integration
+
+**Duration:** ~4-5 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestones 1.1, 0.1, 0.2
+
+**Goal:** Build the service that sends validator data to the LLM (via RunPod) and parses the scored output.
+
+**Data flow:**
+```
+┌──────────────────┐     ┌──────────────┐     ┌──────────────────┐
+│   JSON Snapshot  │────►│   RunPod     │────►│   Scored Output  │
+│   (all validator │     │   Serverless │     │   - Score 0-100  │
+│    profiles)     │     │   Endpoint   │     │   - Reasoning    │
+│                  │     │   (LLM)      │     │   - Ranked list  │
+└──────────────────┘     └──────────────┘     └──────────────────┘
+```
+
+**Steps:**
+
+**1.3.1 — RunPod client** (1-2 days)
+- Implement `RunPodClient` class:
+  - `POST /v2/<endpoint_id>/runsync` for synchronous inference
+  - `POST /v2/<endpoint_id>/run` + `GET /v2/<endpoint_id>/status/<job_id>` for async (fallback if sync times out)
+  - Handle: cold starts (worker scaling up — can take 30-120s), timeouts, retries
+  - Configure: temperature 0, max tokens, JSON response format
+- Test with the benchmark prompt from Phase 0
+
+**1.3.2 — Scoring prompt construction** (1-2 days)
+- Implement `PromptBuilder` class that constructs the scoring prompt from the snapshot
+- The prompt follows the design spec structure:
+  - System prompt: scoring criteria (consensus performance, operational reliability, software diligence, historical track record, network participation, identity/reputation, geographic diversity)
+  - User prompt: all validator data packets as structured JSON
+  - Output format: JSON with `{validator_key: {score: int, reasoning: string}}` per validator
+- Version the prompt (stored as a template, version tracked in config)
+- The prompt must fit within the model's context window — calculate token count and verify
+
+**1.3.3 — Response parsing and validation** (1-2 days)
+- Parse the LLM's JSON response into `ScoringResult` models
+- Validate:
+  - All validators in the snapshot received a score
+  - Scores are in range 0-100
+  - Reasoning is present and non-empty
+  - JSON structure matches expected schema
+- Handle: malformed JSON (retry once), missing validators (flag and log), out-of-range scores (clamp and log)
+
+**1.3.4 — UNL inclusion logic** (1 day)
+- Implement the mechanical UNL inclusion rule from the design:
+  1. Sort validators by score descending
+  2. Apply cutoff threshold (configurable, e.g., score >= 40)
+  3. If <= 35 validators above cutoff → all are on the UNL
+  4. If > 35 above cutoff → top 35 by score
+  5. Remaining are alternates, ranked in order
+- Output: ordered list of validator public keys for the UNL, plus alternates
+
+**Deliverables:**
+- `LLMScorerService` that takes a snapshot and returns scored + ranked validators
+- RunPod client with cold start handling
+- Prompt template (versioned)
+- UNL inclusion logic with configurable threshold
+- Unit tests with mocked RunPod responses
+
+---
+
+### Milestone 1.4: VL Generation (Signed Validator List)
+
+**Duration:** ~3-4 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 1.3
+
+**Goal:** Generate a signed VL JSON file in the same format that postfiatd already understands, using the existing publisher key infrastructure.
+
+**Critical insight:** Testnet nodes already fetch a signed VL from `https://postfiat.org/testnet_vl.json` and verify it against the publisher key `ED3F1E...`. The scoring service will generate VLs in this exact format, so **no C++ changes are needed in postfiatd for Phase 1**.
+
+**Data flow:**
+```
+┌──────────────┐     ┌──────────────┐     ┌────────────────────────┐
+│ Ranked       │     │ VL Generator │     │ Signed VL JSON         │
+│ Validator    │────►│ (port of     │────►│ (same format as        │
+│ List         │     │  generate_   │     │  generate_vl.py output)│
+│ (from 1.3)   │     │  vl.py)      │     │                        │
+└──────────────┘     └──────────────┘     └────────────────────────┘
+                                                     │
+                                          ┌──────────┴──────────┐
+                                          ▼                     ▼
+                                    Upload to URL         Serve via
+                                    (HTTPS endpoint)      scoring service
+```
+
+**Steps:**
+
+**1.4.1 — Port generate_vl.py signing logic** (2-3 days)
+- Port the VL generation logic from `postfiatd/scripts/generate_vl.py` into the scoring service
+- Key functions to port:
+  - `parse_manifest()` — extract keys from publisher manifest
+  - `sign_blob()` — sign the VL blob with the publisher's ephemeral signing key (SHA-512-Half + secp256k1 ECDSA)
+  - VL JSON assembly (manifest, blob, signature, version)
+- The scoring service receives the `VL_PUBLISHER_TOKEN` (same base64 token used by `generate_vl.py`) as an environment variable
+- Input: ranked list of validator public keys + their manifests (from VHS data)
+- Output: signed VL JSON with incrementing sequence number and configurable expiration
+
+**1.4.2 — Sequence management** (0.5-1 day)
+- Track the VL sequence number in PostgreSQL (must always increment — nodes reject <= current)
+- On each scoring round: read last sequence, increment, use for new VL
+- Safety check: before publishing, verify new sequence > last published sequence
+
+**1.4.3 — VL serving** (0.5-1 day)
+- Option A: Upload the VL JSON to the existing URL (`https://postfiat.org/testnet_vl.json`) — requires access to the web server hosting this file
+- Option B: Serve the VL JSON directly from the scoring service at a new endpoint (e.g., `https://scoring-testnet.postfiat.org/vl.json`) — validators would need a config update to point to this URL
+- Option C: Both — upload to existing URL AND serve from scoring service
+- **Recommendation:** Option C for the transition. Start with the new URL on devnet (safe to change 4 validators). For testnet, update the existing URL to avoid requiring 30 validators to change configs.
+
+**1.4.4 — Validation** (0.5 day)
+- Verify generated VL can be decoded by `generate_vl.py --decode`
+- Verify a postfiatd node accepts the generated VL (test on devnet)
+
+**Deliverables:**
+- `VLGeneratorService` that produces a signed VL JSON from a ranked validator list
+- Sequence number tracking in PostgreSQL
+- VL serving endpoint
+- Verification that postfiatd accepts the generated VL
+
+**Security note:** The publisher signing key is the most sensitive secret in this system. It must be stored securely (environment variable, never in code or logs). If this key is compromised, an attacker could publish a malicious UNL. Consider: key rotation plan, access logging, separate key for devnet vs testnet.
+
+---
+
+### Milestone 1.5: IPFS Audit Trail Publication
+
+**Duration:** ~2-3 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestones 1.2, 1.3
+
+**Goal:** Publish the full scoring audit trail to IPFS after each round.
+
+**Steps:**
+
+**1.5.1 — IPFS client** (1-2 days)
+- Implement `IPFSClient` class that pins content to the self-hosted IPFS node:
+  ```
+  POST https://ipfs-testnet.postfiat.org/api/v0/add
+  Authorization: Basic <base64(admin:password)>
+  Content-Type: multipart/form-data
+  ```
+- Support pinning JSON files and directory structures
+- Return the CID (Content Identifier) for each pinned item
+- Handle: upload failures, retries, timeout
+
+**1.5.2 — Audit trail assembly and publication** (1-2 days)
+- After each scoring round, publish to IPFS:
+  ```
+  round_<N>/
+  ├── snapshot.json           # Full validator data snapshot
+  ├── scoring_config.json     # Model version, weight hash, prompt version, parameters
+  ├── scores.json             # LLM output (scores + reasoning for each validator)
+  ├── unl.json                # Final UNL (list of included validators + alternates)
+  └── metadata.json           # Round number, timestamps, hashes
+  ```
+- Pin the directory and get the root CID
+- Store CID in PostgreSQL linked to the round
+
+**Deliverables:**
+- `IPFSPublisherService` that pins the audit trail and returns a CID
+- Audit trail directory structure defined and implemented
+
+---
+
+### Milestone 1.6: On-Chain Memo Publication
+
+**Duration:** ~2-3 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestones 1.4, 1.5
+
+**Goal:** Publish the UNL hash and IPFS CID on-chain as a memo transaction, following the pattern from scoring-onboarding.
+
+**Steps:**
+
+**1.6.1 — Memo format definition** (0.5 day)
+- Define the memo format for UNL publication:
+  ```json
+  {
+    "type": "pf_dynamic_unl_v1",
+    "round_number": 1,
+    "unl_hash": "<sha512Half of VL JSON blob, hex>",
+    "ipfs_cid": "Qm...<root CID of audit trail>",
+    "vl_sequence": 42,
+    "model_version": "Qwen2.5-32B-Instruct",
+    "model_weight_hash": "sha256:abc123...",
+    "prompt_version": "v1.0.0",
+    "validator_count": 30,
+    "published_at": "2026-03-15T00:00:00Z"
+  }
+  ```
+- Memo type: `pf_dynamic_unl` (hex-encoded)
+
+**1.6.2 — Transaction submission** (1-2 days)
+- Reuse the scoring-onboarding `PFTLClient` pattern:
+  - Build Payment transaction (1 drop) with memo
+  - Hex-encode memo data and memo type
+  - Autofill, sign, submit via `xrpl-py`
+- The destination address: a designated memo receiver (same pattern as scoring-onboarding, or self-send)
+- Log transaction hash in PostgreSQL
+- Handle: submission failures, retries (same scheduler pattern as scoring-onboarding)
+
+**1.6.3 — Retry mechanism** (0.5-1 day)
+- If transaction submission fails: mark as pending, retry via scheduler
+- Admin endpoint for manual retry: `POST /admin/retry-publish`
+
+**Deliverables:**
+- `OnChainPublisherService` that submits UNL publication memo transactions
+- Retry mechanism for failed submissions
+- Transaction logging in PostgreSQL
+
+---
+
+### Milestone 1.7: Scoring Orchestrator & Scheduler
+
+**Duration:** ~2-3 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestones 1.2-1.6
+
+**Goal:** Wire all services together into a complete scoring pipeline with scheduled and on-demand execution.
+
+**Steps:**
+
+**1.7.1 — Scoring orchestrator** (1-2 days)
+- Implement `ScoringOrchestrator` that executes the full pipeline:
+  ```
+  1. Collect data (DataCollectorService)
+  2. Run LLM scoring (LLMScorerService)
+  3. Generate signed VL (VLGeneratorService)
+  4. Publish audit trail to IPFS (IPFSPublisherService)
+  5. Publish memo transaction on-chain (OnChainPublisherService)
+  6. Upload VL to serving URL
+  7. Log round completion
+  ```
+- Each step logs its status to PostgreSQL
+- If any step fails: log error, do not proceed to subsequent steps, mark round as failed
+- Round metadata tracked in `scoring_rounds` table:
+  ```
+  id, round_number, status (running/completed/failed),
+  snapshot_hash, ipfs_cid, onchain_tx_hash, vl_sequence,
+  started_at, completed_at, error_message
+  ```
+
+**1.7.2 — Scheduler** (0.5-1 day)
+- APScheduler job that triggers the orchestrator:
+  - Default: every 168 hours (weekly)
+  - Configurable via `SCORING_CADENCE_HOURS` environment variable
+- The scheduler should not run a new round if a previous round is still in progress
+
+**1.7.3 — Manual trigger** (0.5 day)
+- API endpoint: `POST /api/scoring/trigger` — triggers an immediate scoring round
+- Requires admin authentication (API key or basic auth)
+- Returns the round ID for tracking
+- CLI script `scripts/trigger_round.py` that calls this endpoint
+
+**1.7.4 — Status API** (0.5 day)
+- `GET /api/scoring/rounds` — list recent rounds with status
+- `GET /api/scoring/rounds/<id>` — detailed round info (all hashes, CIDs, timestamps)
+- `GET /api/scoring/current-unl` — current active UNL (latest successful round)
+
+**Deliverables:**
+- `ScoringOrchestrator` with full pipeline execution
+- Weekly scheduler + manual trigger endpoint
+- Status API endpoints
+- Round tracking in PostgreSQL
+
+---
+
+### Milestone 1.8: Infrastructure Deployment
+
+**Duration:** ~2-3 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestone 1.7
+
+**Goal:** Deploy the scoring service to Vultr instances for devnet and testnet.
+
+**Steps:**
+
+**1.8.1 — Provision devnet scoring instance** (1-2 hours)
+- Vultr: Cloud Compute → Regular → 2 vCPU / 4 GB / 80 GB → Ubuntu 22.04
+- Same region as devnet validators
+- SSH key access configured
+- Firewall: allow 22 (SSH), 80 (HTTP), 443 (HTTPS)
+
+**1.8.2 — Instance setup** (2-4 hours)
+- Install Docker + Docker Compose
+- Install Caddy (reverse proxy with automatic HTTPS):
+  ```
+  scoring-devnet.postfiat.org {
+      reverse_proxy localhost:8000
+  }
+  ```
+- Create directory `/opt/dynamic-unl-scoring/`
+- Clone repository, set up `.env` from `env.example`
+
+**1.8.3 — Deploy and verify** (1-2 hours)
+- `docker compose up -d`
+- Verify health endpoint: `curl https://scoring-devnet.postfiat.org/health`
+- Verify API docs: `https://scoring-devnet.postfiat.org/docs` (FastAPI auto-docs)
+
+**1.8.4 — Provision testnet scoring instance** (same steps as 1.8.1-1.8.3)
+- DNS: `scoring-testnet.postfiat.org`
+- Different `.env` (testnet RPC URL, testnet wallet, etc.)
+
+**1.8.5 — GitHub Actions deployment** (2-4 hours)
+- Add deploy workflow: on push to main → SSH to instance → pull → restart
+- GitHub secrets: instance IPs, SSH keys, env variables
+
+**Deliverables:**
+- Two running scoring service instances (devnet + testnet)
+- DNS configured and HTTPS active
+- CI/CD deployment pipeline
+
+---
+
+### Milestone 1.9: Devnet Testing & Validation
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 1.8
+
+**Goal:** Run the full scoring pipeline on devnet, verify end-to-end correctness, iterate on prompt quality.
+
+**Steps:**
+
+**1.9.1 — First scoring round** (1 day)
+- Trigger a manual scoring round on devnet
+- Verify each step:
+  - Data collected from VHS (check snapshot.json)
+  - LLM called successfully (check scores.json — are scores reasonable?)
+  - VL generated and signed (decode with `generate_vl.py --decode`)
+  - Audit trail pinned to IPFS (fetch via gateway, verify content)
+  - Memo transaction submitted on-chain (check via RPC)
+  - VL served at configured URL
+
+**1.9.2 — Node verification** (1-2 days)
+- Point one devnet validator to the new VL URL (update `[validator_list_sites]` in config)
+- Restart the validator
+- Verify: validator fetches the new VL, applies it, consensus continues normally
+- Check logs for any VL verification errors
+- Once confirmed: update all 4 devnet validators
+
+**1.9.3 — Prompt iteration** (2-3 days)
+- Review LLM scoring output quality:
+  - Are scores differentiated? (not all 85-90)
+  - Does reasoning reference actual validator metrics?
+  - Does geographic diversity factor in?
+  - Are KYC-verified validators scored appropriately?
+- Iterate on the prompt based on output quality
+- Run 3-5 scoring rounds, compare results
+- Finalize prompt version
+
+**1.9.4 — Edge case testing** (1-2 days)
+- Test: what happens when VHS is down? (data collection should fail gracefully, round marked failed)
+- Test: what happens when RunPod cold-starts? (should wait and retry)
+- Test: what happens when IPFS is unreachable? (should retry)
+- Test: what happens when PFTL node is down? (memo submission should retry)
+- Test: what happens with 0 validators? (should produce empty UNL, not crash)
+- Test: scheduler runs correctly at configured interval
+
+**Deliverables:**
+- Multiple successful scoring rounds on devnet
+- All 4 devnet validators running with dynamic VL
+- Finalized scoring prompt
+- Edge case test results documented
+
+---
+
+### Milestone 1.10: Testnet Deployment
+
+**Duration:** ~3-4 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 1.9
+
+**Goal:** Deploy the scoring pipeline to testnet and transition ~30 validators to the dynamically generated VL.
+
+**Steps:**
+
+**1.10.1 — Testnet scoring round** (1 day)
+- Trigger a manual scoring round on testnet
+- Verify all steps work with real testnet data (~30 validators)
+- Review scores: do they make sense for the actual testnet validator set?
+- Check: does the prompt handle 30 validators within context window?
+
+**1.10.2 — VL transition strategy** (0.5 day)
+- Since testnet validators already fetch from `https://postfiat.org/testnet_vl.json`:
+  - Option A: Have the scoring service upload to this same URL (requires access to the web server)
+  - Option B: Update the URL to `https://scoring-testnet.postfiat.org/vl.json` (requires all validators to update config)
+- Choose option and prepare
+
+**1.10.3 — Transition execution** (1-2 days)
+- If Option A: configure scoring service to upload VL to the existing URL after each round
+- If Option B: announce on Discord/Telegram that validators must update their config, provide exact instructions, give a transition window (e.g., 1 week), then switch
+- Monitor: are all validators picking up the new VL? Check VHS for agreement scores.
+
+**1.10.4 — Monitoring and stabilization** (1-2 days)
+- Run 2-3 weekly scoring rounds
+- Monitor: consensus stability, VL acceptance rate, any validator complaints
+- Address any issues that arise
+
+**Deliverables:**
+- Scoring pipeline running on testnet
+- All testnet validators consuming the dynamically generated VL
+- At least 2 successful weekly scoring rounds completed
+- No consensus disruptions
+
+---
+
+### Phase 1 Decision Gate
+
+**Criteria for proceeding to Phase 2:**
+
+| Criterion | Required | Status |
+|---|---|---|
+| Scoring pipeline running stable on testnet for 2+ weeks | Yes | |
+| All testnet validators consuming dynamic VL | Yes | |
+| No consensus disruptions from VL transitions | Yes | |
+| Scoring quality reviewed and acceptable | Yes | |
+| Audit trail published to IPFS and verifiable | Yes | |
+| On-chain memo publication working | Yes | |
+| Determinism research complete (Milestone 0.3) | Yes | |
+| Mandatory GPU type selected for Phase 2 | Yes | |
+
+---
+
+## Phase 2: Validator Verification
+
+**Duration:** ~6-8 weeks | **Difficulty:** ★★★★★ Very Hard
+
+**Goal:** Validators run the scoring model locally on GPU sidecars, publish output hashes via commit-reveal, and verify convergence with the foundation's results. The foundation's UNL remains authoritative — this is shadow mode verification.
+
+```
+         M 2.1                 M 2.2               M 2.3
+         Commit-Reveal         Sidecar Repo        Sidecar Inference
+         Protocol Design       Setup               Engine
+         ~2-3 days             ~1-2 days            ~7-10 days
+              │                     │                    │
+              └─────────┬───────────┘                    │
+                        │                                │
+                        ▼                                │
+                   M 2.4                                 │
+                   Sidecar Chain        ◄────────────────┘
+                   Integration
+                   ~5-7 days
+                        │
+              ┌─────────┼─────────┐
+              ▼         ▼         ▼
+         M 2.5     M 2.6     M 2.7
+         Converg.  Validator  postfiatd
+         Monitor   Onboard   Changes
+         ~5-7 days ~1-2 days ~5-7 days
+              │         │         │
+              └─────────┼─────────┘
+                        ▼
+                   M 2.8
+                   Devnet Testing
+                   ~5-7 days
+                        │
+                        ▼
+                   M 2.9
+                   Testnet Rollout
+                   ~5-7 days
+```
+
+---
+
+### Milestone 2.1: Commit-Reveal Memo Protocol Design
+
+**Duration:** ~2-3 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Phase 1 complete
+
+**Goal:** Define the exact on-chain memo formats and timing protocol for validator commit-reveal scoring rounds.
+
+**Steps:**
+
+**2.1.1 — Define memo types** (1 day)
+
+Four new memo types for the commit-reveal protocol:
+
+**Round Announcement** (published by foundation):
+```json
+{
+  "type": "pf_scoring_round_v1",
+  "round_number": 42,
+  "snapshot_ipfs_cid": "Qm...",
+  "snapshot_hash": "<sha256 of snapshot.json>",
+  "model_version": "Qwen2.5-32B-Instruct",
+  "model_weight_hash": "sha256:abc123...",
+  "prompt_version": "v1.0.0",
+  "commit_deadline_ledger": 50000,
+  "reveal_deadline_ledger": 50500,
+  "published_at": "2026-06-01T00:00:00Z"
+}
+```
+
+**Commit** (published by each validator's sidecar):
+```json
+{
+  "type": "pf_scoring_commit_v1",
+  "round_number": 42,
+  "validator_public_key": "nHUDXa2b...",
+  "commit_hash": "<sha256(scores_json + salt + round_number)>"
+}
+```
+
+**Reveal** (published by each validator's sidecar after commit window closes):
+```json
+{
+  "type": "pf_scoring_reveal_v1",
+  "round_number": 42,
+  "validator_public_key": "nHUDXa2b...",
+  "scores_ipfs_cid": "Qm...<CID of scored output>",
+  "salt": "<random 32-byte hex>",
+  "scores_hash": "<sha256 of scores JSON>"
+}
+```
+
+**Convergence Report** (published by foundation after reveal window closes):
+```json
+{
+  "type": "pf_scoring_convergence_v1",
+  "round_number": 42,
+  "total_validators": 30,
+  "commits_received": 28,
+  "reveals_received": 27,
+  "converged": true,
+  "convergence_rate": 0.96,
+  "divergent_validators": ["nHxyz..."],
+  "report_ipfs_cid": "Qm..."
+}
+```
+
+**2.1.2 — Define timing protocol** (0.5-1 day)
+
+```
+Round Lifecycle (Phase 2)
+
+  T+0h              T+1h              T+7h              T+8h         T+9h
+  │                 │                 │                 │            │
+  ▼                 ▼                 ▼                 ▼            ▼
+  ┌─────────────────┬─────────────────┬─────────────────┬────────────┐
+  │  Round          │  Inference      │  Commit         │  Reveal    │
+  │  Announcement   │  Window         │  Window         │  Window    │
+  │  (foundation    │  (validators    │  (validators    │  (publish  │
+  │   publishes     │   run model,    │   submit hash   │   scores   │
+  │   snapshot)     │   produce       │   on-chain)     │   to IPFS) │
+  │                 │   scores)       │                 │            │
+  └─────────────────┴─────────────────┴─────────────────┴────────────┘
+                                                                    │
+                                                                    ▼
+                                                              ┌───────────┐
+                                                              │Convergence│
+                                                              │Check +    │
+                                                              │Report     │
+                                                              │(T+9-10h)  │
+                                                              └───────────┘
+```
+
+- Timing uses ledger indices (deterministic, not wall-clock) as deadlines
+- Approximate ledger close time: ~4 seconds on PFTL
+- Commit window: ~1500 ledgers (~6 hours) — enough for cold starts + inference
+- Reveal window: ~250 ledgers (~1 hour)
+- Convergence check: after reveal window closes
+
+**2.1.3 — Protocol edge cases** (0.5 day)
+- What if a validator commits but doesn't reveal? → counted as non-participant for that round
+- What if a validator reveals before commit window closes? → reveal ignored, must wait
+- What if fewer than N validators commit? → round still valid (Phase 2 is shadow mode, not binding)
+- What if the foundation's round announcement is missed? → no round occurs, previous UNL continues
+- How do validators discover the round announcement? → watch for `pf_scoring_round_v1` memos from the foundation's known address
+- What if a validator's sidecar wallet doesn't have enough PFT for transaction fees? → sidecar logs error, skips round
+
+**Deliverables:**
+- Protocol specification document with all memo formats
+- Timing diagram with ledger-based deadlines
+- Edge case handling documented
+
+---
+
+### Milestone 2.2: GPU Sidecar Repository Setup
+
+**Duration:** ~1-2 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestone 2.1
+
+**Goal:** Create the `validator-scoring-sidecar` repository.
+
+**Steps:**
+
+**2.2.1 — Create repository** (1 hour)
+- Create `validator-scoring-sidecar` under `postfiatorg` GitHub org
+
+**2.2.2 — Project structure** (2-4 hours)
+```
+validator-scoring-sidecar/
+├── sidecar/
+│   ├── main.py                    # Entry point
+│   ├── config.py                  # Configuration (env vars)
+│   ├── chain_watcher.py           # Watch for round announcements
+│   ├── inference_engine.py        # Load model, run scoring
+│   ├── commit_reveal.py           # Submit commit/reveal txs
+│   ├── ipfs_client.py             # Publish scores to IPFS
+│   └── pftl_client.py             # XRPL transaction client
+├── scripts/
+│   ├── install.sh                 # One-command setup script
+│   ├── check_gpu.py               # Verify GPU compatibility
+│   └── download_model.py          # Download + verify model weights
+├── runpod/
+│   ├── handler.py                 # RunPod serverless handler (for cloud GPU option)
+│   └── Dockerfile                 # RunPod template
+├── tests/
+├── Dockerfile
+├── docker-compose.yml
+├── env.example
+├── requirements.txt
+└── README.md                      # Setup guide for validators
+```
+
+**2.2.3 — Configuration** (1-2 hours)
+```
+# Chain connection
+PFTL_RPC_URL           # Validator's RPC endpoint (usually localhost)
+SIDECAR_WALLET_SECRET  # Funded wallet for commit/reveal transactions
+VALIDATOR_PUBLIC_KEY    # This validator's master public key
+
+# Foundation
+FOUNDATION_ADDRESS     # Address to watch for round announcements
+
+# Model
+MODEL_ID               # HuggingFace model ID
+MODEL_WEIGHT_HASH      # Expected SHA-256 of weight file
+
+# IPFS
+IPFS_API_URL, IPFS_API_USERNAME, IPFS_API_PASSWORD
+
+# GPU (local mode)
+GPU_DEVICE             # CUDA device ID (default: 0)
+INFERENCE_BACKEND      # vllm or sglang
+
+# RunPod (cloud GPU mode, alternative to local)
+RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
+```
+
+**Deliverables:**
+- Repository with project skeleton
+- Configuration documented
+- Two execution modes defined: local GPU and RunPod cloud GPU
+
+---
+
+### Milestone 2.3: Sidecar Inference Engine
+
+**Duration:** ~7-10 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestone 2.2
+
+**Goal:** Build the inference engine that loads the pinned model and produces scoring output identical to the foundation's pipeline.
+
+**Steps:**
+
+**2.3.1 — Model download and verification** (2-3 days)
+- Implement `download_model.py` script:
+  - Downloads model weights from HuggingFace (or a mirror)
+  - Computes SHA-256 of the weight file
+  - Verifies against the expected hash from config
+  - Stores weights in a persistent local directory (so they survive container restarts)
+- Handle: partial downloads (resume), corrupt files (re-download), disk space checks
+- The model download only happens once (or when the model version changes)
+
+**2.3.2 — Local inference with vLLM/SGLang** (3-4 days)
+- Implement `InferenceEngine` class with two backends:
+  - **Local GPU mode**: loads model into GPU memory using vLLM or SGLang, runs inference locally
+  - **RunPod cloud mode**: calls RunPod serverless endpoint (same as foundation's pipeline)
+- Both modes must produce identical output given identical input + settings:
+  - Temperature 0, greedy decoding
+  - Same max tokens
+  - Same JSON output format
+  - Same prompt template
+- The local GPU mode uses the deterministic inference settings identified in Phase 0 research:
+  - SGLang: `--enable-deterministic` flag
+  - Or equivalent for vLLM
+
+**2.3.3 — Prompt template synchronization** (1-2 days)
+- The sidecar must use the exact same prompt template as the foundation's scoring service
+- Approach: the prompt template version is included in the round announcement memo
+- The sidecar fetches the prompt template from a known location (GitHub raw URL, or bundled with the sidecar version)
+- If the prompt version in the round announcement doesn't match the sidecar's bundled version: skip the round, log a warning (operator needs to update sidecar)
+
+**2.3.4 — GPU compatibility check** (1 day)
+- Implement `check_gpu.py`:
+  - Detects installed GPU(s) via `nvidia-smi`
+  - Checks if the GPU matches the mandatory type (from Phase 0 research)
+  - Checks VRAM capacity vs model requirements
+  - Checks CUDA version and driver version
+  - Clear pass/fail output with actionable messages
+- This runs as part of the install script and on sidecar startup
+
+**Deliverables:**
+- Model download + verification script
+- Inference engine with local GPU and RunPod cloud backends
+- GPU compatibility checker
+- Prompt template synchronization mechanism
+
+---
+
+### Milestone 2.4: Sidecar Chain Integration
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestones 2.1, 2.3
+
+**Goal:** Build the chain watcher and commit-reveal transaction submission.
+
+**Steps:**
+
+**2.4.1 — Chain watcher** (2-3 days)
+- Implement `ChainWatcher` class:
+  - Connects to the local PFTL node's WebSocket (or polls RPC)
+  - Watches for `pf_scoring_round_v1` memo transactions from the foundation's address
+  - When a round announcement is detected: extract snapshot CID, model version, deadlines
+  - Trigger the scoring pipeline
+- Must handle: node restarts, connection drops, reconnection, missed transactions (backfill from last known ledger)
+
+**2.4.2 — Scoring pipeline integration** (1-2 days)
+- When a round is detected:
+  1. Fetch snapshot from IPFS by CID
+  2. Verify snapshot hash against on-chain hash
+  3. Run inference (local GPU or RunPod)
+  4. Produce scored output JSON
+  5. Generate salt (32 random bytes)
+  6. Compute commit hash: `sha256(scores_json + salt + round_number)`
+  7. Wait for commit window to open
+
+**2.4.3 — Commit transaction** (1-2 days)
+- Submit `pf_scoring_commit_v1` memo transaction:
+  - Payment of 1 drop from sidecar wallet to memo destination
+  - Memo contains commit hash and round number
+  - Must be submitted before commit deadline ledger
+- Handle: insufficient balance (log error, skip round), transaction failure (retry once)
+
+**2.4.4 — Reveal transaction** (1-2 days)
+- After commit deadline passes:
+  1. Publish scored output to IPFS
+  2. Submit `pf_scoring_reveal_v1` memo transaction with IPFS CID and salt
+  3. Must be submitted before reveal deadline ledger
+- Verify own commit was included before revealing (read back from chain)
+
+**Deliverables:**
+- `ChainWatcher` with round announcement detection
+- Full commit-reveal flow: detect round → score → commit → reveal
+- Transaction submission with error handling
+
+---
+
+### Milestone 2.5: Convergence Monitoring
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 2.4
+
+**Goal:** Build the convergence checking system in the foundation's scoring service. After each round's reveal window closes, compare all validator outputs to the foundation's output.
+
+**Steps:**
+
+**2.5.1 — Reveal aggregator** (2-3 days)
+- Add to the `dynamic-unl-scoring` service:
+  - After the reveal deadline: scan chain for all `pf_scoring_reveal_v1` memos for this round
+  - For each reveal: verify commit hash matches (sha256(scores + salt + round) == commit hash)
+  - Fetch each validator's scored output from IPFS by CID
+  - Compare each validator's output hash to the foundation's output hash
+
+**2.5.2 — Convergence analysis** (1-2 days)
+- Compare outputs:
+  - **Exact match**: validator's output hash == foundation's output hash → converged
+  - **Score-level match**: individual validator scores match within tolerance (e.g., ±2 points) → partially converged
+  - **UNL-level match**: the final UNL inclusion list is identical → functionally converged
+- Generate convergence report:
+  ```json
+  {
+    "round_number": 42,
+    "foundation_output_hash": "abc123...",
+    "validators": [
+      {
+        "public_key": "nHUDXa2b...",
+        "committed": true,
+        "revealed": true,
+        "output_hash": "abc123...",
+        "exact_match": true,
+        "unl_match": true,
+        "score_divergence": 0
+      }
+    ],
+    "convergence_rate": 0.96,
+    "unl_convergence_rate": 1.0
+  }
+  ```
+
+**2.5.3 — Convergence publication** (1-2 days)
+- Publish convergence report to IPFS
+- Submit `pf_scoring_convergence_v1` memo transaction on-chain
+- Add convergence dashboard endpoint to the scoring service API:
+  - `GET /api/convergence/rounds` — convergence history
+  - `GET /api/convergence/rounds/<id>` — detailed convergence for a round
+  - `GET /api/convergence/validators/<key>` — convergence history per validator
+
+**Deliverables:**
+- Reveal aggregation and verification
+- Convergence analysis (exact, score-level, UNL-level)
+- Convergence report publication (IPFS + on-chain)
+- Convergence monitoring API endpoints
+
+---
+
+### Milestone 2.6: Validator Onboarding Documentation & ChatGPT Agent
+
+**Duration:** ~1-2 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestones 2.3, 2.4
+
+**Goal:** Create comprehensive setup documentation and a ChatGPT agent that guides validators through GPU sidecar installation.
+
+**Steps:**
+
+**2.6.1 — Setup documentation** (0.5-1 day)
+- Write a complete setup guide in the `validator-scoring-sidecar` README:
+  - **Prerequisites**: existing running validator, funded sidecar wallet (provide faucet instructions for testnet), IPFS access
+  - **Option A — Local GPU**: GPU requirements (mandatory type), NVIDIA driver install, CUDA install, Docker with NVIDIA runtime
+  - **Option B — RunPod Cloud GPU**: RunPod account setup, serverless endpoint deployment (step-by-step with screenshots), API key configuration
+  - **Installation**: one-command install script walkthrough
+  - **Configuration**: every env variable explained with examples
+  - **Verification**: how to verify the sidecar is working (check GPU, run test inference, simulate a round)
+  - **Troubleshooting**: common errors and solutions
+  - **Updating**: how to update when model version changes
+
+**2.6.2 — One-command install script** (0.5 day)
+- `install.sh` that:
+  1. Checks OS (Ubuntu 22.04+)
+  2. Checks Docker installed (installs if not)
+  3. Checks NVIDIA driver and CUDA (for local GPU mode)
+  4. Runs GPU compatibility check
+  5. Downloads model weights (with SHA-256 verification)
+  6. Creates `.env` from template (prompts for required values)
+  7. Starts the sidecar via Docker Compose
+  8. Runs a health check
+  9. Prints success message with next steps
+- For RunPod mode: skips GPU/CUDA checks, prompts for RunPod credentials instead
+
+**2.6.3 — ChatGPT agent** (0.5 day)
+- Create a custom GPT (similar to the existing validator install agent at the existing ChatGPT link)
+- The agent should:
+  - Guide users through the entire sidecar setup process step by step
+  - Answer questions about GPU requirements, costs, RunPod setup
+  - Help troubleshoot common installation issues
+  - Explain what the sidecar does and why it's needed
+  - Reference the official documentation
+- Configure with:
+  - Full README content as knowledge base
+  - Common troubleshooting scenarios
+  - FAQ about Dynamic UNL, scoring, and verification
+- Publish and share the link with validators
+
+**2.6.4 — Announcement preparation** (1-2 hours)
+- Draft Discord/Telegram announcement:
+  - What Dynamic UNL is and why it matters
+  - What validators need to do (install GPU sidecar)
+  - Two options: local GPU or RunPod cloud
+  - Link to documentation and ChatGPT agent
+  - Timeline for Phase 2 activation on testnet
+  - FAQ section
+
+**Deliverables:**
+- Complete setup documentation in README
+- One-command install script
+- Custom ChatGPT agent for validator support
+- Discord/Telegram announcement draft
+
+---
+
+### Milestone 2.7: postfiatd Changes (if needed)
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Phase 1 complete, Milestone 2.1
+
+**Goal:** Evaluate whether postfiatd needs any C++ changes for Phase 2 and implement them if so.
+
+**Assessment:** Phase 2 may work entirely without postfiatd changes. The sidecar handles chain watching and transaction submission independently. However, evaluate:
+
+**Steps:**
+
+**2.7.1 — Evaluate necessity** (1 day)
+- Can the sidecar discover round announcements by watching memo transactions via RPC? → Yes, using `account_tx` or `subscribe`
+- Can the sidecar submit commit/reveal as memo transactions via RPC? → Yes, using `submit`
+- Does postfiatd need to understand the commit-reveal protocol? → Not in Phase 2 (shadow mode — foundation UNL is still authoritative)
+- Does the convergence check need to happen inside postfiatd? → Not in Phase 2 (runs in the scoring service)
+
+**2.7.2 — Optional: Add RPC convenience methods** (3-5 days, only if needed)
+- If raw memo watching proves too fragile or slow, consider adding RPC methods to postfiatd:
+  - `dynamic_unl_info` — returns current dynamic UNL status (latest round, convergence)
+  - `dynamic_unl_rounds` — returns recent scoring round history
+- These would read from on-chain memo data and present it in a structured format
+- This is optional and can be deferred if the sidecar's chain watching works well
+
+**2.7.3 — Prepare featureDynamicUNL amendment** (2-3 days)
+- Add `featureDynamicUNL` to `features.macro` (disabled by default)
+- This amendment will gate Phase 3 changes (when the converged validator UNL becomes authoritative)
+- For Phase 2, the amendment is defined but not activated
+- Validators can vote on it in advance so it's ready for Phase 3
+
+**Deliverables:**
+- Assessment document: what postfiatd changes are needed vs not
+- `featureDynamicUNL` amendment defined (disabled)
+- Optional: RPC convenience methods
+
+---
+
+### Milestone 2.8: Devnet Testing
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestones 2.4, 2.5, 2.7
+
+**Goal:** Run the full Phase 2 system on devnet with 4 validators.
+
+**Steps:**
+
+**2.8.1 — Deploy sidecars to devnet validators** (1-2 days)
+- Install the sidecar on all 4 devnet validators (foundation-controlled)
+- Configure each with its own sidecar wallet (funded)
+- Use RunPod cloud mode for simplicity (same endpoint as the scoring service)
+- Start sidecars and verify they're watching for round announcements
+
+**2.8.2 — Run first commit-reveal round** (1-2 days)
+- Trigger a scoring round from the foundation scoring service
+- Monitor: do all 4 sidecars detect the round announcement?
+- Monitor: do all 4 sidecars run inference and produce scores?
+- Monitor: do all 4 sidecars submit commit transactions before deadline?
+- Monitor: do all 4 sidecars submit reveal transactions after commit window?
+- Monitor: does the convergence check produce a valid report?
+
+**2.8.3 — Convergence analysis** (1-2 days)
+- Compare output hashes across all 4 validators + foundation
+- If using RunPod cloud (same endpoint): outputs should be identical
+- If any divergence: investigate cause (timing, model version mismatch, prompt difference)
+- Document convergence rate and any issues
+
+**2.8.4 — Edge case testing** (1-2 days)
+- Test: sidecar starts after round announcement (late joiner)
+- Test: sidecar loses connection during round
+- Test: sidecar wallet runs out of funds
+- Test: one sidecar deliberately submits wrong scores (should diverge in convergence check)
+- Test: commit deadline passes with only 2/4 commits (round should still work)
+
+**Deliverables:**
+- All 4 devnet validators running sidecars
+- Multiple successful commit-reveal rounds
+- Convergence analysis results
+- Edge case test results
+
+---
+
+### Milestone 2.9: Testnet Rollout
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestone 2.8
+
+**Goal:** Roll out Phase 2 to testnet validators.
+
+**Steps:**
+
+**2.9.1 — Foundation validator sidecars** (1-2 days)
+- Install sidecars on the 5 foundation testnet validators first
+- Run 1-2 scoring rounds with only foundation validators participating
+- Verify convergence among foundation validators
+
+**2.9.2 — Community announcement** (1 day)
+- Post the prepared announcement on Discord and Telegram
+- Share documentation link and ChatGPT agent link
+- Offer support for setup questions
+- No hard deadline — validators can join at their own pace
+
+**2.9.3 — Monitor community participation** (ongoing, ~3-5 days)
+- Track: how many validators install sidecars
+- Track: commit/reveal participation rates per round
+- Respond to support requests
+- Iterate on documentation based on feedback
+
+**2.9.4 — Stabilization** (1-2 days)
+- Run multiple rounds with growing participation
+- Monitor convergence rates as more validators join
+- Document any systematic issues
+
+**Deliverables:**
+- Phase 2 live on testnet
+- Foundation + community validators participating
+- Convergence monitoring dashboard populated
+- Documentation updated based on feedback
+
+---
+
+### Phase 2 Decision Gate
+
+**Criteria for proceeding to Phase 3:**
+
+| Criterion | Required | Status |
+|---|---|---|
+| Phase 2 running on testnet for 4+ weeks | Yes | |
+| At least 10 validators participating in commit-reveal | Yes | |
+| Convergence rate > 90% consistently | Yes | |
+| Divergence causes identified and documented | Yes | |
+| Output convergence confirmed (Layer 1) | Yes | |
+| Logit-level determinism tested empirically (same GPU type) | Yes | |
+| `featureDynamicUNL` amendment defined in postfiatd | Yes | |
+
+---
+
+## Phase 3: Full Verification — Proof of Logits
+
+**Duration:** ~5-7 weeks | **Difficulty:** ★★★★★ Very Hard
+
+**Goal:** Validators prove they actually ran the correct model via proof-of-logits. The converged validator UNL replaces the foundation's UNL as the authoritative source. The foundation becomes one validator among many.
+
+```
+         M 3.1                  M 3.2
+         Logit Commitment       Spot-Check
+         Generation             Tooling
+         ~7-10 days             ~7-10 days
+              │                      │
+              └──────────┬───────────┘
+                         ▼
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+         M 3.3      M 3.4      M 3.5
+         Verif.     Authority  Identity
+         Publish    Transfer   Portal
+         ~5-7 days  ~5-7 days  ~7-10 days
+              │          │          │
+              └──────────┼──────────┘
+                         ▼
+                    M 3.6
+                    Full System
+                    Test
+                    ~5-7 days
+```
+
+---
+
+### Milestone 3.1: Logit Commitment Generation
+
+**Duration:** ~7-10 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Phase 2 complete
+
+**Goal:** Modify the sidecar's inference engine to capture SHA-256 hashes of logit vectors at every token position during generation.
+
+**Steps:**
+
+**3.1.1 — Inference engine modification** (3-5 days)
+- Hook into the inference engine (vLLM or SGLang) to intercept logit vectors at each decoding step
+- At each token position `i`:
+  1. Get the raw logit vector (float array over vocabulary, typically 32K-128K entries)
+  2. Serialize the logit vector to bytes (consistent byte ordering — little-endian float32)
+  3. Compute `SHA-256(serialized_logits)`
+  4. Store the hash alongside the generated token
+- The result is an ordered list of hashes — the **logit commitment**:
+  ```json
+  {
+    "logit_commitment": [
+      {"position": 0, "token_id": 1234, "logit_hash": "a1b2c3..."},
+      {"position": 1, "token_id": 5678, "logit_hash": "d4e5f6..."},
+      ...
+    ],
+    "total_positions": 1500,
+    "commitment_hash": "<sha256 of all logit hashes concatenated>"
+  }
+  ```
+
+**3.1.2 — Deterministic inference validation** (2-3 days)
+- Run the same prompt through the inference engine multiple times on the same GPU
+- Verify: are logit hashes identical across runs? (they must be for this to work)
+- If not: investigate inference engine settings, quantization, CUDA determinism flags
+- Test across multiple instances of the same GPU type (e.g., two A40s on RunPod)
+- Document results and any required settings
+
+**3.1.3 — Integration with commit-reveal** (2 days)
+- Update the sidecar's commit-reveal flow:
+  - Commit hash now includes: `sha256(scores_json + logit_commitment_hash + salt + round_number)`
+  - Reveal payload now includes: logit commitment (published to IPFS alongside scores)
+- Update memo formats:
+  ```json
+  {
+    "type": "pf_scoring_reveal_v2",
+    "round_number": 42,
+    "validator_public_key": "nHUDXa2b...",
+    "scores_ipfs_cid": "Qm...",
+    "logit_commitment_ipfs_cid": "Qm...",
+    "salt": "...",
+    "scores_hash": "...",
+    "logit_commitment_hash": "..."
+  }
+  ```
+
+**Deliverables:**
+- Inference engine with logit hash capture at every token position
+- Deterministic inference validated on mandatory GPU type
+- Updated commit-reveal protocol with logit commitments
+- Test results documenting cross-instance logit hash consistency
+
+---
+
+### Milestone 3.2: Cross-Validator Spot-Check Tooling
+
+**Duration:** ~7-10 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Milestone 3.1
+
+**Goal:** Build tooling that allows any validator (or external party) to spot-check any other validator's logit commitments.
+
+**Steps:**
+
+**3.2.1 — Spot-check engine** (3-5 days)
+- Implement `SpotChecker` class:
+  1. Input: target validator's logit commitment + published scores + round snapshot
+  2. Pick N random token positions (configurable, default 5-10)
+  3. For each position `K`:
+     - Load the same model (verified by weight hash)
+     - Feed the same input (snapshot + prompt, verified from IPFS)
+     - Run forward pass up to position `K`
+     - Compute `SHA-256(logits_at_position_K)`
+     - Compare with the target validator's published hash at position `K`
+  4. Report results: pass/fail per position, overall verdict
+
+**3.2.2 — Spot-check scheduling** (2-3 days)
+- After each round's reveal window:
+  - The foundation's scoring service performs minimum 3 spot-checks per validator
+  - Each validator's sidecar can optionally spot-check other validators
+  - External parties can spot-check at any time using the published data
+- Spot-check results are collected and included in the convergence report
+
+**3.2.3 — Verification CLI tool** (2 days)
+- Standalone CLI tool (included in the sidecar repo) for manual spot-checking:
+  ```bash
+  python -m sidecar.verify \
+    --round 42 \
+    --validator nHUDXa2b... \
+    --positions 5 \
+    --model-path /path/to/model \
+    --ipfs-gateway https://ipfs-testnet.postfiat.org
+  ```
+- Downloads all necessary data (snapshot, scores, logit commitment) from IPFS
+- Runs spot-checks and prints results
+- Can be used by anyone with GPU access
+
+**Deliverables:**
+- `SpotChecker` implementation
+- Automated spot-checking in foundation scoring service
+- Standalone verification CLI tool
+- Documentation for external verifiers
+
+---
+
+### Milestone 3.3: Verification Result Publication
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 3.2
+
+**Goal:** Publish verification results and update the convergence report format.
+
+**Steps:**
+
+**3.3.1 — Extended convergence report** (2-3 days)
+- Update convergence report to include Layer 2 verification:
+  ```json
+  {
+    "round_number": 42,
+    "layer_1": {
+      "convergence_rate": 0.96,
+      "output_hash_matches": 26,
+      "total_reveals": 27
+    },
+    "layer_2": {
+      "spot_checks_performed": 135,
+      "spot_checks_passed": 132,
+      "spot_checks_failed": 3,
+      "validators_verified": 27,
+      "validators_failed": 1,
+      "failure_details": [
+        {
+          "validator": "nHxyz...",
+          "position": 342,
+          "expected_hash": "abc...",
+          "actual_hash": "def...",
+          "verdict": "logit_mismatch"
+        }
+      ]
+    }
+  }
+  ```
+
+**3.3.2 — Mismatch handling** (2-3 days)
+- Validators that fail spot-checks:
+  - Excluded from that round's convergence calculation
+  - Logged in the convergence report with evidence
+  - No slashing — exclusion is the penalty
+  - Repeated failures across rounds flagged for investigation
+- Update the `pf_scoring_convergence_v1` memo to include Layer 2 summary
+
+**3.3.3 — Monitoring dashboard update** (1 day)
+- Update the scoring service API to expose Layer 2 data
+- Per-validator: spot-check history, pass/fail rate across rounds
+
+**Deliverables:**
+- Extended convergence report with Layer 2 data
+- Mismatch handling logic
+- Updated monitoring endpoints
+
+---
+
+### Milestone 3.4: Authority Transition
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Milestones 3.1-3.3, Phase 2 convergence proven
+
+**Goal:** Transition from "foundation UNL is authoritative" to "converged validator UNL is authoritative."
+
+**Steps:**
+
+**3.4.1 — Define transition criteria** (1 day)
+- The converged validator UNL becomes authoritative when:
+  - At least 10 validators consistently participate (4+ consecutive rounds)
+  - Layer 1 convergence rate > 95% for 4+ consecutive rounds
+  - Layer 2 spot-checks pass rate > 98%
+  - The `featureDynamicUNL` amendment is voted and enabled
+
+**3.4.2 — Implement UNL source selection in scoring service** (2-3 days)
+- Update the scoring orchestrator:
+  - If convergence criteria met: use the converged validator UNL (median of validator outputs)
+  - If not met: fall back to foundation's UNL
+  - The switch is automatic based on convergence data
+- The foundation still publishes the VL — but the VL content now comes from the converged result, not the foundation's own scoring
+
+**3.4.3 — postfiatd amendment activation** (2-3 days)
+- When ready: activate `featureDynamicUNL` amendment via validator voting
+- This is a protocol-level change that signals validators support the Dynamic UNL system
+- The amendment itself may not gate code changes in Phase 3 (the VL format doesn't change), but it serves as a coordination mechanism
+
+**Deliverables:**
+- Transition criteria defined and implemented
+- Automatic UNL source selection based on convergence
+- Amendment activation plan
+
+---
+
+### Milestone 3.5: Validator Identity Portal
+
+**Duration:** ~7-10 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** None (can be built in parallel)
+
+**Goal:** Provide a web interface where validators can complete identity verification (KYC/KYB via SumSub) before being eligible for scoring.
+
+**Note:** This extends the existing scoring-onboarding system. The exact implementation approach should be determined when this milestone is reached. Below is an approximate scope.
+
+**Steps:**
+
+**3.5.1 — Evaluate extension options** (1 day)
+- Option A: Extend the existing scoring-onboarding web UI and API
+- Option B: Build a standalone portal that integrates with the existing SumSub setup
+- Recommend Option A if the existing codebase is maintainable
+
+**3.5.2 — Validator identity flow** (3-5 days)
+- Validator visits the portal and connects their validator public key
+- Portal guides them through:
+  1. Wallet authorization (sign a message with their validator key)
+  2. KYC verification (redirect to SumSub, complete verification)
+  3. Optional: domain verification (prove they control a domain)
+  4. Optional: institutional verification (KYB)
+- On completion: identity proofs published on-chain (existing memo pattern)
+
+**3.5.3 — Integration with scoring pipeline** (2-3 days)
+- The scoring service reads identity data when building validator profiles
+- Validators with completed KYC receive an identity score boost
+- Validators without KYC are still scored but with lower identity/reputation scores
+
+**3.5.4 — Documentation** (1 day)
+- Guide for validators on how to complete identity verification
+- Add to the ChatGPT agent's knowledge base
+
+**Deliverables:**
+- Validator identity verification portal
+- On-chain identity publication
+- Integration with scoring pipeline
+- Documentation
+
+---
+
+### Milestone 3.6: Full System Test
+
+**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** All previous milestones
+
+**Goal:** End-to-end test of the complete Dynamic UNL system on testnet.
+
+**Steps:**
+
+**3.6.1 — Full round execution** (2-3 days)
+- Run multiple scoring rounds with:
+  - Foundation scoring (Phase 1 pipeline)
+  - Validator verification with commit-reveal (Phase 2)
+  - Logit commitment generation and spot-checking (Phase 3)
+  - Convergence check with both Layer 1 and Layer 2
+- Verify all data is published to IPFS and on-chain
+
+**3.6.2 — Authority transition test** (1-2 days)
+- Simulate the transition: converged validator UNL becomes the published VL
+- Verify all testnet validators accept the converged UNL
+- Monitor consensus stability during and after transition
+- Test fallback: if convergence drops, does the system revert to foundation UNL?
+
+**3.6.3 — Adversarial testing** (1-2 days)
+- Test: one validator deliberately runs a different model → should fail spot-checks and be excluded
+- Test: one validator submits fabricated logit commitments → should be caught
+- Test: one validator copies another's output hash → should be caught by logit spot-check (different logits)
+- Test: foundation goes offline → validators still converge among themselves (future resilience)
+
+**Deliverables:**
+- Complete system test results
+- Authority transition verified
+- Adversarial test results
+- System declared production-ready for testnet
+
+---
+
+## Summary: Time and Difficulty by Phase
+
+| Phase | Duration | Difficulty | Key Deliverables |
+|---|---|---|---|
+| **Phase 0** | ~1 week | ★★★☆☆ | Model selected, RunPod ready, determinism research |
+| **Phase 1** | ~4-6 weeks | ★★★★☆ | Foundation scoring live on testnet, VL auto-generated |
+| **Phase 2** | ~6-8 weeks | ★★★★★ | Validator GPU sidecars, commit-reveal, convergence monitoring |
+| **Phase 3** | ~5-7 weeks | ★★★★★ | Proof-of-logits, authority transition, identity portal |
+| **Total** | **~17-23 weeks** | | **Fully decentralized Dynamic UNL** |
+
+## Summary: Time and Difficulty by Milestone
+
+| Milestone | Duration | Difficulty | Dependencies |
+|---|---|---|---|
+| **0.1** Model Selection | 2-3 days | ★★★☆☆ | None |
+| **0.2** RunPod Setup | 1-2 days | ★★☆☆☆ | 0.1 |
+| **0.3** Determinism Research | 2 days | ★★★★☆ | 0.1 |
+| **0.4** MaxMind Upgrade | 2 hours | ★☆☆☆☆ | None |
+| **1.1** Repo Setup | 1-2 days | ★★☆☆☆ | Phase 0 |
+| **1.2** Data Collection | 3-4 days | ★★★☆☆ | 1.1 |
+| **1.3** LLM Scoring | 4-5 days | ★★★☆☆ | 1.1, 0.1, 0.2 |
+| **1.4** VL Generation | 3-4 days | ★★★☆☆ | 1.3 |
+| **1.5** IPFS Publication | 2-3 days | ★★☆☆☆ | 1.2, 1.3 |
+| **1.6** On-Chain Memo | 2-3 days | ★★☆☆☆ | 1.4, 1.5 |
+| **1.7** Orchestrator | 2-3 days | ★★☆☆☆ | 1.2-1.6 |
+| **1.8** Infra Deploy | 2-3 days | ★★☆☆☆ | 1.7 |
+| **1.9** Devnet Testing | 5-7 days | ★★★☆☆ | 1.8 |
+| **1.10** Testnet Deploy | 3-4 days | ★★★☆☆ | 1.9 |
+| **2.1** Commit-Reveal Design | 2-3 days | ★★★★☆ | Phase 1 |
+| **2.2** Sidecar Repo | 1-2 days | ★★☆☆☆ | 2.1 |
+| **2.3** Sidecar Inference | 7-10 days | ★★★★☆ | 2.2 |
+| **2.4** Sidecar Chain | 5-7 days | ★★★★☆ | 2.1, 2.3 |
+| **2.5** Convergence Monitor | 5-7 days | ★★★☆☆ | 2.4 |
+| **2.6** Validator Onboarding | 1-2 days | ★★☆☆☆ | 2.3, 2.4 |
+| **2.7** postfiatd Changes | 5-7 days | ★★★★☆ | Phase 1, 2.1 |
+| **2.8** Devnet Testing | 5-7 days | ★★★☆☆ | 2.4, 2.5, 2.7 |
+| **2.9** Testnet Rollout | 5-7 days | ★★★★☆ | 2.8 |
+| **3.1** Logit Commitments | 7-10 days | ★★★★★ | Phase 2 |
+| **3.2** Spot-Check Tooling | 7-10 days | ★★★★★ | 3.1 |
+| **3.3** Verification Publish | 5-7 days | ★★★☆☆ | 3.2 |
+| **3.4** Authority Transfer | 5-7 days | ★★★★★ | 3.1-3.3 |
+| **3.5** Identity Portal | 7-10 days | ★★★☆☆ | None (parallel) |
+| **3.6** Full System Test | 5-7 days | ★★★★☆ | All |
