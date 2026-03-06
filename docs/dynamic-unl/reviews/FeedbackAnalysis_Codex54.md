@@ -54,16 +54,6 @@ Phase 1 doesn't need determinism (foundation-only), so this doesn't block shippi
 
 **Current plan:** Phase 3 is presented as ~5-7 weeks of implementation with concrete milestones.
 
-**Verdict: Accept with modification**
-
-The reviewer correctly identifies that Phase 3 has genuine research risk (logit-level determinism may not work reliably), and our plan currently papers over that by presenting it as a linear implementation sequence.
-
-The 3A/3B split is valuable:
-- **3A** (content authority transfer): Validators converge, foundation publishes the converged result. This is achievable as soon as Phase 2 convergence is proven. No logit proofs needed.
-- **3B** (publication authority transfer): Remove foundation as the single publisher. This requires protocol-level changes (threshold signing, multi-publisher, or on-chain derivation). This is a harder, separate problem.
-
-The modification: I'd keep the logit commitment work (Milestone 3.1-3.2) as defined but explicitly mark it as "research milestone — proceed only if Phase 2 convergence rates justify it." If Phase 2 shows >99% output convergence reliably, logit proofs become less critical (the system is already working). If convergence is spotty, logit proofs become the diagnostic tool for why.
-
 **Resolution: Accepted with modification — 3A/3B split with explicit fallback**
 
 Restructure Phase 3 into two sub-phases:
@@ -81,18 +71,6 @@ Logit commitment milestones (3.1-3.2) are kept but marked as research — procee
 **Reviewer says:** Even with perfect validator convergence, the foundation still controls: snapshot assembly, round announcements, VL signing/distribution path, IPFS gateway. Phase 3 isn't "foundation replaced" unless those choke points are also addressed.
 
 **Current plan:** Phase 3 says "the foundation becomes one validator among many" but doesn't address snapshot production, list signing, or publication monopolies.
-
-**Verdict: Accept**
-
-This is an honest assessment. Our current Phase 3 narrative overstates the decentralization achieved. With all the Phase 3 milestones complete as designed, the foundation would still be:
-- The sole data collector/snapshot assembler
-- The sole round announcer
-- The sole VL signer
-- The primary IPFS gateway operator
-
-The validators prove computation honestly, but the foundation controls the inputs and the delivery channel.
-
-This doesn't invalidate the plan — it means we should be precise in our language and honest about the trust model at each phase. Phase 3 as currently scoped achieves "converged scoring authority" not "full decentralization."
 
 **Resolution: Accepted — update trust model language to be precise**
 
@@ -174,17 +152,6 @@ VHS sees the network from one vantage point. Keep it simple: the scoring prompt 
 
 **Current plan:** MaxMind GeoIP2 data published as part of the validator snapshot to IPFS.
 
-**Verdict: Accept**
-
-This is a legitimate legal risk we hadn't considered. Publishing raw MaxMind data (ISP name, datacenter, city) to IPFS could violate their license terms.
-
-Solutions:
-1. **Publish normalized categories instead of raw data.** Instead of `"isp": "DigitalOcean"`, publish `"datacenter_provider": true`, `"cloud_concentration_class": "major"`. Our own taxonomy, derived from but not reproducing MaxMind data.
-2. **Get commercial license.** MaxMind offers redistribution licenses — cost TBD.
-3. **Use alternative data sources.** ASN data is public (WHOIS/RIR databases). Country from IP is available from multiple free sources. We may not even need MaxMind for the fields that matter.
-
-Option 1 is the safest and aligns with the reviewer's broader point about publishing normalized categories rather than vendor data.
-
 **Resolution: Accepted — split data sources by publishability**
 
 Use ASN (Autonomous System Number) data from public WHOIS/RIR databases for ISP and cloud provider identification. ASN data is public, freely redistributable, and provides the same information needed for diversity scoring (ISP name like "DigitalOcean", AS number, cloud provider classification). This data can be published to IPFS without licensing concerns.
@@ -221,18 +188,6 @@ After evaluating several approaches (percentage caps, hysteresis thresholds, inc
 
 **Current plan:** Milestone 1.7 describes a linear orchestrator with step logging.
 
-**Verdict: Accept**
-
-A proper state machine with idempotent steps is strictly better than "linear pipeline with logging." It enables:
-- Resuming from failure (don't re-run scoring if IPFS upload failed)
-- Debugging (replay a round from any intermediate state)
-- Dry runs (test the pipeline without publishing)
-- Audit (every state transition is recorded)
-
-The `replay_round` and `rebuild_from_raw` capabilities are genuinely useful for debugging and will save significant time during development and operations.
-
-Also accept the reviewer's point about not using APScheduler in-process — use a round table in Postgres with advisory locks for singleton orchestration.
-
 **Resolution: Accepted**
 
 Redesign Milestone 1.7 as an explicit state machine with idempotent steps. States: `COLLECTING`, `NORMALIZED`, `SCORED`, `SELECTED`, `VL_SIGNED`, `IPFS_PUBLISHED`, `ONCHAIN_PUBLISHED`, `COMPLETE`, `FAILED`. Each step is idempotent — rerunning from any state produces the same result. Add `dry_run`, `replay_round(round_id)`, and `rebuild_from_raw(round_id)` capabilities. Replace APScheduler with a round table in Postgres with advisory locks for singleton orchestration.
@@ -246,18 +201,6 @@ Redesign Milestone 1.7 as an explicit state machine with idempotent steps. State
 **Reviewer says:** Treat VL signing key as a separate security domain. Use a minimal signing service or HSM-backed function. Don't let the general FastAPI process hold the raw long-lived secret. Have a manual offline emergency publication tool.
 
 **Current plan:** Publisher token stored as environment variable, used by the FastAPI service directly.
-
-**Verdict: Accept with modification**
-
-The reviewer is right that this key is governance-critical — compromise means an attacker can publish a malicious UNL. However, HSM/Vault in Phase 1 for a testnet with ~30 validators may be over-engineering.
-
-Modification: For Phase 1/devnet/testnet, environment variable is acceptable but with these mitigations:
-- Separate devnet and testnet keys (already implied but make explicit)
-- Key rotation runbook documented
-- Access logging for the signing operation
-- Manual offline signing tool for emergencies
-
-For mainnet (if ever), upgrade to HSM/Vault transit.
 
 **Resolution: Accepted with modification**
 
@@ -273,12 +216,6 @@ For Phase 1/testnet, environment variable storage is acceptable with these mitig
 
 **Current plan:** Single self-hosted IPFS node at `ipfs-testnet.postfiat.org`.
 
-**Verdict: Accept with modification**
-
-The principle is correct — a single foundation-run IPFS gateway is a centralization point. However, for Phase 1 on testnet, a single gateway is pragmatically fine.
-
-Modification: In Phase 1, document that validators can use any IPFS gateway to fetch by CID (the data is content-addressed — any gateway works). Add Pinata or web3.storage as a secondary pin for redundancy. The scoring service should also serve the audit trail over plain HTTPS as a fallback.
-
 **Resolution: Accepted — document IPFS redundancy and HTTPS fallback**
 
 For Phase 1 on testnet, a single gateway is pragmatically fine. But document that: (a) validators can use any IPFS gateway to fetch by CID (content-addressed — any gateway works), (b) add a secondary pinning service (Pinata or web3.storage) for redundancy, (c) the scoring service serves audit trail artifacts over plain HTTPS as a fallback.
@@ -292,12 +229,6 @@ For Phase 1 on testnet, a single gateway is pragmatically fine. But document tha
 **Reviewer says:** Never hash concatenated strings loosely. Use typed encoding: `sha256(domain || version || round_uint64 || artifact_hash || cid_bytes || ...)`
 
 **Current plan:** Commit hash is `sha256(scores_json + salt + round_number)` — string concatenation.
-
-**Verdict: Accept**
-
-This is a subtle but real correctness issue. Loose string concatenation can create ambiguities (is `"score12"+"3"` the same as `"score1"+"23"`?). Domain-separated hashing with fixed-width fields is the standard approach for cryptographic commitments.
-
-Small change, high value. Define a canonical binary encoding for all hash preimages.
 
 **Resolution: Accepted**
 
@@ -313,10 +244,6 @@ Loose string concatenation (`sha256(scores_json + salt + round_number)`) creates
 
 **Current plan:** Milestone 2.5 has three levels: exact match, score-level match, UNL-level match.
 
-**Verdict: Accept**
-
-The reviewer's breakdown is more useful for debugging. Especially the "first divergence analysis" and "environment diff" — these are what you actually need when troubleshooting why validators diverged. Without them you just know "they disagree" but not why.
-
 **Resolution: Accepted with modification — environment diff only, no token-level analysis**
 
 Add environment diff as a diagnostic layer: when validators diverge, compare their execution manifests to identify which configuration field differs (SGLang version, CUDA driver, model hash, etc.). Drop the first-divergence token-level analysis for now — it's overkill for Phase 2. The three existing levels (exact match, score-level, UNL-level) plus environment diff is sufficient.
@@ -331,10 +258,6 @@ Add environment diff as a diagnostic layer: when validators diverge, compare the
 
 **Current plan:** Milestone 2.8 says "Use RunPod cloud mode for simplicity (same endpoint as the scoring service)."
 
-**Verdict: Accept**
-
-If all validators hit the same RunPod endpoint, you're testing that the commit-reveal plumbing works, not that independent inference converges. Each validator (or at least a subset) needs their own endpoint/pod for the convergence test to be meaningful.
-
 **Resolution: Accepted**
 
 If all validators hit the same RunPod endpoint during devnet testing, we're proving transport symmetry, not independent execution. At least a subset of devnet validators must use their own GPU or separate RunPod endpoint for the convergence test to be meaningful.
@@ -348,10 +271,6 @@ If all validators hit the same RunPod endpoint during devnet testing, we're prov
 **Reviewer says:** Challenges must be derived from something validators can't know at commit time. A future validated ledger hash is the natural source.
 
 **Current plan:** "Pick a random token position K" — no specification of randomness source.
-
-**Verdict: Accept**
-
-If challenge positions are known in advance, a cheating validator could precompute correct logits at likely challenge positions while fabricating the rest. Using a future ledger hash (from after the reveal window closes) as the challenge seed makes this impossible.
 
 **Resolution: Accepted — use future ledger hash as challenge seed**
 
@@ -403,12 +322,6 @@ Standard JSON serialization is non-deterministic (key ordering, whitespace, numb
 
 **Reviewer says:** Specific Python tooling recommendations for both new repos.
 
-**Verdict: Accept mostly**
-
-Most of these are modern best practices: `uv` over pip, `ruff` over black/flake8, `httpx` over requests, `structlog` over stdlib logging, `pydantic-settings` (already planned). `hypothesis` for property testing is a good call for the normalization/canonicalization code.
-
-The one thing I'd skip for now: `sqlalchemy + alembic` may be over-engineered for Phase 1. Raw SQL with a migration script might be simpler for the small schema. But if the team prefers an ORM, fine.
-
 **Resolution: Accepted — keep it simple**
 
 Use modern Python tooling without over-engineering: `uv` for dependency management, `ruff` for linting, `httpx` for HTTP, `structlog` for structured logging, `pydantic-settings` (already planned). Skip `sqlalchemy + alembic` for Phase 1 — raw SQL with migration scripts is simpler for the small schema. Add `hypothesis` for property testing of canonicalization/normalization code.
@@ -420,12 +333,6 @@ Use modern Python tooling without over-engineering: `uv` for dependency manageme
 ### 23. Ops/security stack (Prometheus, Sentry, Trivy, Cosign, SOPS)
 
 **Reviewer says:** Add container scanning (Trivy), SBOM (Syft), image signing (Cosign), secret management (SOPS/Vault).
-
-**Verdict: Defer to Phase 2**
-
-For Phase 1 on testnet, this is over-engineering. We already have Grafana/Loki for observability. Container scanning and image signing are mainnet-grade practices. Add them when the system is stable and heading toward production.
-
-Prometheus metrics endpoint and structured logs: accept for Phase 1 — low cost, high value.
 
 **Resolution: Accepted — use existing Loki stack, defer container security**
 
@@ -442,10 +349,6 @@ Defer container scanning (Trivy), SBOM (Syft), image signing (Cosign), and secre
 ### 24. Add a legal/licensing workstream in Phase 0
 
 **Reviewer says:** Specifically for IP-intelligence vendor licensing, public redistribution of derived fields, identity attestation wording.
-
-**Verdict: Accept**
-
-The MaxMind licensing issue (item #10) is real. This doesn't need to be a big workstream — one legal consultation focused on: (a) can we publish MaxMind-derived categories to IPFS, (b) what identity data can we publish on-chain. A day of work but needs to happen early.
 
 **Resolution: Accepted**
 
@@ -469,10 +372,6 @@ These tests were already added as Milestone 1.9.4 (Scoring stability testing) du
 
 **Reviewer says:** Identity portal (Milestone 3.5) is useful but not critical path. Make it explicitly parallel.
 
-**Verdict: Accept**
-
-The plan already says "Dependencies: None (can be built in parallel)" but it's listed in Phase 3, implying it gates the full system test. Make the independence explicit. It can be built anytime during Phase 1-3.
-
 **Resolution: Accepted — make independence explicit, but clarify prerequisite**
 
 The identity portal (Milestone 3.5) is independent infrastructure work — it can be built anytime during Phase 1-3 and does not gate the system test. However, validators must have on-chain identity data (submitted via any method, including the existing scoring-onboarding flow) before scoring begins. The portal is a convenience layer, not the only path to identity data.
@@ -484,10 +383,6 @@ The identity portal (Milestone 3.5) is independent infrastructure work — it ca
 ### 27. Identity data should be minimal (status only, no PII)
 
 **Reviewer says:** Publish only: verified/not-verified, institutional/individual/unknown, domain-attested/not-attested. No PII.
-
-**Verdict: Accept**
-
-This is already roughly our intent but worth making explicit. The on-chain memo should contain attestation status, not identity details.
 
 **Resolution: Accepted**
 
@@ -515,10 +410,6 @@ The prompt should define the relevant concentration surfaces (country, ASN, oper
 
 **Reviewer says:** If no rewards, you need low-cost round cadence, minimal operator burden, reputational incentives, public participation metrics, and hard fallback rules if participation drops.
 
-**Verdict: Accept as documentation, not code change**
-
-The XRPL model (no validator rewards) works for XRPL. We're following the same model. But the reviewer is right that we should document: what happens if participation drops below threshold? Answer: fall back to foundation UNL (which is already the Phase 2 design — foundation remains authoritative).
-
 **Resolution: Accepted — document participation fallback rules**
 
 The XRPL model (no validator rewards) works, but we should document: if participation drops below threshold, fall back to foundation UNL (which is already the Phase 2 design — foundation remains authoritative). Document minimum participation requirements and how round cadence affects operator burden.
@@ -531,21 +422,17 @@ The XRPL model (no validator rewards) works, but we should document: if particip
 
 **Reviewer says:** Three installation paths: interactive shell, non-interactive .env/Compose, Ansible/Terraform module. For institutions, the third is the real one.
 
-**Verdict: Defer**
+**Resolution: Deferred**
 
 Shell script + Docker Compose is sufficient for testnet. Ansible/Terraform is mainnet-grade. If an institutional validator asks for it during testnet, build it then.
 
-**Impact on plan:** None for now. Add to future work.
+**No changes to plan.**
 
 ---
 
 ### 31. Add failure drills to Phase 3 system test
 
 **Reviewer says:** Test: foundation doesn't announce a round, IPFS gateway down, one-third of validators fail to reveal, list publication misses before expiry, model upgrade half-applied, signing service unavailable.
-
-**Verdict: Accept**
-
-These are the scenarios that matter for operational resilience. The current Milestone 3.6 has some adversarial tests but not these operational failure scenarios.
 
 **Resolution: Accepted**
 
@@ -558,10 +445,6 @@ Add operational failure scenarios to Milestone 3.6: foundation doesn't announce 
 ### 32. Layer 2 (proof-of-logits) proves computation consistency, not hardware provenance or non-collusion
 
 **Reviewer says:** Proof-of-logits proves transcript consistency with the model/input/runtime. It does not prove the validator used its own GPU, didn't outsource, or is socially independent.
-
-**Verdict: Accept as documentation clarification**
-
-This is correct and we should be precise about what Layer 2 actually proves. It's not a flaw in the design — it's a scope clarification. Update the design doc to be explicit about what proof-of-logits does and doesn't prove.
 
 **Resolution: Accepted — clarify scope in design doc**
 
@@ -581,9 +464,11 @@ This is a scope clarification, not a design flaw.
 
 **Reviewer says:** Use a Merkle tree so you can commit to one root and reveal partial proofs efficiently.
 
-**Verdict: Defer**
+**Resolution: Deferred**
 
 Merkle trees are elegant but add complexity. For Phase 3 R&D, an ordered list of hashes with a root hash of the concatenation is simpler and sufficient. If logit commitment proves viable and we need more efficient proofs, upgrade to Merkle trees later.
+
+**No changes to plan.**
 
 ---
 
@@ -591,9 +476,11 @@ Merkle trees are elegant but add complexity. For Phase 3 R&D, an ordered list of
 
 **Reviewer says:** Half the complexity comes from the fact it may not be co-located.
 
-**Verdict: Reject**
+**Resolution: Rejected**
 
 "Sidecar" is a well-understood infrastructure pattern. "Executor" is generic. The current name communicates intent clearly.
+
+**No changes to plan.**
 
 ---
 
@@ -601,9 +488,11 @@ Merkle trees are elegant but add complexity. For Phase 3 R&D, an ordered list of
 
 **Reviewer says:** For IPFS audit bundles.
 
-**Verdict: Defer**
+**Resolution: Deferred**
 
 IPFS directory pinning is sufficient for Phase 1-2. CAR files are an optimization for when you need portable, self-contained bundles. Not needed yet.
+
+**No changes to plan.**
 
 ---
 

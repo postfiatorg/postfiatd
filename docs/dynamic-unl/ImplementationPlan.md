@@ -105,7 +105,7 @@ Validation             Scoring                  Verification               Proof
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  RunPod Serverless Endpoint (NEW)                            │  │
 │  │  Model: TBD (selected in Phase 0, e.g. Qwen 3.5 32B)         │  │
-│  │  Backend: SGLang (vLLM as fallback)                           │  │
+│  │  Backend: SGLang (vLLM as fallback)                          │  │
 │  │  Pay-per-use: ~$0.00025/sec active | $0 idle                 │  │
 │  │  Estimated monthly: ~$5-15 (weekly scoring, both envs)       │  │
 │  │  Single endpoint shared by devnet + testnet scoring          │  │
