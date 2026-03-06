@@ -807,10 +807,15 @@ dynamic-unl-scoring/
   ```
 - Note: MaxMind geolocation responses are **not** included in the IPFS audit trail (EULA restriction). Raw VHS and ASN data are publishable.
 - Pin the directory and get the root CID
+- Pin to a secondary service (Pinata or web3.storage) for redundancy — if the foundation's IPFS node goes down, the data is still accessible
+- Serve audit trail artifacts over plain HTTPS as a fallback (e.g., `https://scoring-testnet.postfiat.org/rounds/<N>/`)
 - Store CID in PostgreSQL linked to the round
+- Note: validators can fetch by CID through any IPFS gateway, not just the foundation's
 
 **Deliverables:**
 - `IPFSPublisherService` that pins the audit trail and returns a CID
+- Secondary pin to a redundant service
+- HTTPS fallback serving of audit trail artifacts
 - Audit trail directory structure defined and implemented
 
 ---
@@ -1225,10 +1230,22 @@ Round Lifecycle (Phase 2)
 - How do validators discover the round announcement? → watch for `pf_scoring_round_v1` memos from the foundation's known address
 - What if a validator's sidecar wallet doesn't have enough PFT for transaction fees? → sidecar logs error, skips round
 
+**2.1.5 — Participation fallback rules** (0.5 day)
+- Define minimum participation thresholds:
+  - Minimum validators required for a valid convergence check (e.g., 5)
+  - If fewer than the minimum commit, the round is valid but convergence is not assessed
+  - Foundation's UNL remains authoritative until participation consistently exceeds threshold
+- Fallback behavior:
+  - If participation drops below threshold for N consecutive rounds → revert to foundation-only UNL (Phase 1 mode)
+  - Foundation-only mode continues until participation recovers
+  - No validator rewards (XRPL model) — participation is voluntary, so fallback rules are the safety net
+- Document round cadence impact on operator burden (weekly rounds = low burden, daily = high burden)
+
 **Deliverables:**
 - Protocol specification document with all memo formats
 - Timing diagram with ledger-based deadlines
 - Edge case handling documented
+- Participation fallback rules documented
 
 ---
 
@@ -1639,7 +1656,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ### Phase 2 Decision Gate
 
-**Criteria for proceeding to Phase 3:**
+**Criteria for proceeding to Phase 3A:**
 
 | Criterion | Required | Status |
 |---|---|---|
@@ -1647,17 +1664,39 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 | At least 10 validators participating in commit-reveal | Yes | |
 | Convergence rate > 90% consistently | Yes | |
 | Divergence causes identified and documented | Yes | |
-| Output convergence confirmed (Layer 1) | Yes | |
-| Logit-level determinism tested empirically (same GPU type) | Yes | |
+| Output convergence confirmed | Yes | |
 | `featureDynamicUNL` amendment defined in postfiatd | Yes | |
+
+**Additional criteria for Phase 3 Research (proof-of-logits):**
+
+| Criterion | Required | Status |
+|---|---|---|
+| Logit-level determinism tested empirically (same GPU type) | Yes | |
+| Phase 2 convergence rates indicate logit proofs are worthwhile | Decision point | |
 
 ---
 
-## Phase 3: Full Verification — Proof of Logits
+## Phase 3A: Content Authority Transfer
 
-**Duration:** ~5-7 weeks | **Difficulty:** ★★★★★ Very Hard
+**Duration:** ~2-3 weeks | **Difficulty:** ★★★★☆ Hard
 
-**Goal:** Validators prove they actually ran the correct model via proof-of-logits. The converged validator UNL replaces the foundation's UNL as the authoritative source. The foundation becomes one validator among many.
+**Goal:** Transfer UNL content authority from the foundation to converged validator results. The foundation still publishes the VL but the content comes from what validators agree on. If convergence drops, the system falls back to foundation-only scoring.
+
+```
+         M 3.4                  M 3.5 (parallel)
+         Authority              Identity
+         Transfer               Portal
+         ~5-7 days              ~7-10 days
+              │                      │
+              ▼                      │
+         M 3.6                      │
+         System Test   ◄────────────┘
+         ~5-7 days
+```
+
+## Phase 3 Research: Proof of Logits (Conditional)
+
+**Status:** Research milestone — proceed only if Phase 2 convergence rates justify the investment. If Phase 2 achieves >99% output convergence reliably, logit proofs are less critical. If not pursued, the system operates at Phase 2 + 3A level with output-level convergence.
 
 ```
          M 3.1                  M 3.2
@@ -1667,26 +1706,17 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
               │                      │
               └──────────┬───────────┘
                          ▼
-              ┌──────────┼──────────┐
-              ▼          ▼          ▼
-         M 3.3      M 3.4      M 3.5
-         Verif.     Authority  Identity
-         Publish    Transfer   Portal
-         ~5-7 days  ~5-7 days  ~7-10 days
-              │          │          │
-              └──────────┼──────────┘
-                         ▼
-                    M 3.6
-                    Full System
-                    Test
+                    M 3.3
+                    Verif.
+                    Publish
                     ~5-7 days
 ```
 
 ---
 
-### Milestone 3.1: Logit Commitment Generation
+### Milestone 3.1: Logit Commitment Generation (Research)
 
-**Duration:** ~7-10 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Phase 2 complete
+**Duration:** ~7-10 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Phase 2 complete, decision to proceed with logit proofs
 
 **Goal:** Modify the sidecar's inference engine to capture SHA-256 hashes of logit vectors at every token position during generation.
 
@@ -1745,7 +1775,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ---
 
-### Milestone 3.2: Cross-Validator Spot-Check Tooling
+### Milestone 3.2: Cross-Validator Spot-Check Tooling (Research)
 
 **Duration:** ~7-10 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Milestone 3.1
 
@@ -1756,8 +1786,9 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 **3.2.1 — Spot-check engine** (3-5 days)
 - Implement `SpotChecker` class:
   1. Input: target validator's logit commitment + published scores + round snapshot
-  2. Pick N random token positions (configurable, default 5-10)
-  3. For each position `K`:
+  2. Derive challenge positions from a **future validated ledger hash** — use the hash of a ledger that closes after the reveal window ends. This makes positions unpredictable at commit time, preventing validators from precomputing logits at only the challenged positions.
+  3. Pick N positions from the derived seed (configurable, default 5-10)
+  4. For each position `K`:
      - Load the same model (verified by weight hash)
      - Feed the same input (snapshot + prompt, verified from IPFS)
      - Run forward pass up to position `K`
@@ -1794,7 +1825,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ---
 
-### Milestone 3.3: Verification Result Publication
+### Milestone 3.3: Verification Result Publication (Research)
 
 **Duration:** ~5-7 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestone 3.2
 
@@ -1852,18 +1883,18 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ### Milestone 3.4: Authority Transition
 
-**Duration:** ~5-7 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Milestones 3.1-3.3, Phase 2 convergence proven
+**Duration:** ~5-7 days | **Difficulty:** ★★★★★ Very Hard | **Dependencies:** Phase 2 convergence proven
 
-**Goal:** Transition from "foundation UNL is authoritative" to "converged validator UNL is authoritative."
+**Goal:** Transition from "foundation UNL is authoritative" to "converged validator UNL is authoritative." This is a Phase 3A milestone — it does not require proof-of-logits, only proven Phase 2 output convergence.
 
 **Steps:**
 
 **3.4.1 — Define transition criteria** (1 day)
 - The converged validator UNL becomes authoritative when:
   - At least 10 validators consistently participate (4+ consecutive rounds)
-  - Layer 1 convergence rate > 95% for 4+ consecutive rounds
-  - Layer 2 spot-checks pass rate > 98%
+  - Output convergence rate > 95% for 4+ consecutive rounds
   - The `featureDynamicUNL` amendment is voted and enabled
+- If convergence drops below threshold for N consecutive rounds, automatically revert to foundation-only UNL
 
 **3.4.2 — Implement UNL source selection in scoring service** (2-3 days)
 - Update the scoring orchestrator:
@@ -1886,11 +1917,13 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ### Milestone 3.5: Validator Identity Portal
 
-**Duration:** ~7-10 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** None (can be built in parallel)
+**Duration:** ~7-10 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** None (parallel work — can be built anytime during Phase 1-3, does not gate any other milestone)
 
 **Goal:** Provide a web interface where validators can complete identity verification (KYC/KYB via SumSub) before being eligible for scoring.
 
 **Note:** This extends the existing scoring-onboarding system. The exact implementation approach should be determined when this milestone is reached. Below is an approximate scope.
+
+**Important distinction:** Validators need on-chain identity data for meaningful scoring (the LLM needs to know who it's scoring). However, identity data can be submitted via the existing scoring-onboarding memo flow — the portal is a convenience layer, not the only path. Validators must have identity data on-chain before scoring begins, but this milestone (the web portal) is not a prerequisite for that.
 
 **Steps:**
 
@@ -1927,9 +1960,9 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 ### Milestone 3.6: Full System Test
 
-**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** All previous milestones
+**Duration:** ~5-7 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestones 3.4, 3.5
 
-**Goal:** End-to-end test of the complete Dynamic UNL system on testnet.
+**Goal:** End-to-end test of the Phase 3A system on testnet — converged validator UNL as the authoritative source.
 
 **Steps:**
 
@@ -1937,25 +1970,25 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 - Run multiple scoring rounds with:
   - Foundation scoring (Phase 1 pipeline)
   - Validator verification with commit-reveal (Phase 2)
-  - Logit commitment generation and spot-checking (Phase 3)
-  - Convergence check with both Layer 1 and Layer 2
+  - Convergence check (output hash comparison)
+  - Authority transition active (converged UNL published as authoritative)
 - Verify all data is published to IPFS and on-chain
 
 **3.6.2 — Authority transition test** (1-2 days)
-- Simulate the transition: converged validator UNL becomes the published VL
+- Verify the transition: converged validator UNL becomes the published VL
 - Verify all testnet validators accept the converged UNL
 - Monitor consensus stability during and after transition
 - Test fallback: if convergence drops, does the system revert to foundation UNL?
+- Test participation fallback: what happens if fewer than the minimum validators participate?
 
 **3.6.3 — Adversarial testing** (1-2 days)
-- Test: one validator deliberately runs a different model → should fail spot-checks and be excluded
-- Test: one validator submits fabricated logit commitments → should be caught
-- Test: one validator copies another's output hash → should be caught by logit spot-check (different logits)
+- Test: one validator deliberately runs a different model → should diverge in convergence check
+- Test: one validator copies another's output hash without running the model → caught by commit-reveal timing (must commit before seeing others)
 - Test: foundation goes offline → validators still converge among themselves (future resilience)
 
 **Deliverables:**
 - Complete system test results
-- Authority transition verified
+- Authority transition verified with fallback behavior confirmed
 - Adversarial test results
 - System declared production-ready for testnet
 
@@ -1968,8 +2001,9 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 | **Phase 0** | ~1 week | ★★★☆☆ | Model selected, RunPod ready, determinism research |
 | **Phase 1** | ~4-6 weeks | ★★★★☆ | Foundation scoring live on testnet, VL auto-generated |
 | **Phase 2** | ~6-8 weeks | ★★★★★ | Validator GPU sidecars, commit-reveal, convergence monitoring |
-| **Phase 3** | ~5-7 weeks | ★★★★★ | Proof-of-logits, authority transition, identity portal |
-| **Total** | **~17-23 weeks** | | **Fully decentralized Dynamic UNL** |
+| **Phase 3A** | ~2-3 weeks | ★★★★☆ | Authority transition, identity portal, system test |
+| **Phase 3 Research** | ~5-7 weeks | ★★★★★ | Proof-of-logits (conditional — only if Phase 2 convergence justifies) |
+| **Total (through 3A)** | **~14-19 weeks** | | **Converged validator UNL as authoritative source** |
 
 ## Summary: Time and Difficulty by Milestone
 
@@ -1978,7 +2012,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 | **0.1** Model Selection | 2-3 days | ★★★☆☆ | None |
 | **0.2** RunPod Setup | 1-2 days | ★★☆☆☆ | 0.1 |
 | **0.3** Determinism Research | 2 days | ★★★★☆ | 0.1 |
-| **0.4** MaxMind Upgrade | 2 hours | ★☆☆☆☆ | None |
+| **0.4** Geolocation Setup & Legal | 1 day | ★☆☆☆☆ | None |
 | **1.1** Repo Setup | 1-2 days | ★★☆☆☆ | Phase 0 |
 | **1.2** Data Collection | 3-4 days | ★★★☆☆ | 1.1 |
 | **1.3** LLM Scoring | 4-5 days | ★★★☆☆ | 1.1, 0.1, 0.2 |
@@ -1998,9 +2032,9 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 | **2.7** postfiatd Changes | 5-7 days | ★★★★☆ | Phase 1, 2.1 |
 | **2.8** Devnet Testing | 5-7 days | ★★★☆☆ | 2.4, 2.5, 2.7 |
 | **2.9** Testnet Rollout | 5-7 days | ★★★★☆ | 2.8 |
-| **3.1** Logit Commitments | 7-10 days | ★★★★★ | Phase 2 |
-| **3.2** Spot-Check Tooling | 7-10 days | ★★★★★ | 3.1 |
-| **3.3** Verification Publish | 5-7 days | ★★★☆☆ | 3.2 |
-| **3.4** Authority Transfer | 5-7 days | ★★★★★ | 3.1-3.3 |
+| **3.4** Authority Transfer | 5-7 days | ★★★★★ | Phase 2 convergence proven |
 | **3.5** Identity Portal | 7-10 days | ★★★☆☆ | None (parallel) |
-| **3.6** Full System Test | 5-7 days | ★★★★☆ | All |
+| **3.6** Full System Test | 5-7 days | ★★★★☆ | 3.4, 3.5 |
+| **3.1** Logit Commitments | 7-10 days | ★★★★★ | Phase 2 (research, conditional) |
+| **3.2** Spot-Check Tooling | 7-10 days | ★★★★★ | 3.1 (research, conditional) |
+| **3.3** Verification Publish | 5-7 days | ★★★☆☆ | 3.2 (research, conditional) |
