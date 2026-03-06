@@ -105,7 +105,7 @@ Validation             Scoring                  Verification               Proof
 │  ┌──────────────────────────────────────────────────────────────┐  │
 │  │  RunPod Serverless Endpoint (NEW)                            │  │
 │  │  Model: TBD (selected in Phase 0, e.g. Qwen 3.5 32B)         │  │
-│  │  Backend: vLLM or SGLang                                     │  │
+│  │  Backend: SGLang (vLLM as fallback)                           │  │
 │  │  Pay-per-use: ~$0.00025/sec active | $0 idle                 │  │
 │  │  Estimated monthly: ~$5-15 (weekly scoring, both envs)       │  │
 │  │  Single endpoint shared by devnet + testnet scoring          │  │
@@ -136,7 +136,7 @@ Step-by-step for provisioning each scoring service instance:
 Step-by-step for deploying the LLM inference endpoint:
 
 1. **Create RunPod account** at runpod.io, add payment method
-2. **Create serverless endpoint**: Templates → vLLM Inference → Configure
+2. **Create serverless endpoint**: Templates → SGLang Inference → Configure
 3. **Model configuration**:
    - Model ID: HuggingFace model path (e.g., `Qwen/Qwen2.5-32B-Instruct` — TBD in Phase 0)
    - GPU type: Select based on model size (e.g., A40 48GB for 32B model)
@@ -207,7 +207,8 @@ Model Selection        RunPod Setup           Determinism           MaxMind
   - Llama 4 Scout / Llama 3.x (70B if budget allows, 8B for baseline)
   - DeepSeek V3/R1 distilled variants
   - Mistral/Mixtral (if applicable)
-- For each candidate: note parameter count, quantization options (GGUF Q4, Q8, FP16), VRAM requirements, RunPod serverless compatibility
+- For each candidate: note parameter count, quantization options (FP16, BF16, INT8), VRAM requirements, RunPod serverless compatibility
+- Use safetensors format with HuggingFace snapshot revision pinning (not GGUF)
 
 **0.1.3 — Run benchmark across candidates** (1 day)
 - For each candidate model:
@@ -221,12 +222,21 @@ Model Selection        RunPod Setup           Determinism           MaxMind
 - Choose the model based on: scoring quality, consistency, cost, RunPod availability
 - Document the selection with rationale
 - Record: exact model ID, quantization, VRAM requirement, expected RunPod GPU type, per-run cost estimate
-- Compute SHA-256 of the model weight file (for pinning in production)
+- Define the full **execution manifest** — hash and record:
+  - HuggingFace snapshot revision and all weight shard hashes (safetensors)
+  - Tokenizer files and config files
+  - Prompt template version
+  - Inference engine (SGLang) version and configuration
+  - Attention backend, dtype, quantization mode
+  - Container image digest
+  - CUDA / driver version
+- Construct raw prompt strings directly (do not rely on chat-template defaults — upstream changes are a silent divergence risk)
 
 **Deliverables:**
 - Benchmark dataset (JSON file with validator profiles)
 - Benchmark results comparison document
 - Final model selection with rationale
+- Full execution manifest definition (all convergence-critical parameters)
 - Model configuration (ID, quantization, GPU type, cost)
 
 ---
@@ -246,7 +256,7 @@ Model Selection        RunPod Setup           Determinism           MaxMind
 
 **0.2.2 — Deploy serverless endpoint** (2-4 hours)
 - Navigate to Serverless → New Endpoint
-- Select template: vLLM (recommended) or SGLang
+- Select template: SGLang (preferred) or vLLM (fallback only if SGLang proves unsuitable)
 - Configure:
   ```
   Model:           <selected model from 0.1>
@@ -283,43 +293,50 @@ Model Selection        RunPod Setup           Determinism           MaxMind
 
 ---
 
-### Milestone 0.3: Determinism Research Documentation
+### Milestone 0.3: Determinism Research & Reproducibility Harness Design
 
-**Duration:** ~2 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestone 0.1 (model selected)
+**Duration:** ~3 days | **Difficulty:** ★★★★☆ Hard | **Dependencies:** Milestone 0.1 (model selected)
 
-**Goal:** Document the state of LLM inference determinism research to inform Phase 2 and Phase 3 implementation. This is research and documentation, not implementation.
+**Goal:** Document determinism research, design the reproducibility harness, and identify candidate GPU types. The harness itself will be built and run during Phase 1 — its results are a hard gate for Phase 2 entry.
 
-**Note:** This does not block Phase 1. Phase 1 runs fine without determinism — only the foundation scores. This research is preparation for Phase 2+ where multiple validators must produce identical outputs.
+**Note:** This does not block Phase 1. Phase 1 runs fine without determinism — only the foundation scores. This is preparation for Phase 2+ where multiple validators must produce identical outputs.
 
 **Steps:**
 
 **0.3.1 — Survey deterministic inference solutions** (1 day)
-- Research and document current state of:
-  - **SGLang deterministic mode**: how it works, what it guarantees, performance overhead (~34%), which models/GPUs supported
-  - **Ingonyama deterministic kernels**: CUDA-core-only approach, bypasses Tensor Cores, tested GPU types (RTX 3090/4080/L4)
-  - **LayerCast**: FP16 storage + FP32 computation, memory trade-offs
-  - **vLLM deterministic options**: if any exist
-- For each solution: document compatibility with the selected model, GPU requirements, known limitations
+- Research and document current state of SGLang deterministic mode (`--enable-deterministic-inference`): how it works, what it guarantees, performance overhead (~34%), which attention backends supported (FlashInfer, FA3, Triton), which models/GPUs validated
+- Document alternative solutions for reference: Ingonyama deterministic kernels, LayerCast
+- Document compatibility with the selected model, GPU requirements, known limitations
 
 **0.3.2 — Document the mandatory GPU type decision** (0.5 day)
-- Based on the selected model and determinism solutions, identify candidate mandatory GPU types
+- Based on the selected model and SGLang deterministic mode, identify candidate mandatory GPU types
 - Consider: availability on RunPod, cost, community accessibility
 - Candidates likely: NVIDIA A40, L4, RTX 4090 (consumer), A100 40GB
 - Document trade-offs (cost vs availability vs determinism guarantees)
-- The final GPU choice will be made when Phase 2 implementation begins, after empirical testing
+- The final GPU choice will be made after empirical testing via the reproducibility harness
 
-**0.3.3 — Document open questions for Phase 2** (0.5 day)
-- What empirical tests need to run before Phase 2 starts:
-  - Same model + same prompt → same output text? (Layer 1 requirement)
-  - Same model + same prompt → same logit hashes? (Layer 2 requirement)
-  - What correlation threshold is acceptable?
-- Reference existing research findings (>0.93 correlation from 150+ runs, need >0.99)
+**0.3.3 — Design the reproducibility harness** (1.5 days)
+- Define the harness that will run during Phase 1 and gate Phase 2 entry:
+  - **What to measure:**
+    - Output-text equality rate (same input → same output text?)
+    - Score equality rate (same input → same validator scores?)
+    - Token-level transcript equality rate
+    - Logit-hash equality rate (for Phase 3)
+  - **Test matrix:**
+    - Same worker, multiple runs
+    - Different workers, same GPU type
+    - Different datacenters
+    - Warm vs cold starts
+  - **Pass criteria:** >99% output equality on the mandatory GPU type
+  - **Failure path:** if SGLang deterministic mode does not achieve >99%, evaluate vLLM as fallback. If neither achieves it, Phase 2 design must be revisited.
+- Document the harness design, test matrix, and pass/fail criteria
 - Link to [ResearchStatus.md](research/ResearchStatus.md)
 
 **Deliverables:**
 - Updated determinism research document (extends [ResearchStatus.md](research/ResearchStatus.md))
 - Mandatory GPU type candidates with trade-off analysis
-- Phase 2 empirical test plan
+- Reproducibility harness design document (test matrix, measurements, pass criteria)
+- Harness will be built and executed during Phase 1 (see Phase 1 Decision Gate)
 
 ---
 
@@ -358,10 +375,10 @@ Model Selection        RunPod Setup           Determinism           MaxMind
 | Criterion | Required | Status |
 |---|---|---|
 | Open-weight model selected that produces acceptable scoring quality | Yes | |
-| RunPod serverless endpoint active and tested | Yes | |
-| Model weight SHA-256 hash recorded | Yes | |
+| RunPod serverless endpoint active and tested (SGLang backend) | Yes | |
+| Full execution manifest defined and recorded | Yes | |
 | MaxMind GeoIP2 access confirmed | Yes | |
-| Determinism research documented (informational, not blocking) | No | |
+| Determinism research documented + reproducibility harness designed | No (but harness must run during Phase 1) | |
 
 **If the model benchmark fails** (no open-weight model scores well enough): iterate on prompt engineering, try larger models, or try different quantizations until acceptable quality is reached. The open-weight local inference path is the only path — there is no fallback to proprietary models.
 
@@ -487,6 +504,7 @@ dynamic-unl-scoring/
   ```
 - Docker Compose with FastAPI app + PostgreSQL 16
 - Health check endpoint at `/health`
+- **Canonical JSON serialization** (RFC 8785 / JCS) for all artifacts that get hashed — standard JSON is non-deterministic in key ordering, whitespace, and number formatting, which causes hash divergence even when content is identical
 
 **1.1.4 — CI/CD pipeline** (2-4 hours)
 - GitHub Actions: lint, test, Docker build
@@ -1015,6 +1033,7 @@ dynamic-unl-scoring/
 | Audit trail published to IPFS and verifiable | Yes | |
 | On-chain memo publication working | Yes | |
 | Determinism research complete (Milestone 0.3) | Yes | |
+| Reproducibility harness built and run — >99% output equality on mandatory GPU type | Yes | |
 | Mandatory GPU type selected for Phase 2 | Yes | |
 
 ---
@@ -1228,7 +1247,7 @@ IPFS_API_URL, IPFS_API_USERNAME, IPFS_API_PASSWORD
 
 # GPU (local mode)
 GPU_DEVICE             # CUDA device ID (default: 0)
-INFERENCE_BACKEND      # vllm or sglang
+INFERENCE_BACKEND      # sglang (default)
 
 # RunPod (cloud GPU mode, alternative to local)
 RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
@@ -1251,25 +1270,23 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 **2.3.1 — Model download and verification** (2-3 days)
 - Implement `download_model.py` script:
-  - Downloads model weights from HuggingFace (or a mirror)
-  - Computes SHA-256 of the weight file
-  - Verifies against the expected hash from config
+  - Downloads model from HuggingFace using pinned snapshot revision (safetensors format)
+  - Computes SHA-256 of every file in the snapshot (weights, tokenizer, config)
+  - Verifies against the full execution manifest from config
   - Stores weights in a persistent local directory (so they survive container restarts)
 - Handle: partial downloads (resume), corrupt files (re-download), disk space checks
 - The model download only happens once (or when the model version changes)
 
-**2.3.2 — Local inference with vLLM/SGLang** (3-4 days)
+**2.3.2 — Local inference with SGLang** (3-4 days)
 - Implement `InferenceEngine` class with two backends:
-  - **Local GPU mode**: loads model into GPU memory using vLLM or SGLang, runs inference locally
-  - **RunPod cloud mode**: calls RunPod serverless endpoint (same as foundation's pipeline)
+  - **Local GPU mode**: loads model into GPU memory using SGLang with `--enable-deterministic-inference`, runs inference locally
+  - **RunPod cloud mode**: calls RunPod serverless endpoint (SGLang backend, same as foundation's pipeline)
 - Both modes must produce identical output given identical input + settings:
   - Temperature 0, greedy decoding
   - Same max tokens
   - Same JSON output format
-  - Same prompt template
-- The local GPU mode uses the deterministic inference settings identified in Phase 0 research:
-  - SGLang: `--enable-deterministic` flag
-  - Or equivalent for vLLM
+  - Same prompt template (raw prompt strings, not chat-template defaults)
+- The local GPU mode uses the deterministic inference settings validated by the reproducibility harness (Milestone 0.3)
 
 **2.3.3 — Prompt template synchronization** (1-2 days)
 - The sidecar must use the exact same prompt template as the foundation's scoring service
@@ -1634,7 +1651,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 **Steps:**
 
 **3.1.1 — Inference engine modification** (3-5 days)
-- Hook into the inference engine (vLLM or SGLang) to intercept logit vectors at each decoding step
+- Hook into the inference engine (SGLang) to intercept logit vectors at each decoding step
 - At each token position `i`:
   1. Get the raw logit vector (float array over vocabulary, typically 32K-128K entries)
   2. Serialize the logit vector to bytes (consistent byte ordering — little-endian float32)

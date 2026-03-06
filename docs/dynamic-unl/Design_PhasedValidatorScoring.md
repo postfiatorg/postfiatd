@@ -29,8 +29,9 @@ The foundation selects an open-weight model suitable for validator scoring. The 
 
 **Pinning:**
 
-- Model version and weight file hash (SHA-256 of the GGUF or safetensors file) are published with every scoring round
-- All validators must use the exact pinned version — verified by weight hash
+- A full **execution manifest** is published with every scoring round, covering: HuggingFace snapshot revision, all weight shard hashes (safetensors format), tokenizer files, config files, prompt template version, inference engine version (SGLang), attention backend, dtype, quantization mode, container image digest, CUDA/driver version
+- All validators must use the exact pinned manifest — verified by comparing their local manifest against the published one
+- Prompt strings are constructed directly, not via chat-template defaults (upstream template changes are a silent divergence risk)
 - Model changes are treated as protocol upgrades: announced in advance, validators download new weights, change takes effect at a specific round number
 
 **Target model class:** 7B-32B parameter open-weight models (Qwen 3.5, Llama 4, DeepSeek, or equivalent). Large enough for quality scoring, small enough to run on commodity GPU hardware.
@@ -247,23 +248,20 @@ Cross-hardware determinism is the prerequisite for both layers. It is solved by 
 
 **Why one GPU type works:** Floating-point non-determinism comes from different hardware architectures using different operation ordering in parallel computations. Same GPU model + same driver + same CUDA version + same inference engine + deterministic mode = identical logits.
 
-**Available deterministic inference solutions:**
+**Inference engine:** SGLang with `--enable-deterministic-inference` is the primary inference engine across all phases. SGLang's deterministic path is explicitly documented and works on a broader range of GPUs than alternatives. vLLM is kept as a documented fallback only if SGLang proves unsuitable during reproducibility testing.
 
-| Solution | What It Does | Compatibility |
-|----------|-------------|---------------|
-| SGLang deterministic mode | Batch-invariant operators, fixed reduction order | Production-ready, validated on Qwen3-8B, ~34% perf overhead |
-| Ingonyama deterministic kernels | Bypasses Tensor Cores, CUDA cores only, fixed operation order | llama.cpp, tested across RTX 3090/4080/L4 |
-| LayerCast | FP16 storage, FP32 computation | Inference engine wrapper, ~34% less memory than full FP32 |
+**For our use case** (one scoring prompt per round, not a throughput service), the performance overhead of deterministic mode (~34%) is irrelevant.
 
-**For our use case** (one scoring prompt per round, not a throughput service), the performance overhead of deterministic mode is irrelevant.
+**All hashed artifacts use canonical JSON serialization** (RFC 8785 / JCS) to ensure identical content produces identical hashes regardless of serialization implementation. Standard JSON is non-deterministic in key ordering, whitespace, and number formatting.
 
-**What needs empirical testing** (see [ResearchStatus.md](research/ResearchStatus.md)):
+**What needs empirical testing** (see [ResearchStatus.md](research/ResearchStatus.md)) — a reproducibility harness must be built and run before Phase 2, measuring:
 
 1. Does the same model + prompt + input produce identical output text across instances of the mandatory GPU type?
 2. Do logit hashes match at every token position with deterministic mode enabled?
 3. What is the convergence rate on the final UNL inclusion list (the actual deliverable)?
+4. Are results consistent across: same worker, different workers, same GPU type, different datacenters, warm vs cold starts?
 
-If output text converges but logit hashes don't perfectly match, Layer 1 works without Layer 2. If both converge, the full system works.
+The harness results are a hard gate for Phase 2 entry (>99% output equality required). If output text converges but logit hashes don't perfectly match, Layer 1 works without Layer 2. If both converge, the full system works.
 
 ---
 
