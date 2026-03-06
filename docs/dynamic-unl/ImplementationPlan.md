@@ -1,12 +1,12 @@
 # Dynamic UNL: Implementation Milestones
 
-Detailed implementation plan for [Design_PhasedValidatorScoring.md](Design_PhasedValidatorScoring.md). Each phase contains milestones with concrete steps, time estimates, difficulty ratings, dependencies, and infrastructure details.
+Detailed implementation plan for [Design.md](Design.md). Each phase contains milestones with concrete steps, time estimates, difficulty ratings, dependencies, and infrastructure details.
 
 **Difficulty scale:** ★☆☆☆☆ Trivial | ★★☆☆☆ Easy | ★★★☆☆ Medium | ★★★★☆ Hard | ★★★★★ Very Hard
 
 **Time estimates** assume a solo developer with heavy LLM-assisted development (Claude Code, Codex).
 
-**Reference design:** All architectural decisions, trust models, and protocol details are defined in [Design_PhasedValidatorScoring.md](Design_PhasedValidatorScoring.md). This document covers *how* and *when* to build it, not *what* to build.
+**Reference design:** All architectural decisions, trust models, and protocol details are defined in [Design.md](Design.md). This document covers *how* and *when* to build it, not *what* to build.
 
 ---
 
