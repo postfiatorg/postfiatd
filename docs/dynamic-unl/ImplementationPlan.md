@@ -471,7 +471,7 @@ dynamic-unl-scoring/
 │   ├── pftl/
 │   │   ├── client.py              # XRPL transaction client
 │   │   └── publisher.py           # Memo builder (pattern from scoring-onboarding)
-│   └── scheduler.py               # APScheduler for weekly runs
+│   └── scheduler.py               # Postgres-based scheduling with advisory locks
 ├── migrations/                    # PostgreSQL migrations
 ├── scripts/
 │   └── trigger_round.py           # CLI to trigger manual scoring round
@@ -512,9 +512,12 @@ dynamic-unl-scoring/
 - Docker Compose with FastAPI app + PostgreSQL 16
 - Health check endpoint at `/health`
 - **Canonical JSON serialization** (RFC 8785 / JCS) for all artifacts that get hashed — standard JSON is non-deterministic in key ordering, whitespace, and number formatting, which causes hash divergence even when content is identical
+- **Structured JSON logging** via `structlog` — compatible with existing Promtail → Loki → Grafana stack
+- Optional `/metrics` endpoint (Prometheus format) for Grafana to scrape operational metrics (rounds completed, scoring latency, IPFS upload time)
+- **Python tooling:** `uv` for dependency management, `ruff` for linting, `httpx` for HTTP clients, `pydantic-settings` for config, `hypothesis` for property testing of canonicalization code
 
 **1.1.4 — CI/CD pipeline** (2-4 hours)
-- GitHub Actions: lint, test, Docker build
+- GitHub Actions: lint (`ruff`), test, Docker build
 - Deployment workflow (similar pattern to other repos): SSH to Vultr, docker compose pull, restart
 
 **Deliverables:**
@@ -767,7 +770,12 @@ dynamic-unl-scoring/
 - VL serving endpoint
 - Verification that postfiatd accepts the generated VL
 
-**Security note:** The publisher signing key is the most sensitive secret in this system. It must be stored securely (environment variable, never in code or logs). If this key is compromised, an attacker could publish a malicious UNL. Consider: key rotation plan, access logging, separate key for devnet vs testnet.
+**Security note:** The publisher signing key is the most sensitive secret in this system. It must be stored securely (environment variable, never in code or logs). If this key is compromised, an attacker could publish a malicious UNL. Required mitigations for Phase 1:
+- Separate keys for devnet and testnet (never share signing keys across environments)
+- Key rotation runbook documented (how to generate new key, update validators, revoke old key)
+- Access logging for every signing operation (log round number, timestamp, VL hash — never log the key itself)
+- Manual offline emergency signing tool: a standalone CLI script that can sign and publish a VL without the scoring service running (for use if the service is compromised or unavailable)
+- For mainnet (future): upgrade to HSM or Vault transit for key storage
 
 ---
 
@@ -868,54 +876,60 @@ dynamic-unl-scoring/
 
 ### Milestone 1.7: Scoring Orchestrator & Scheduler
 
-**Duration:** ~2-3 days | **Difficulty:** ★★☆☆☆ Easy | **Dependencies:** Milestones 1.2-1.6
+**Duration:** ~3-4 days | **Difficulty:** ★★★☆☆ Medium | **Dependencies:** Milestones 1.2-1.6
 
-**Goal:** Wire all services together into a complete scoring pipeline with scheduled and on-demand execution.
+**Goal:** Wire all services together into a state machine orchestrator with idempotent steps, scheduled and on-demand execution, and replay/rebuild capabilities.
 
 **Steps:**
 
-**1.7.1 — Scoring orchestrator** (1-2 days)
-- Implement `ScoringOrchestrator` that executes the full pipeline:
+**1.7.1 — State machine orchestrator** (2-3 days)
+- Implement `ScoringOrchestrator` as an explicit state machine with these states:
   ```
-  1. Collect data (DataCollectorService)
-  2. Run LLM scoring (LLMScorerService)
-  3. Generate signed VL (VLGeneratorService)
-  4. Publish audit trail to IPFS (IPFSPublisherService)
-  5. Publish memo transaction on-chain (OnChainPublisherService)
-  6. Upload VL to serving URL
-  7. Log round completion
+  COLLECTING → NORMALIZED → SCORED → SELECTED → VL_SIGNED →
+  IPFS_PUBLISHED → ONCHAIN_PUBLISHED → COMPLETE
+                                                    ↓ (any step)
+                                                  FAILED
   ```
-- Each step logs its status to PostgreSQL
-- If any step fails: log error, do not proceed to subsequent steps, mark round as failed
+- Each step is **idempotent** — rerunning from any state produces the same result
+- On failure: record which state failed, resume from that state on retry (don't re-run scoring if IPFS upload failed)
 - Round metadata tracked in `scoring_rounds` table:
   ```
-  id, round_number, status (running/completed/failed),
+  id, round_number, state (enum of above states),
   snapshot_hash, ipfs_cid, onchain_tx_hash, vl_sequence,
-  started_at, completed_at, error_message
+  started_at, completed_at, error_message,
+  state_transitions (JSONB array of {state, timestamp, result})
   ```
+- Every state transition is logged for audit
+- **Capabilities:**
+  - `dry_run` — run the full pipeline without publishing (no IPFS pin, no on-chain memo, no VL upload)
+  - `replay_round(round_id)` — re-run a completed round from its saved snapshot (useful for debugging)
+  - `rebuild_from_raw(round_id)` — re-normalize from raw evidence and re-score (verifies the full chain)
 
 **1.7.2 — Scheduler** (0.5-1 day)
-- APScheduler job that triggers the orchestrator:
-  - Default: every 168 hours (weekly)
-  - Configurable via `SCORING_CADENCE_HOURS` environment variable
-- The scheduler should not run a new round if a previous round is still in progress
+- Use a `scoring_schedule` table in Postgres with advisory locks for singleton orchestration (no APScheduler in-process)
+  - Default cadence: every 168 hours (weekly), configurable via `SCORING_CADENCE_HOURS`
+  - Advisory lock ensures only one round runs at a time, even with multiple service instances
+  - A background task checks the schedule table and triggers rounds when due
 
 **1.7.3 — Manual trigger** (0.5 day)
 - API endpoint: `POST /api/scoring/trigger` — triggers an immediate scoring round
+- `POST /api/scoring/trigger?dry_run=true` — dry run mode
+- `POST /api/scoring/replay/<round_id>` — replay a previous round
 - Requires admin authentication (API key or basic auth)
 - Returns the round ID for tracking
 - CLI script `scripts/trigger_round.py` that calls this endpoint
 
 **1.7.4 — Status API** (0.5 day)
-- `GET /api/scoring/rounds` — list recent rounds with status
-- `GET /api/scoring/rounds/<id>` — detailed round info (all hashes, CIDs, timestamps)
+- `GET /api/scoring/rounds` — list recent rounds with status and current state
+- `GET /api/scoring/rounds/<id>` — detailed round info (all hashes, CIDs, timestamps, state transition log)
 - `GET /api/scoring/current-unl` — current active UNL (latest successful round)
 
 **Deliverables:**
-- `ScoringOrchestrator` with full pipeline execution
-- Weekly scheduler + manual trigger endpoint
-- Status API endpoints
-- Round tracking in PostgreSQL
+- `ScoringOrchestrator` as a state machine with idempotent steps
+- dry_run, replay_round, rebuild_from_raw capabilities
+- Postgres-based scheduling with advisory locks
+- Manual trigger + status API endpoints
+- Round tracking with state transition audit log
 
 ---
 
@@ -1432,10 +1446,11 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
   - Compare each validator's output hash to the foundation's output hash
 
 **2.5.2 — Convergence analysis** (1-2 days)
-- Compare outputs:
+- Compare outputs at three levels:
   - **Exact match**: validator's output hash == foundation's output hash → converged
   - **Score-level match**: individual validator scores match within tolerance (e.g., ±2 points) → partially converged
   - **UNL-level match**: the final UNL inclusion list is identical → functionally converged
+- For divergent validators, perform **environment diff**: compare the validator's execution manifest against the foundation's to identify which configuration field differs (SGLang version, CUDA driver, model hash, attention backend, etc.). This is the first diagnostic step — most divergence is caused by config mismatch, not cheating.
 - Generate convergence report:
   ```json
   {
@@ -1449,7 +1464,8 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
         "output_hash": "abc123...",
         "exact_match": true,
         "unl_match": true,
-        "score_divergence": 0
+        "score_divergence": 0,
+        "manifest_diff": null
       }
     ],
     "convergence_rate": 0.96,
@@ -1467,7 +1483,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 **Deliverables:**
 - Reveal aggregation and verification
-- Convergence analysis (exact, score-level, UNL-level)
+- Convergence analysis (exact, score-level, UNL-level) with environment diff for divergent validators
 - Convergence report publication (IPFS + on-chain)
 - Convergence monitoring API endpoints
 
@@ -1986,10 +2002,19 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 - Test: one validator copies another's output hash without running the model → caught by commit-reveal timing (must commit before seeing others)
 - Test: foundation goes offline → validators still converge among themselves (future resilience)
 
+**3.6.4 — Operational failure drills** (1-2 days)
+- Test: foundation doesn't announce a round → no round occurs, previous UNL stays active
+- Test: IPFS gateway goes down → validators fetch from HTTPS fallback or alternative gateway
+- Test: one-third of validators fail to reveal → round still completes with reduced participation, convergence rate reflects the dropoff
+- Test: VL expires before the next round publishes a new one → what happens to consensus? (validators should continue with last known VL)
+- Test: model upgrade half-applied (some validators on old version, some on new) → convergence check should detect the split via environment diff
+- Test: signing service unavailable → offline signing tool can publish an emergency VL
+
 **Deliverables:**
 - Complete system test results
 - Authority transition verified with fallback behavior confirmed
 - Adversarial test results
+- Operational failure drill results
 - System declared production-ready for testnet
 
 ---
@@ -2019,7 +2044,7 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 | **1.4** VL Generation | 3-4 days | ★★★☆☆ | 1.3 |
 | **1.5** IPFS Publication | 2-3 days | ★★☆☆☆ | 1.2, 1.3 |
 | **1.6** On-Chain Memo | 2-3 days | ★★☆☆☆ | 1.4, 1.5 |
-| **1.7** Orchestrator | 2-3 days | ★★☆☆☆ | 1.2-1.6 |
+| **1.7** Orchestrator | 3-4 days | ★★★☆☆ | 1.2-1.6 |
 | **1.8** Infra Deploy | 2-3 days | ★★☆☆☆ | 1.7 |
 | **1.9** Devnet Testing | 5-7 days | ★★★☆☆ | 1.8 |
 | **1.10** Testnet Deploy | 3-4 days | ★★★☆☆ | 1.9 |
