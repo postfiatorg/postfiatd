@@ -56,8 +56,9 @@ The foundation collects validator performance data and publishes it as a structu
 - All data is compiled into a normalized JSON snapshot (the scorer's input)
 - Raw API responses are archived alongside the snapshot for audit verification (`raw/` directory)
 - Snapshot + raw evidence are pinned to IPFS at a defined block height
-- IPFS CID is published on-chain
-- Validators fetch the snapshot by CID and verify it against the on-chain hash
+- IPFS CID is published on-chain; content is also pinned to a secondary service (Pinata or web3.storage) for redundancy
+- Validators fetch the snapshot by CID through any IPFS gateway (not dependent on the foundation's gateway) and verify it against the on-chain hash
+- Audit trail artifacts are also served over plain HTTPS as a fallback
 - MaxMind geolocation data is provided to the LLM during scoring but excluded from the IPFS publication (EULA restriction)
 
 The snapshot is deterministic — all validators use the same data because they all fetch the same IPFS content by CID.
@@ -175,26 +176,52 @@ Validators run the scoring model locally and verify that their results match the
 
 ---
 
-## Phase 3: Full Verification — Layer 2 (Proof of Logits)
+## Phase 3A: Content Authority Transfer
 
-Validators prove they actually ran the correct model, not just that they agree on the output.
-
-**Why Layer 2 is needed:** Layer 1 alone is insufficient. Validators could achieve hash convergence by copying each other's output without running the model. Layer 2 proves computational integrity — each validator actually performed the inference.
+Once Phase 2 proves reliable convergence, the UNL content authority transfers from the foundation to the validators. The foundation still publishes the VL, but the VL content comes from the converged validator result, not the foundation's own scoring.
 
 **What happens:**
 
+1. Phase 2 convergence is consistently proven (>95% for 4+ consecutive rounds)
+2. The foundation's scoring service switches UNL source: instead of publishing its own scores, it publishes the converged result from validator outputs
+3. The foundation retains its operational roles (data collection, round announcements, VL signing, IPFS publication)
+4. If convergence drops below threshold, the system falls back to foundation-only scoring
+
+**What this achieves:** Validators collectively determine the UNL content. The foundation is the publisher but not the authority — it publishes what the validators agree on.
+
+**What this doesn't achieve:** The foundation still controls snapshot assembly, round announcements, VL signing, and IPFS publication. These are addressed in Phase 3B (future work).
+
+---
+
+## Phase 3 Research: Layer 2 (Proof of Logits)
+
+**Status: Research milestone — proceed only if Phase 2 convergence rates justify the investment.**
+
+Layer 2 proves that validators actually ran the correct model, not just that they agree on the output. This is a research program, not a committed implementation timeline.
+
+**Why Layer 2 may be needed:** Layer 1 alone has a theoretical gap: validators could achieve hash convergence by copying each other's output without running the model. Layer 2 proves computational integrity. However, if Phase 2 achieves >99% output convergence reliably, the practical value of logit proofs diminishes — the system is already working.
+
+**Fallback:** If logit-level determinism proves infeasible, the system works at Phase 2 + 3A level with output-level convergence. This is a viable long-term operating mode, not a failure state.
+
+**How it works (if pursued):**
+
 1. During inference, each validator's GPU sidecar computes `SHA-256(logits)` at every token position
 2. The ordered list of logit hashes (the **logit commitment**) is published alongside the scored output
-3. After all validators reveal, any validator (or external party) can spot-check any other validator:
-   - Pick a random token position K
+3. After all validators reveal, spot-check challenge positions are derived from a **future validated ledger hash** (from after the reveal window closes) — making them unpredictable at commit time
+4. Any validator (or external party) can spot-check any other validator at the challenged positions:
    - Re-run one forward pass up to position K with the same model and input
    - Compare the logit hash at position K
-4. If hashes match → validator ran the correct model at that position
-5. If hashes don't match → validator cheated (wrong model, wrong input, or fabricated output)
+5. If hashes match → validator ran the correct model at that position
+6. If hashes don't match → validator cheated (wrong model, wrong input, or fabricated output)
 
 **Why this is efficient:** Generating the full scored UNL may take 500-2,000 tokens of inference. Spot-checking one position costs milliseconds — one forward pass at one position. Checking 5-10 random positions gives high statistical confidence.
 
 **What mandatory GPU guarantees:** Because all validators use the same GPU type with the same deterministic inference settings, logit output is identical across machines. A validator on wrong hardware produces wrong logit hashes and gets caught. The GPU requirement is self-enforcing — no separate hardware attestation needed.
+
+**What proof-of-logits proves and doesn't prove:**
+
+- **Proves:** Transcript consistency — the validator ran the declared model with the declared input and produced the declared output
+- **Does not prove:** That the validator used its own GPU (could outsource computation), that the validator is socially independent from others, or that the validator didn't share results pre-computation
 
 **Mismatch handling:**
 
@@ -202,9 +229,20 @@ Validators prove they actually ran the correct model, not just that they agree o
 - Repeated failures indicate dishonesty or misconfiguration
 - No slashing — exclusion from the round is the penalty
 
-**The transition:** Once both layers are running and convergence is consistently proven, the converged validator UNL replaces the foundation-published UNL as the authoritative source. The foundation becomes one validator among many, not the sole authority.
+**What ships (if pursued):** Logit commitment generation in the inference engine, logit hash publication alongside scored output, cross-validator spot-check tooling, verification result aggregation.
 
-**What ships:** Logit commitment generation in the inference engine, logit hash publication alongside scored output, cross-validator spot-check tooling, verification result aggregation.
+---
+
+## Phase 3B: Publication Decentralization (Future Work)
+
+Removing the foundation as the sole publisher requires addressing these remaining centralization vectors:
+
+- **Snapshot assembly:** The foundation is the sole data collector. Future: multiple snapshot assemblers with cross-validation.
+- **Round announcements:** The foundation announces rounds. Future: deterministic schedule derived from ledger state.
+- **VL signing:** The foundation holds the VL signing key. Future: threshold signing or multi-party VL publication.
+- **IPFS publication:** The foundation is the primary IPFS gateway. Future: validators publish independently, content-addressed data ensures consistency.
+
+This is a separate design problem that requires protocol-level changes. It is not on the current implementation timeline.
 
 ---
 
@@ -271,13 +309,14 @@ The harness results are a hard gate for Phase 2 entry (>99% output equality requ
 
 ## Trust Model Progression
 
-| Phase | Trust Model | Foundation Role | Validator Role |
-|-------|------------|-----------------|---------------|
-| 1 | Trust the foundation | Sole scorer, publishes UNL | Accept published UNL |
-| 2 | Verify the foundation | Scores and publishes, remains authoritative | Run model locally, publish output hash, flag discrepancies |
-| 3 | Replace the foundation | One validator among many | Score independently, prove computation, collective UNL |
+| Phase | Trust Model | Foundation Role | Validator Role | What's Decentralized |
+|-------|------------|-----------------|---------------|---------------------|
+| 1 | Trust the foundation | Sole scorer, publisher, data collector | Accept published UNL | Nothing — foundation controls everything |
+| 2 | Verify the foundation | Scores, publishes, remains authoritative | Run model locally, publish output hash, flag discrepancies | Scoring verification (shadow mode) |
+| 3A | Converged scoring authority | Publisher, data collector, round announcer, VL signer | Score independently, collective UNL content | UNL content determined by validator consensus |
+| 3B (future) | Publication decentralization | One participant among many | Score, publish, verify independently | Full stack — no single point of control |
 
-By Phase 3, no single entity controls the UNL. Every validator independently computes it. Every computation is verifiable. The foundation's only remaining privileged role is data collection — and even that is published transparently.
+By Phase 3A, validators collectively determine the UNL content. The foundation publishes what the validators agree on — it is the publisher but no longer the authority. The foundation retains operational roles: data collection, round announcements, VL signing, and IPFS publication. These are centralization vectors acknowledged explicitly and addressed in Phase 3B (future work).
 
 ---
 
@@ -287,7 +326,7 @@ By Phase 3, no single entity controls the UNL. Every validator independently com
 
 **Phase 2:** Validators become active verifiers. Any validator catching a discrepancy between their result and the foundation's has public, mathematical evidence. The community can track convergence rates across validators. Trust shifts from "trust the foundation" to "trust the math."
 
-**Phase 3:** The strongest community trust model. Every validator computes the UNL independently and proves it. Community members with GPU access can verify any validator's work. The open-weight model and published prompts mean the entire system is inspectable — no black boxes.
+**Phase 3A:** Validators collectively determine the UNL. Community members with GPU access can verify any validator's work. The open-weight model and published prompts mean the entire system is inspectable — no black boxes. The foundation still operates the publication infrastructure but publishes the validators' converged result.
 
 **Hardware barrier:** Validators need GPU access for Phase 2+. Cloud GPU rental (RunPod, ~$1-2/hr for a few minutes per round) keeps costs low. The one-command setup script keeps the barrier to entry technical-skill-wise low.
 
@@ -299,20 +338,20 @@ By Phase 3, no single entity controls the UNL. Every validator independently com
 
 **Phase 2:** Institutions running validators can independently verify the foundation's work. Mathematical verification strengthens the governance narrative.
 
-**Phase 3:** Strongest regulatory positioning. "Multiple independent parties run the same AI model, prove their computation mathematically, and independently arrive at the same validator list." No single entity controls the outcome. Institutions can participate directly by running a validator with a GPU sidecar.
+**Phase 3A:** Strong regulatory positioning. "Multiple independent parties run the same AI model and independently arrive at the same validator list. The foundation publishes the validators' converged result." Institutions can participate directly by running a validator with a GPU sidecar.
 
-**The phased approach helps institutions:** conservative institutions can engage at Phase 1 (simple, centralized, auditable) while technically sophisticated institutions can participate fully at Phase 3.
+**The phased approach helps institutions:** conservative institutions can engage at Phase 1 (simple, centralized, auditable) while technically sophisticated institutions can participate fully at Phase 3A.
 
 ---
 
 ## Cost Profile
 
-| Cost | Phase 1 | Phase 2 | Phase 3 |
+| Cost | Phase 1 | Phase 2 | Phase 3A |
 |------|---------|---------|---------|
-| Foundation GPU | ~$1-2/round | ~$1-2/round | Same (foundation is now a regular validator) |
+| Foundation GPU | ~$1-2/round | ~$1-2/round | Same (foundation still operates infrastructure) |
 | Foundation data collection | Operational cost | Same | Same |
 | Foundation IPFS pinning | Commodity | Same | Same |
-| Validator GPU | None | ~$0.10-1.00/round (cloud) | Same + logit computation overhead |
+| Validator GPU | None | ~$0.10-1.00/round (cloud) | Same |
 | Validator VPS | Existing cost | Same | Same |
 | Scoring rewards | None | None | None (XRPL model) |
 
@@ -333,9 +372,12 @@ By Phase 3, no single entity controls the UNL. Every validator independently com
 - On-chain commit-reveal for output hashes
 - Convergence monitoring (compare hashes across validators, track divergence rates)
 
-**Phase 3 (after Phase 2 proves convergence):**
+**Phase 3A (after Phase 2 proves convergence):**
+- Content authority transition: foundation publishes the converged validator result
+- Participation fallback: if convergence drops, revert to foundation-only scoring
+
+**Phase 3 Research (conditional — if Phase 2 convergence justifies):**
 - Logit commitment generation during inference (hash logits at every token position)
 - Logit commitment publication alongside scored output
-- Cross-validator spot-check tooling (pick position, re-run one forward pass, compare hash)
+- Cross-validator spot-check tooling (challenge positions derived from future ledger hash)
 - Verification result publication
-- Protocol transition: converged UNL replaces foundation-published UNL as authoritative source
