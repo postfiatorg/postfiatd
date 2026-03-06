@@ -28,15 +28,15 @@ Create the directory and download the appropriate Docker Compose file for your n
 **Validator node** (light image — minimal history, for consensus participation):
 
 ```bash
-mkdir -p /opt/postfiatd
+mkdir -p /opt/postfiatd/logs
 cd /opt/postfiatd
-wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-validator.yml -O docker-compose.yml
+wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-external-validator.yml -O docker-compose.yml
 ```
 
 **RPC node** (medium image — serves API requests):
 
 ```bash
-mkdir -p /opt/postfiatd
+mkdir -p /opt/postfiatd/logs
 cd /opt/postfiatd
 wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-rpc.yml -O docker-compose.yml
 ```
