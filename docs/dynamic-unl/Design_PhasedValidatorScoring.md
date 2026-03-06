@@ -62,10 +62,15 @@ The snapshot is deterministic — all validators use the same data because they 
 
 ## Scoring Mechanism
 
-The LLM ingests all candidate validator data packets in a single prompt and outputs:
+The LLM ingests all candidate validator data packets in a single prompt (sorted deterministically by master public key) and outputs:
 
 - A score (0-100) for each candidate with written reasoning
-- The scoring considers: consensus performance, operational reliability, software diligence, historical track record, network participation, identity and reputation, geographic/ISP/datacenter diversity
+- The scoring considers: consensus performance, operational reliability, software diligence, historical track record, network participation, identity and reputation
+- The scoring prompt explicitly enumerates diversity dimensions with weighting guidance:
+  - Country concentration
+  - ASN (autonomous system) concentration
+  - Cloud provider / datacenter concentration
+  - Operator concentration (how many validators the same entity runs)
 
 **UNL inclusion rule (mechanical, not LLM-decided):**
 
@@ -73,6 +78,7 @@ The LLM ingests all candidate validator data packets in a single prompt and outp
 2. If 35 or fewer candidates clear the cutoff → all eligible candidates are on the UNL
 3. If more than 35 clear the cutoff → top 35 by rank score are included
 4. All others are alternates, ranked in order
+5. **Churn control:** a challenger only replaces an incumbent UNL validator if the challenger's score exceeds the incumbent's by at least X points (configurable). This prevents UNL oscillation from minor score fluctuations between rounds. The gap value is determined empirically during testnet operation.
 
 **Configuration:**
 

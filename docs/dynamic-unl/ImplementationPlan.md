@@ -621,8 +621,14 @@ dynamic-unl-scoring/
 - Implement `PromptBuilder` class that constructs the scoring prompt from the snapshot
 - The prompt follows the design spec structure:
   - System prompt: scoring criteria (consensus performance, operational reliability, software diligence, historical track record, network participation, identity/reputation, geographic diversity)
-  - User prompt: all validator data packets as structured JSON
+  - User prompt: all validator data packets as structured JSON, sorted deterministically by master public key
   - Output format: JSON with `{validator_key: {score: int, reasoning: string}}` per validator
+- The prompt must explicitly enumerate diversity dimensions and provide weighting guidance:
+  - Country concentration: how many other validators share this country
+  - ASN concentration: how many other validators share this autonomous system
+  - Cloud provider / datacenter concentration
+  - Operator concentration: how many validators are run by the same entity
+  - The prompt should instruct the LLM on how heavily to factor each dimension relative to quality metrics
 - Version the prompt (stored as a template, version tracked in config)
 - The prompt must fit within the model's context window — calculate token count and verify
 
@@ -635,20 +641,26 @@ dynamic-unl-scoring/
   - JSON structure matches expected schema
 - Handle: malformed JSON (retry once), missing validators (flag and log), out-of-range scores (clamp and log)
 
-**1.3.4 — UNL inclusion logic** (1 day)
+**1.3.4 — UNL inclusion logic** (1-2 days)
 - Implement the mechanical UNL inclusion rule from the design:
   1. Sort validators by score descending
   2. Apply cutoff threshold (configurable, e.g., score >= 40)
   3. If <= 35 validators above cutoff → all are on the UNL
   4. If > 35 above cutoff → top 35 by score
   5. Remaining are alternates, ranked in order
+- **Churn control — minimum score gap for replacement:**
+  - A challenger only displaces an incumbent UNL validator if the challenger's score exceeds the incumbent's score by at least X points (configurable, e.g., 5-10)
+  - If the gap is smaller, the incumbent stays regardless of absolute ranking
+  - This prevents UNL oscillation caused by minor score fluctuations between rounds
+  - The exact gap value will be determined during devnet testing (Milestone 1.9) by measuring natural score variance across rounds
+  - On the first round (no previous UNL exists), the rule does not apply — the initial UNL is set purely by score ranking
 - Output: ordered list of validator public keys for the UNL, plus alternates
 
 **Deliverables:**
 - `LLMScorerService` that takes a snapshot and returns scored + ranked validators
 - RunPod client with cold start handling
-- Prompt template (versioned)
-- UNL inclusion logic with configurable threshold
+- Prompt template (versioned) with explicit diversity dimension guidance
+- UNL inclusion logic with configurable threshold and minimum score gap for replacement
 - Unit tests with mocked RunPod responses
 
 ---
@@ -924,13 +936,19 @@ dynamic-unl-scoring/
 - Review LLM scoring output quality:
   - Are scores differentiated? (not all 85-90)
   - Does reasoning reference actual validator metrics?
-  - Does geographic diversity factor in?
+  - Does geographic diversity factor in? Are the specified diversity dimensions (country, ASN, cloud provider, datacenter, operator) reflected in the scoring?
   - Are KYC-verified validators scored appropriately?
 - Iterate on the prompt based on output quality
 - Run 3-5 scoring rounds, compare results
 - Finalize prompt version
 
-**1.9.4 — Edge case testing** (1-2 days)
+**1.9.4 — Scoring stability testing** (1-2 days)
+- Replay the same snapshot multiple times (5-10 runs) — scores should be consistent across runs
+- One-candidate-added / one-candidate-removed test — existing validator scores should not shift significantly when an unrelated validator is added or removed from the snapshot
+- Measure natural score variance across rounds to determine the minimum score gap config value for churn control (Milestone 1.3.4)
+- Validate that the churn control mechanism behaves as expected: borderline validators should not oscillate between rounds
+
+**1.9.5 — Edge case testing** (1-2 days)
 - Test: what happens when VHS is down? (data collection should fail gracefully, round marked failed)
 - Test: what happens when RunPod cold-starts? (should wait and retry)
 - Test: what happens when IPFS is unreachable? (should retry)
