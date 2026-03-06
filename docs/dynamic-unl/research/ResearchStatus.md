@@ -86,15 +86,15 @@ The bond prevents Sybil attacks. KYC is still useful for reputation scoring and 
 
 ## Approaches
 
-The four architectural approaches for Dynamic UNL scoring are defined in [Approaches.md](../Approaches.md). They differ along two primary axes: **who scores** (foundation vs. distributed nodes) and **where the LLM runs** (cloud API vs. local inference). The chosen architecture ([Design_PhasedValidatorScoring](../Design_PhasedValidatorScoring.md)) uses a phased rollout from foundation scoring to validator-driven scoring with local inference and proof-of-logits.
+The four architectural approaches for Dynamic UNL scoring are defined in [Approaches.md](../archive/Approaches.md). They differ along two primary axes: **who scores** (foundation vs. distributed nodes) and **where the LLM runs** (cloud API vs. local inference). The chosen architecture ([Design](../Design.md)) uses a phased rollout from foundation scoring to validator-driven scoring with local inference and proof-of-logits.
 
-| Approach | Who Scores | LLM Execution | Proof Method | Existing Design |
+| Approach | Who Scores | LLM Execution | Proof Method | Design Doc |
 |----------|-----------|--------------|-------------|-----------------|
-| 1 | Foundation | Cloud API | Published audit trail | Design_FoundationCloudAPI |
-| 2 | Distributed Nodes | Cloud API | Commit-reveal + median | Design_DistributedCloudAPI |
-| 3 | Foundation | Local | Proof-of-logits | Design_FoundationLocalHardware |
-| 4 | Distributed Nodes | Local | Proof-of-logits | Design_DistributedLocalHardware |
-| **Chosen** | **Foundation → Validators** | **Local** | **Output convergence + proof-of-logits** | **Design_PhasedValidatorScoring** |
+| 1 | Foundation | Cloud API | Published audit trail | archive/Design_FoundationCloudAPI |
+| 2 | Distributed Nodes | Cloud API | Commit-reveal + median | archive/Design_DistributedCloudAPI |
+| 3 | Foundation | Local | Proof-of-logits | archive/Design_FoundationLocalHardware |
+| 4 | Distributed Nodes | Local | Proof-of-logits | archive/Design_DistributedLocalHardware |
+| **Chosen** | **Foundation → Validators** | **Local** | **Output convergence + proof-of-logits** | **Design.md** |
 
 ---
 
