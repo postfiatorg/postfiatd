@@ -44,18 +44,21 @@ The foundation collects validator performance data and publishes it as a structu
 
 **Data sources:**
 
-| Source | Data | Verifiability |
-|--------|------|---------------|
-| VHS API | Agreement scores, uptime, latency, peer connections, server version, manifests, amendment voting, fee votes, domain verification | On-chain and public API — validators can cross-check |
-| MaxMind GeoIP2 API | Continent, country, city, ISP, datacenter | Third-party — independently queryable |
-| On-chain identity records | KYC/KYB status, institutional domain verification | Directly verifiable from ledger |
+| Source | Data | Verifiability | Published to IPFS? |
+|--------|------|---------------|-------------------|
+| VHS API | Agreement scores, uptime, latency, peer connections, server version, manifests, amendment voting, fee votes, domain verification | On-chain and public API — validators can cross-check | Yes |
+| ASN (WHOIS/RIR) | AS number, ISP name, organization (e.g., "DigitalOcean") | Public data — anyone can query | Yes |
+| MaxMind GeoIP2 API | Continent, country, city | Third-party — independently queryable | No (EULA restricts republishing; used internally for scoring context only) |
+| On-chain identity records | Verification status, entity type, domain attestation (no PII) | Directly verifiable from ledger | Yes |
 
 **Snapshot publication:**
 
-- All data is compiled into a structured JSON snapshot
-- Snapshot is pinned to IPFS at a defined block height
+- All data is compiled into a normalized JSON snapshot (the scorer's input)
+- Raw API responses are archived alongside the snapshot for audit verification (`raw/` directory)
+- Snapshot + raw evidence are pinned to IPFS at a defined block height
 - IPFS CID is published on-chain
 - Validators fetch the snapshot by CID and verify it against the on-chain hash
+- MaxMind geolocation data is provided to the LLM during scoring but excluded from the IPFS publication (EULA restriction)
 
 The snapshot is deterministic — all validators use the same data because they all fetch the same IPFS content by CID.
 
@@ -67,6 +70,7 @@ The LLM ingests all candidate validator data packets in a single prompt (sorted 
 
 - A score (0-100) for each candidate with written reasoning
 - The scoring considers: consensus performance, operational reliability, software diligence, historical track record, network participation, identity and reputation
+- **Observer-dependent metrics** (latency, peer count, topology) receive low weight relative to objective metrics (agreement scores, uptime, server version). VHS observes the network from a single vantage point — these metrics reflect VHS's view, not universal truth.
 - The scoring prompt explicitly enumerates diversity dimensions with weighting guidance:
   - Country concentration
   - ASN (autonomous system) concentration
@@ -222,7 +226,7 @@ Validators prove they actually ran the correct model, not just that they agree o
 │
 ↓
 3. Commit (Each Validator, On-Chain)
-│   Publish hash(scored_output + logit_commitment_hash + salt + round_number)
+│   Publish domain-separated hash (binary encoding with fixed-width fields)
 │
 ↓
 4. Reveal (Each Validator, IPFS + On-Chain)

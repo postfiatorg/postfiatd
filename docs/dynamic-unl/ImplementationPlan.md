@@ -158,7 +158,7 @@ Step-by-step for deploying the LLM inference endpoint:
 | RunPod Serverless (shared) | — | — | ~$5-15 |
 | IPFS (existing) | $0 | $0 | $0 |
 | VHS (existing) | $0 | $0 | $0 |
-| MaxMind GeoIP2 (Phase 0) | — | — | ~$0-25 |
+| MaxMind GeoIP2 (internal geo) | — | — | ~$0-25 |
 | **Total new monthly cost** | | | **~$41-76** |
 
 ---
@@ -340,31 +340,38 @@ Model Selection        RunPod Setup           Determinism           MaxMind
 
 ---
 
-### Milestone 0.4: MaxMind GeoIP2 Upgrade
+### Milestone 0.4: Geolocation Setup & Legal Assessment
 
-**Duration:** ~2 hours | **Difficulty:** ★☆☆☆☆ Trivial | **Dependencies:** None
+**Duration:** ~1 day | **Difficulty:** ★☆☆☆☆ Trivial | **Dependencies:** None
 
-**Goal:** Upgrade from MaxMind GeoLite (free, limited) to GeoIP2 (paid, accurate) for validator geolocation data. Also update references in other repos that use MaxMind.
+**Goal:** Set up data sources for validator geolocation and ISP identification. Assess licensing constraints for data publication.
+
+**Data source split:** ISP/cloud provider identification uses public ASN data (freely publishable). City/country geolocation uses MaxMind GeoIP2 (kept internal, not published to IPFS). This split avoids MaxMind EULA restrictions on republishing extracted data points — ASN data from WHOIS/RIR databases is public and provides the same ISP/provider identification needed for diversity scoring.
 
 **Steps:**
 
-**0.4.1 — Evaluate MaxMind GeoIP2 plans** (30 min)
+**0.4.1 — Set up MaxMind GeoIP2** (2 hours)
 - Compare GeoLite2 (current, free) vs GeoIP2 Precision Insights
-- GeoIP2 provides: accurate ISP identification, datacenter detection, connection type — all needed for diversity scoring
-- Pricing: GeoIP2 Web Service starts free for low volume (1,000 lookups/day free tier), pay-as-you-go after
-- For weekly scoring of ~35 validators: well within free tier
-
-**0.4.2 — Set up GeoIP2 account and update repos** (1.5 hours)
-- Sign up at maxmind.com for GeoIP2 Precision Web Service
-- Generate API key (account ID + license key)
-- Test API with a known validator IP
-- Store credentials securely
+- GeoIP2 provides: accurate city/country geolocation — used internally for scoring context, not published
+- Pricing: GeoIP2 Web Service starts free for low volume (1,000 lookups/day free tier)
+- Sign up, generate API key, test with a known validator IP
 - Update any other repos that reference MaxMind GeoLite to use the new key/service
 
+**0.4.2 — Identify ASN data source** (2 hours)
+- Evaluate public ASN lookup options: Team Cymru IP-to-ASN, RIPE RIS, local pyasn database, ipinfo.io free tier
+- ASN data provides: AS number, ISP name (e.g., "DigitalOcean"), organization — all publishable
+- Select a source and verify it returns accurate ISP/provider data for known validator IPs
+- Document the chosen source and its query method
+
+**0.4.3 — Legal/licensing assessment** (0.5 day)
+- Confirm MaxMind EULA compliance: internal use for geolocation only, no IPFS publication of MaxMind-derived fields
+- Review what identity attestation data can be published on-chain (attestation status only, no PII — see Milestone 1.2)
+- Document licensing constraints and rationale for the data source split
+
 **Deliverables:**
-- MaxMind GeoIP2 account with API key
-- Verified API access
-- Other repos updated
+- MaxMind GeoIP2 account with API key (for internal geolocation only)
+- ASN data source selected and verified (for publishable ISP/provider data)
+- Licensing assessment documented
 
 ---
 
@@ -485,7 +492,7 @@ dynamic-unl-scoring/
   # VHS
   VHS_API_URL (e.g., https://vhs.testnet.postfiat.org)
 
-  # MaxMind
+  # MaxMind (internal geolocation only — not published to IPFS)
   MAXMIND_ACCOUNT_ID, MAXMIND_LICENSE_KEY
 
   # RunPod
@@ -549,22 +556,41 @@ dynamic-unl-scoring/
 - Parse responses into Pydantic `ValidatorProfile` models
 - Handle: pagination (if any), timeouts, retries, VHS downtime
 
-**1.2.2 — MaxMind geolocation** (1 day)
+**1.2.2 — ASN lookup for ISP/provider identification** (0.5-1 day)
+- Implement `ASNClient` class using the data source selected in Milestone 0.4
+- For each validator IP: get AS number, ISP/organization name (e.g., "DigitalOcean", "Hetzner")
+- This data is public (WHOIS/RIR) and freely publishable — included in the IPFS snapshot
+- Cache results (ASN data changes infrequently — cache for 24h)
+
+**1.2.3 — MaxMind geolocation (internal only)** (0.5 day)
 - Implement `GeoIPClient` class that calls MaxMind GeoIP2 Precision Web Service
-- For each validator IP: get continent, country, city, ISP, datacenter, connection type
+- For each validator IP: get continent, country, city
+- This data is used internally by the scoring pipeline to provide geographic context to the LLM but is **not published to IPFS** (MaxMind EULA restricts republishing extracted data points)
 - Cache results (geoIP data doesn't change frequently — cache for 24h)
 - Handle: rate limits, API errors, unknown IPs
 
-**1.2.3 — On-chain identity data** (1 day)
+**1.2.4 — On-chain identity data** (1 day)
 - Implement `IdentityClient` class
 - Read identity verification memo transactions from the PFTL chain:
   - Use the PFTL RPC `account_tx` method to fetch transactions from the scoring-onboarding publisher address
   - Parse memo data (hex → JSON) for `pf_identity_v1` and `pf_wallet_auth_v1` memos
-  - Extract: KYC status, domain verification, social verification per validator address
+  - Extract attestation status only — no PII:
+    - `verified`: true/false
+    - `entity_type`: institutional/individual/unknown
+    - `domain_attested`: true/false
 - Index results into the local PostgreSQL database for fast lookup in future rounds
 - Alternatively: if scoring-onboarding DB is accessible, query it directly
 
-**1.2.4 — Snapshot assembly** (0.5-1 day)
+**1.2.5 — Raw evidence archival** (0.5 day)
+- Archive raw API responses from each data source before normalization:
+  - Raw VHS API responses (JSON, timestamped)
+  - Raw ASN lookup responses
+  - Raw MaxMind responses (kept internal — not published to IPFS)
+  - Raw on-chain identity transactions
+- Each raw response is hashed individually for later verification
+- This creates a verifiable audit chain: raw data → normalization → snapshot → scoring
+
+**1.2.6 — Snapshot assembly** (0.5-1 day)
 - Combine all data sources into a unified `ScoringSnapshot` model:
   ```json
   {
@@ -586,25 +612,26 @@ dynamic-unl-scoring/
         "server_version": "2.4.0",
         "amendment_votes": ["featureX", "featureY"],
         "fee_vote": 10,
-        "continent": "North America",
-        "country": "US",
-        "city": "New York",
+        "asn": 14061,
         "isp": "DigitalOcean",
-        "datacenter": "NYC1",
-        "kyc_status": "approved",
-        "domain_verified": "example.com",
-        "social_verified": "@handle"
+        "country": "US",
+        "verified": true,
+        "entity_type": "institutional",
+        "domain_attested": true
       }
     ]
   }
   ```
+- Note: `asn` and `isp` are from public ASN data (publishable). `country` is included in the published snapshot. City-level geolocation from MaxMind is provided to the LLM during scoring but not included in the published snapshot.
+- Identity fields are attestation status only — no PII (names, addresses, or personal details)
 - Write snapshot to local file and prepare for IPFS pinning
 - Compute SHA-256 hash of the snapshot JSON (for on-chain reference)
 
 **Deliverables:**
 - `DataCollectorService` that produces a complete `ScoringSnapshot`
-- VHS, MaxMind, and Identity client implementations
-- Snapshot JSON schema documented
+- VHS, ASN, MaxMind, and Identity client implementations
+- Raw evidence archival for audit trail
+- Snapshot JSON schema documented (with data source attribution)
 - Unit tests with mocked API responses
 
 ---
@@ -647,6 +674,7 @@ dynamic-unl-scoring/
   - Cloud provider / datacenter concentration
   - Operator concentration: how many validators are run by the same entity
   - The prompt should instruct the LLM on how heavily to factor each dimension relative to quality metrics
+- The prompt must instruct the LLM to give **low weight to observer-dependent metrics** (latency, peer count, topology) relative to objective metrics (agreement scores, uptime, server version). VHS observes the network from a single vantage point — these metrics reflect VHS's view, not universal truth.
 - Version the prompt (stored as a template, version tracked in config)
 - The prompt must fit within the model's context window — calculate token count and verify
 
@@ -766,12 +794,18 @@ dynamic-unl-scoring/
 - After each scoring round, publish to IPFS:
   ```
   round_<N>/
-  ├── snapshot.json           # Full validator data snapshot
+  ├── snapshot.json           # Normalized validator data snapshot (scorer input)
+  ├── raw/                    # Raw API responses (verifiable audit trail)
+  │   ├── vhs_validators.json # Raw VHS response, timestamped
+  │   ├── vhs_topology.json   # Raw VHS topology response
+  │   ├── asn_lookups.json    # Raw ASN lookup responses
+  │   └── identity_txs.json   # Raw on-chain identity data
   ├── scoring_config.json     # Model version, weight hash, prompt version, parameters
   ├── scores.json             # LLM output (scores + reasoning for each validator)
   ├── unl.json                # Final UNL (list of included validators + alternates)
   └── metadata.json           # Round number, timestamps, hashes
   ```
+- Note: MaxMind geolocation responses are **not** included in the IPFS audit trail (EULA restriction). Raw VHS and ASN data are publishable.
 - Pin the directory and get the root CID
 - Store CID in PostgreSQL linked to the round
 
@@ -1113,7 +1147,7 @@ Four new memo types for the commit-reveal protocol:
   "type": "pf_scoring_commit_v1",
   "round_number": 42,
   "validator_public_key": "nHUDXa2b...",
-  "commit_hash": "<sha256(scores_json + salt + round_number)>"
+  "commit_hash": "<domain-separated hash — see 2.1.4>"
 }
 ```
 
@@ -1176,7 +1210,14 @@ Round Lifecycle (Phase 2)
 - Reveal window: ~250 ledgers (~1 hour)
 - Convergence check: after reveal window closes
 
-**2.1.3 — Protocol edge cases** (0.5 day)
+**2.1.3 — Domain-separated hash construction** (0.5 day)
+- Define a canonical binary encoding for all hash preimages — never use loose string concatenation
+- Commit hash format: `sha256(domain_tag || version_uint8 || round_uint64 || scores_hash_32bytes || salt_32bytes)`
+- `domain_tag` is a fixed-length string identifying the hash purpose (e.g., `"pf_scoring_commit_v1\x00"`)
+- Fixed-width fields prevent ambiguity (e.g., `"score12" + "3"` vs `"score1" + "23"`)
+- Document the exact binary layout for every hash used in the protocol (commit, reveal verification, convergence)
+
+**2.1.4 — Protocol edge cases** (0.5 day)
 - What if a validator commits but doesn't reveal? → counted as non-participant for that round
 - What if a validator reveals before commit window closes? → reveal ignored, must wait
 - What if fewer than N validators commit? → round still valid (Phase 2 is shadow mode, not binding)
@@ -1525,7 +1566,8 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 **2.8.1 — Deploy sidecars to devnet validators** (1-2 days)
 - Install the sidecar on all 4 devnet validators (foundation-controlled)
 - Configure each with its own sidecar wallet (funded)
-- Use RunPod cloud mode for simplicity (same endpoint as the scoring service)
+- **At least 2 of 4 validators must use independent execution environments** (separate RunPod endpoints or local GPU) — not a shared endpoint. If all validators hit the same endpoint, the test proves transport symmetry, not independent execution.
+- The remaining 2 can share a RunPod endpoint for comparison
 - Start sidecars and verify they're watching for round announcements
 
 **2.8.2 — Run first commit-reveal round** (1-2 days)
@@ -1538,8 +1580,8 @@ RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID
 
 **2.8.3 — Convergence analysis** (1-2 days)
 - Compare output hashes across all 4 validators + foundation
-- If using RunPod cloud (same endpoint): outputs should be identical
-- If any divergence: investigate cause (timing, model version mismatch, prompt difference)
+- Critical test: do validators on independent endpoints produce identical output to those on shared endpoints?
+- If any divergence: investigate cause (timing, model version mismatch, prompt difference, hardware difference)
 - Document convergence rate and any issues
 
 **2.8.4 — Edge case testing** (1-2 days)
