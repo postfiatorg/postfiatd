@@ -325,8 +325,12 @@ jobs:
               iptables -I INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT
             fi
             # Make iptables rules persistent
-            apt-get install -y iptables-persistent 2>/dev/null || true
-            netfilter-persistent save 2>/dev/null || true
+            if command -v netfilter-persistent &> /dev/null; then
+              netfilter-persistent save 2>/dev/null || true
+            elif ! command -v ufw &> /dev/null; then
+              apt-get install -y iptables-persistent 2>/dev/null || true
+              netfilter-persistent save 2>/dev/null || true
+            fi
 
             # Install Caddy if not present
             if ! command -v caddy &> /dev/null; then
@@ -576,8 +580,12 @@ jobs:
               iptables -I INPUT -p tcp -s ${VHS_HOST} --dport 443 -j ACCEPT
             fi
             # Make iptables rules persistent
-            apt-get install -y iptables-persistent 2>/dev/null || true
-            netfilter-persistent save 2>/dev/null || true
+            if command -v netfilter-persistent &> /dev/null; then
+              netfilter-persistent save 2>/dev/null || true
+            elif ! command -v ufw &> /dev/null; then
+              apt-get install -y iptables-persistent 2>/dev/null || true
+              netfilter-persistent save 2>/dev/null || true
+            fi
 
             # Install Caddy if not present
             if ! command -v caddy &> /dev/null; then
