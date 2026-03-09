@@ -1,0 +1,11 @@
+#
+# AI Devnet Validators (Static List)
+#
+# This file contains the public keys of trusted validators for the ai-devnet.
+# Using static list instead of dynamic fetch for simplicity during development.
+#
+
+[validators]
+nHByK3pZariiaq5E7yfCpMRTZxiDtUiBvE7bxVKpTy3tuMiL3m3i
+nHBxdwna2kRmozVJq6Yogi3hPHuLGJtgzwrqkgfHiYbzi6CsVVvc
+nHU11KuCnAyUPah51QbA1PtQZPCqYqh89b2xKBEcouavc4RPjC3p

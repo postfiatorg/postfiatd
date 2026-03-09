@@ -9,6 +9,7 @@ on:
         options:
           - devnet
           - testnet
+          - ai-devnet
       node_type:
         description: 'Node type to deploy'
         required: true
@@ -46,6 +47,10 @@ jobs:
           TESTNET_RPC: ${{ vars.TESTNET_RPC_HOSTS }}
           TESTNET_ARCHIVE: ${{ vars.TESTNET_ARCHIVE_HOSTS }}
           TESTNET_VHS: ${{ vars.TESTNET_VHS_HOST }}
+          AI_DEVNET_VALIDATORS: ${{ vars.AI_DEVNET_VALIDATOR_HOSTS }}
+          AI_DEVNET_RPC: ${{ vars.AI_DEVNET_RPC_HOSTS }}
+          AI_DEVNET_ARCHIVE: ${{ vars.AI_DEVNET_ARCHIVE_HOSTS }}
+          AI_DEVNET_VHS: ${{ vars.AI_DEVNET_VHS_HOST }}
         run: |
           if [ "${{ inputs.network }}" = "devnet" ]; then
             echo "validator_hosts=$DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
@@ -53,6 +58,12 @@ jobs:
             ARCHIVE="${DEVNET_ARCHIVE:-[]}"
             echo "archive_hosts=$ARCHIVE" >> $GITHUB_OUTPUT
             echo "vhs_host=$DEVNET_VHS" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.network }}" = "ai-devnet" ]; then
+            echo "validator_hosts=$AI_DEVNET_VALIDATORS" >> $GITHUB_OUTPUT
+            echo "rpc_hosts=$AI_DEVNET_RPC" >> $GITHUB_OUTPUT
+            ARCHIVE="${AI_DEVNET_ARCHIVE:-[]}"
+            echo "archive_hosts=$ARCHIVE" >> $GITHUB_OUTPUT
+            echo "vhs_host=$AI_DEVNET_VHS" >> $GITHUB_OUTPUT
           else
             echo "validator_hosts=$TESTNET_VALIDATORS" >> $GITHUB_OUTPUT
             echo "rpc_hosts=$TESTNET_RPC" >> $GITHUB_OUTPUT
@@ -91,12 +102,15 @@ jobs:
           TESTNET_VALIDATOR_TOKEN_3: ${{ secrets.TESTNET_VALIDATOR_TOKEN_3 }}
           TESTNET_VALIDATOR_TOKEN_4: ${{ secrets.TESTNET_VALIDATOR_TOKEN_4 }}
           TESTNET_VALIDATOR_TOKEN_5: ${{ secrets.TESTNET_VALIDATOR_TOKEN_5 }}
+          AI_DEVNET_VALIDATOR_TOKEN_1: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_1 }}
+          AI_DEVNET_VALIDATOR_TOKEN_2: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_2 }}
+          AI_DEVNET_VALIDATOR_TOKEN_3: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_3 }}
           DEPLOY_HOST: ${{ matrix.host }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,DEPLOY_HOST
+          envs: NETWORK,LOKI_URL,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,AI_DEVNET_VALIDATOR_TOKEN_1,AI_DEVNET_VALIDATOR_TOKEN_2,AI_DEVNET_VALIDATOR_TOKEN_3,DEPLOY_HOST
           script: |
             set -e
 
@@ -227,6 +241,12 @@ jobs:
                 "45.32.222.206")   VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_3}" ;;
                 "144.202.31.74")   VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_4}" ;;
                 "144.202.16.242")  VALIDATOR_TOKEN="${TESTNET_VALIDATOR_TOKEN_5}" ;;
+              esac
+            elif [ "${NETWORK}" = "ai-devnet" ]; then
+              case "${DEPLOY_HOST}" in
+                "140.82.42.131")  VALIDATOR_TOKEN="${AI_DEVNET_VALIDATOR_TOKEN_1}" ;;
+                "108.61.75.59")   VALIDATOR_TOKEN="${AI_DEVNET_VALIDATOR_TOKEN_2}" ;;
+                "45.77.151.23")   VALIDATOR_TOKEN="${AI_DEVNET_VALIDATOR_TOKEN_3}" ;;
               esac
             fi
 

@@ -1,14 +1,14 @@
-name: Docker Build - Devnet
+name: Docker Build - AI Devnet
 on:
   workflow_dispatch:
   push:
     branches:
-      - devnet
+      - ai-devnet
     paths:
       - 'src/**'
       - 'include/**'
-      - 'cfg/postfiatd-devnet-*.cfg'
-      - 'cfg/validators-devnet.txt'
+      - 'cfg/postfiatd-ai-devnet-*.cfg'
+      - 'cfg/validators-ai-devnet.txt'
       - 'cmake/**'
       - 'external/**'
       - 'Builds/**'
@@ -18,9 +18,9 @@ on:
       - 'scripts/docker-entrypoint.sh'
       - 'scripts/logrotate-postfiatd.conf'
 jobs:
-  build-devnet:
+  build-ai-devnet:
     uses: ./.github/workflows/build.yml
     with:
-      network: devnet
-      source_ref: devnet
+      network: ai-devnet
+      source_ref: ai-devnet
     secrets: inherit
