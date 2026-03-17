@@ -48,7 +48,11 @@ WORKDIR /postfiat
 RUN pipx install conan
 RUN pipx ensurepath
 RUN export PATH=$PATH:/root/.local/bin
-ENV PATH="/root/.local/bin:$PATH"
+ENV PATH="/root/.cargo/bin:/root/.local/bin:$PATH"
+
+# Install a modern Rust toolchain (apt cargo/rustc is too old for edition2024 crates)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+RUN rustc --version && cargo --version
 
 # Copy source code first (needed for conan profile setup)
 COPY . .

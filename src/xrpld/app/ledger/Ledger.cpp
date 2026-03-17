@@ -31,6 +31,8 @@
 #include <xrpld/nodestore/Database.h>
 #include <xrpld/nodestore/detail/DatabaseNodeImp.h>
 
+#include "orchard-postfiat/src/ffi/bridge.rs.h"
+
 #include <xrpl/basics/Log.h>
 #include <xrpl/basics/contract.h>
 #include <xrpl/beast/utility/instrumentation.h>
@@ -40,6 +42,7 @@
 #include <xrpl/protocol/Indexes.h>
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/SecretKey.h>
+#include <xrpl/protocol/Seed.h>
 #include <xrpl/protocol/digest.h>
 #include <xrpl/protocol/jss.h>
 
@@ -181,20 +184,18 @@ Ledger::Ledger(
     info_.closeTimeResolution = ledgerGenesisTimeResolution;
 
     // Select genesis account based on network type:
-    // - PostFiat production networks (mainnet=2026, testnet=2025, devnet=2024)
-    //   use the PostFiat genesis account UNLESS running in standalone mode
-    // - Standalone mode and unit tests: derive from "masterpassphrase"
-    //   (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh)
+    // - Standalone mode and devnet (2024): derive from "masterpassphrase"
+    //   (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh) for deterministic smoke testing.
+    // - PostFiat production networks (testnet=2025, mainnet=2026):
+    //   use the PostFiat genesis account.
     AccountID id;
-    if (config.standalone())
+    if (config.standalone() || config.NETWORK_ID == 2024)
     {
         auto const seed = generateSeed("masterpassphrase");
         auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
         id = calcAccountID(keypair.first);
     }
-    else if (
-        config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
-        config.NETWORK_ID == 2026)
+    else if (config.NETWORK_ID == 2025 || config.NETWORK_ID == 2026)
     {
         // PostFiat production networks
         id = *parseBase58<AccountID>("r4vhrMChCsaoFsBoCkRTRGUuc1njfr7bmA");
@@ -244,6 +245,32 @@ Ledger::Ledger(
             sle->at(sfReferenceFeeUnits) = Config::FEE_UNITS_DEPRECATED;
         }
         rawInsert(sle);
+    }
+
+    std::cout << "DEBUG: Reached genesis anchor check point" << std::endl;
+
+    // Initialize empty anchor for Orchard privacy (if feature is enabled)
+    if (std::find(amendments.begin(), amendments.end(), featureOrchardPrivacy) !=
+        amendments.end())
+    {
+        std::cout << "DEBUG: OrchardPrivacy feature is enabled in genesis!" << std::endl;
+
+        // Get the proper empty anchor from Orchard library
+        auto emptyAnchorBytes = orchard_test_get_empty_anchor();
+        uint256 emptyAnchor;
+        std::memcpy(emptyAnchor.data(), emptyAnchorBytes.data(), 32);
+
+        std::cout << "GENESIS: Storing empty anchor: " << to_string(emptyAnchor) << std::endl;
+
+        auto sle = std::make_shared<SLE>(keylet::orchardAnchor(emptyAnchor));
+        sle->setFieldU32(sfLedgerSequence, 1);
+        rawInsert(sle);
+
+        std::cout << "GENESIS: Empty anchor stored successfully" << std::endl;
+    }
+    else
+    {
+        std::cout << "DEBUG: OrchardPrivacy feature NOT enabled in genesis" << std::endl;
     }
 
     stateMap_.flushDirty(hotACCOUNT_NODE);

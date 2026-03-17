@@ -946,7 +946,25 @@ TRANSACTION(ttBATCH, 71, Batch,
     {sfBatchSigners, soeOPTIONAL},
 }))
 
-/** Reserve 72-73 for future Vault-related transactions */
+/** This transaction type performs shielded payments using Orchard/Halo2 proofs.
+
+    Supports t->z, z->z, and z->t flows.
+ */
+#if TRANSACTION_INCLUDE
+#   include <xrpld/app/tx/detail/ShieldedPayment.h>
+#endif
+TRANSACTION(ttSHIELDED_PAYMENT, 72, ShieldedPayment,
+    Delegation::notDelegatable,
+    featureOrchardPrivacy,
+    noPriv,
+    ({
+    {sfDestination, soeOPTIONAL},
+    {sfDestinationTag, soeOPTIONAL},
+    {sfAmount, soeOPTIONAL},
+    {sfOrchardBundle, soeOPTIONAL},
+}))
+
+/** Reserve 73 for future Vault-related transactions */
 
 /** This transaction creates and updates a Loan Broker */
 #if TRANSACTION_INCLUDE
