@@ -33,6 +33,11 @@
 
 #include <mutex>
 
+// Forward declaration for Orchard wallet
+namespace ripple {
+class OrchardWallet;
+}
+
 namespace ripple {
 
 namespace unl {
@@ -284,6 +289,10 @@ public:
 
     virtual std::optional<uint256> const&
     trapTxID() const = 0;
+
+    // Orchard wallet integration
+    virtual OrchardWallet&
+    getOrchardWallet() = 0;
 };
 
 std::unique_ptr<Application>

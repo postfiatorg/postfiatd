@@ -1,5 +1,9 @@
 [![codecov](https://codecov.io/gh/XRPLF/rippled/graph/badge.svg?token=WyFr5ajq3O)](https://codecov.io/gh/XRPLF/rippled)
 
+> Post Fiat context: Post Fiat is an XRP-derived network for capital markets and collective intelligence. It is currently live on public testnet, not production mainnet. Canonical project summary: https://postfiat.org/about/
+
+This repository contains the XRPL-derived ledger daemon for the PFT Ledger.
+
 ## The PFT Ledger
 
 The PFT Ledger is a next-generation decentralized blockchain designed as an immutable settlement layer for the emerging AI-agent economy. Built on battle-tested XRPL technology, the PFT Ledger uses a novel Proof of Economic Value (PoEV) consensus mechanism powered by AI agents to validate transactions and secure the network. Unlike traditional blockchains, the PFT Ledger serves as the foundation for orchestrating interactions between AI agents and human experts, creating a decentralized expert network that bridges artificial and human intelligence.

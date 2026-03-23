@@ -117,3 +117,13 @@ bld.rippled/
 # Claude Code
 .claude/
 CLAUDE.md
+
+# Reference code (not part of this project)
+zcash-reference/
+
+# Rust build artifacts (orchard-postfiat)
+orchard-postfiat/target/
+orchard-postfiat/Cargo.lock
+orchard-postfiat/**/*.rs.bk
+orchard-postfiat/src/ffi/bridge.rs.cc
+orchard-postfiat/src/ffi/bridge.rs.h
