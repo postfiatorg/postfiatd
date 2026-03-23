@@ -2079,7 +2079,7 @@ class STParsedJSON_test : public beast::unit_test::suite
                 STParsedJSONObject parsed("test", faultyJson);
                 BEAST_EXPECT(!parsed.object);
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 std::string what(e.what());
                 unexpected(
