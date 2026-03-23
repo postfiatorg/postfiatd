@@ -59,10 +59,12 @@ jobs:
     steps:
       - name: Update validator ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 10
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
+          command_timeout: 10m
           script: |
             set -e
 
@@ -71,30 +73,45 @@ jobs:
             docker compose pull
             docker compose up -d
 
-            echo "Waiting for postfiatd to start..."
-            sleep 30
+            echo "Waiting for validator to reach proposing state..."
+            TIMEOUT=480
+            ELAPSED=0
+            INTERVAL=10
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              STATE=$(docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg server_info 2>/dev/null \
+                | grep -o '"server_state"\s*:\s*"[^"]*"' \
+                | head -1 \
+                | sed 's/.*: *"//;s/"//')
+              echo "  ${ELAPSED}s — server_state: ${STATE:-starting}"
+              if [ "$STATE" = "proposing" ]; then
+                echo "Validator is proposing — healthy"
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
 
-            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
-              echo "postfiatd is healthy"
-            else
-              echo "Warning: postfiatd health check inconclusive, container may still be starting"
-            fi
+            echo "WARNING: Validator did not reach proposing within ${TIMEOUT}s (last state: ${STATE:-unknown})"
+            exit 1
 
   update-rpc:
-    if: ${{ inputs.node_type == 'rpc' || inputs.node_type == 'all' }}
-    needs: prepare
+    if: ${{ always() && !cancelled() && (inputs.node_type == 'rpc' || inputs.node_type == 'all') }}
+    needs: [prepare, update-validator]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         host: ${{ fromJson(needs.prepare.outputs.rpc_hosts) }}
     steps:
       - name: Update RPC ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 10
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
+          command_timeout: 10m
           script: |
             set -e
 
@@ -103,11 +120,23 @@ jobs:
             docker compose pull
             docker compose up -d
 
-            echo "Waiting for postfiatd to start..."
-            sleep 30
+            echo "Waiting for RPC to reach full state..."
+            TIMEOUT=480
+            ELAPSED=0
+            INTERVAL=10
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              STATE=$(docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg server_info 2>/dev/null \
+                | grep -o '"server_state"\s*:\s*"[^"]*"' \
+                | head -1 \
+                | sed 's/.*: *"//;s/"//')
+              echo "  ${ELAPSED}s — server_state: ${STATE:-starting}"
+              if [ "$STATE" = "full" ] || [ "$STATE" = "proposing" ]; then
+                echo "RPC is $STATE — healthy"
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
 
-            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
-              echo "postfiatd is healthy"
-            else
-              echo "Warning: postfiatd health check inconclusive, container may still be starting"
-            fi
+            echo "WARNING: RPC did not reach full state within ${TIMEOUT}s (last state: ${STATE:-unknown})"
+            exit 1
