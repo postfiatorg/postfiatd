@@ -22,9 +22,24 @@ on:
         description: 'Docker image tag prefix (defaults to network name, use for feature branch deploys)'
         required: false
         type: string
+      version:
+        description: 'Image version to deploy (e.g., 1.0.0). Mutually exclusive with image_tag.'
+        required: false
+        type: string
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "::error::image_tag and version are mutually exclusive."
+            exit 1
+          fi
+
   prepare:
+    needs: validate
     runs-on: ubuntu-latest
     outputs:
       validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
@@ -53,7 +68,7 @@ jobs:
 
   update-validator:
     if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
-    needs: prepare
+    needs: [validate, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -66,21 +81,27 @@ jobs:
         timeout-minutes: 10
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
+          VERSION: ${{ inputs.version }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
           command_timeout: 10m
-          envs: IMAGE_TAG
+          envs: IMAGE_TAG,VERSION
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            if [ -n "$IMAGE_TAG" ]; then
+            if [ -n "$VERSION" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$VERSION"'/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
+            elif [ -n "$IMAGE_TAG" ]; then
               NETWORK="$IMAGE_TAG" docker compose pull
               NETWORK="$IMAGE_TAG" docker compose up -d
             else
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1latest/' docker-compose.yml
               docker compose pull
               docker compose up -d
             fi
@@ -107,8 +128,8 @@ jobs:
             exit 1
 
   update-rpc:
-    if: ${{ always() && !cancelled() && (inputs.node_type == 'rpc' || inputs.node_type == 'all') }}
-    needs: [prepare, update-validator]
+    if: ${{ always() && !cancelled() && needs.validate.result == 'success' && (inputs.node_type == 'rpc' || inputs.node_type == 'all') }}
+    needs: [validate, prepare, update-validator]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -121,21 +142,27 @@ jobs:
         timeout-minutes: 10
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
+          VERSION: ${{ inputs.version }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
           command_timeout: 10m
-          envs: IMAGE_TAG
+          envs: IMAGE_TAG,VERSION
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            if [ -n "$IMAGE_TAG" ]; then
+            if [ -n "$VERSION" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$VERSION"'/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
+            elif [ -n "$IMAGE_TAG" ]; then
               NETWORK="$IMAGE_TAG" docker compose pull
               NETWORK="$IMAGE_TAG" docker compose up -d
             else
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1latest/' docker-compose.yml
               docker compose pull
               docker compose up -d
             fi

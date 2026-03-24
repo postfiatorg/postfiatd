@@ -24,6 +24,10 @@ on:
         required: false
         type: boolean
         default: true
+      version:
+        description: 'Image version to deploy (e.g., 1.0.0). Defaults to latest.'
+        required: false
+        type: string
 
 jobs:
   prepare:
@@ -106,11 +110,12 @@ jobs:
           AI_DEVNET_VALIDATOR_TOKEN_2: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_2 }}
           AI_DEVNET_VALIDATOR_TOKEN_3: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_3 }}
           DEPLOY_HOST: ${{ matrix.host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,AI_DEVNET_VALIDATOR_TOKEN_1,AI_DEVNET_VALIDATOR_TOKEN_2,AI_DEVNET_VALIDATOR_TOKEN_3,DEPLOY_HOST
+          envs: NETWORK,LOKI_URL,IMAGE_SUFFIX,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,AI_DEVNET_VALIDATOR_TOKEN_1,AI_DEVNET_VALIDATOR_TOKEN_2,AI_DEVNET_VALIDATOR_TOKEN_3,DEPLOY_HOST
           script: |
             set -e
 
@@ -172,6 +177,10 @@ jobs:
               postfiatd-data:
               promtail-positions:
             COMPOSE_EOF
+
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
 
             cat > promtail-config.yml << PROMTAIL_EOF
             server:
@@ -283,11 +292,12 @@ jobs:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
           VHS_HOST: ${{ needs.prepare.outputs.vhs_host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,VHS_HOST
+          envs: NETWORK,LOKI_URL,VHS_HOST,IMAGE_SUFFIX
           script: |
             set -e
 
@@ -418,6 +428,10 @@ jobs:
               promtail-positions:
             COMPOSE_EOF
 
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
+
             cat > promtail-config.yml << PROMTAIL_EOF
             server:
               http_listen_port: 9080
@@ -538,11 +552,12 @@ jobs:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
           VHS_HOST: ${{ needs.prepare.outputs.vhs_host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,VHS_HOST
+          envs: NETWORK,LOKI_URL,VHS_HOST,IMAGE_SUFFIX
           script: |
             set -e
 
@@ -672,6 +687,10 @@ jobs:
               postfiatd-data:
               promtail-positions:
             COMPOSE_EOF
+
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
 
             cat > promtail-config.yml << PROMTAIL_EOF
             server:

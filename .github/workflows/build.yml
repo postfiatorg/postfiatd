@@ -42,6 +42,41 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: ${{ inputs.source_ref }}
+    - name: Extract version from source
+      if: ${{ !inputs.image_tag }}
+      id: version
+      run: |
+        VERSION=$(grep -oP 'versionString\s*=\s*"\K[^"]+' src/libxrpl/protocol/BuildInfo.cpp)
+        if [ -z "$VERSION" ]; then
+          echo "::error::Could not extract version from BuildInfo.cpp"
+          exit 1
+        fi
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Detected version: $VERSION"
+    - name: Check for existing versioned tag
+      if: ${{ !inputs.image_tag }}
+      run: |
+        TAG="${{ inputs.network }}-${{ matrix.node_size }}-${{ steps.version.outputs.version }}"
+        echo "Checking Docker Hub for tag '$TAG'..."
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+          "https://hub.docker.com/v2/repositories/${{ env.IMAGE_NAME }}/tags/$TAG")
+        if [ "$HTTP_STATUS" = "200" ]; then
+          echo "::error::Tag '$TAG' already exists. Bump the version in BuildInfo.cpp."
+          exit 1
+        elif [ "$HTTP_STATUS" != "404" ]; then
+          echo "::error::Docker Hub API returned HTTP $HTTP_STATUS. Failing safe."
+          exit 1
+        fi
+        echo "Tag does not exist. Proceeding."
+    - name: Compute image tags
+      id: tags
+      run: |
+        PREFIX="${{ inputs.image_tag || inputs.network }}"
+        TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREFIX}-${{ matrix.node_size }}-latest"
+        if [ -n "${{ steps.version.outputs.version }}" ]; then
+          TAGS="${TAGS},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.network }}-${{ matrix.node_size }}-${{ steps.version.outputs.version }}"
+        fi
+        echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
@@ -55,7 +90,7 @@ jobs:
         file: ./Dockerfile
         target: builder
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.image_tag || inputs.network }}-${{ matrix.node_size }}-latest
+        tags: ${{ steps.tags.outputs.tags }}
         platforms: linux/amd64
         build-args: |
           NETWORK=${{ inputs.network }}
