@@ -18,6 +18,10 @@ on:
           - validators
           - rpc
           - all
+      image_tag:
+        description: 'Docker image tag prefix (defaults to network name, use for feature branch deploys)'
+        required: false
+        type: string
 
 jobs:
   prepare:
@@ -60,18 +64,26 @@ jobs:
       - name: Update validator ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
         timeout-minutes: 10
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
           command_timeout: 10m
+          envs: IMAGE_TAG
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            docker compose pull
-            docker compose up -d
+            if [ -n "$IMAGE_TAG" ]; then
+              NETWORK="$IMAGE_TAG" docker compose pull
+              NETWORK="$IMAGE_TAG" docker compose up -d
+            else
+              docker compose pull
+              docker compose up -d
+            fi
 
             echo "Waiting for validator to reach proposing state..."
             TIMEOUT=480
@@ -107,18 +119,26 @@ jobs:
       - name: Update RPC ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
         timeout-minutes: 10
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
           command_timeout: 10m
+          envs: IMAGE_TAG
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            docker compose pull
-            docker compose up -d
+            if [ -n "$IMAGE_TAG" ]; then
+              NETWORK="$IMAGE_TAG" docker compose pull
+              NETWORK="$IMAGE_TAG" docker compose up -d
+            else
+              docker compose pull
+              docker compose up -d
+            fi
 
             echo "Waiting for RPC to reach full state..."
             TIMEOUT=480

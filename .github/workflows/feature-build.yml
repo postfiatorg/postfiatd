@@ -7,9 +7,21 @@ on:
         required: true
         type: string
 jobs:
+  sanitize:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.sanitize.outputs.image_tag }}
+    steps:
+      - name: Sanitize ref for Docker tag
+        id: sanitize
+        run: |
+          TAG=$(echo "${{ inputs.source_ref }}" | sed 's/[^a-zA-Z0-9._-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//')
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
   build-feature:
+    needs: sanitize
     uses: ./.github/workflows/build.yml
     with:
       network: devnet
       source_ref: ${{ inputs.source_ref }}
+      image_tag: ${{ needs.sanitize.outputs.image_tag }}
     secrets: inherit
