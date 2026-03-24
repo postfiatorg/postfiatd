@@ -429,7 +429,7 @@ parseLoan(Json::Value const& params, Json::StaticString const fieldName)
     }
 
     auto const id = LedgerEntryHelpers::requiredUInt256(
-        params, jss::loan_broker_id, "malformedOwner");
+        params, jss::loan_broker_id, "malformedBroker");
     if (!id)
         return Unexpected(id.error());
     auto const seq = LedgerEntryHelpers::requiredUInt32(
@@ -835,7 +835,7 @@ doLedgerEntry(RPC::JsonContext& context)
             return RPC::make_param_error("No ledger_entry params provided.");
         }
     }
-    catch (Json::error& e)
+    catch (Json::error const& e)
     {
         if (context.apiVersion > 1u)
         {

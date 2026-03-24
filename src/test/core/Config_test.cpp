@@ -413,7 +413,7 @@ port_wss_admin
                 c.loadFromString(
                     boost::str(configTemplate % validationSeed % token));
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -434,7 +434,7 @@ port_wss_admin
 main
 )rippleConfig");
         }
-        catch (std::runtime_error& e)
+        catch (std::runtime_error const& e)
         {
             error = e.what();
         }
@@ -447,7 +447,7 @@ main
             c.loadFromString(R"rippleConfig(
 )rippleConfig");
         }
-        catch (std::runtime_error& e)
+        catch (std::runtime_error const& e)
         {
             error = e.what();
         }
@@ -462,7 +462,7 @@ main
 255
 )rippleConfig");
         }
-        catch (std::runtime_error& e)
+        catch (std::runtime_error const& e)
         {
             error = e.what();
         }
@@ -477,7 +477,7 @@ main
 10000
 )rippleConfig");
         }
-        catch (std::runtime_error& e)
+        catch (std::runtime_error const& e)
         {
             error = e.what();
         }
@@ -505,7 +505,7 @@ main
                 Config c;
                 c.loadFromString(boost::str(cc % missingPath));
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -526,7 +526,7 @@ main
                 Config c;
                 c.loadFromString(boost::str(cc % invalidFile.string()));
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -646,7 +646,7 @@ trustthesevalidators.gov
                 c.loadFromString(toLoad);
                 fail();
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -675,7 +675,7 @@ value = 2
                 c.loadFromString(toLoad);
                 fail();
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -724,7 +724,7 @@ trustthesevalidators.gov
                 c.loadFromString(toLoad);
                 fail();
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -901,7 +901,7 @@ trustthesevalidators.gov
                 c.loadFromString(boost::str(cc % vtg.validatorsFile()));
                 fail();
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -928,7 +928,7 @@ trustthesevalidators.gov
                 Config c2;
                 c2.loadFromString(boost::str(cc % vtg.validatorsFile()));
             }
-            catch (std::runtime_error& e)
+            catch (std::runtime_error const& e)
             {
                 error = e.what();
             }
@@ -1411,7 +1411,7 @@ r.ripple.com:51235
                 else
                     fail();
             }
-            catch (std::runtime_error&)
+            catch (std::runtime_error const&)
             {
                 if (!shouldPass)
                     pass();
@@ -1434,7 +1434,7 @@ r.ripple.com:51235
                 c.loadFromString("[overlay]\nmax_unknown_time=" + value);
                 return c.MAX_UNKNOWN_TIME;
             }
-            catch (std::runtime_error&)
+            catch (std::runtime_error const&)
             {
                 return {};
             }
@@ -1469,7 +1469,7 @@ r.ripple.com:51235
                 c.loadFromString("[overlay]\nmax_diverged_time=" + value);
                 return c.MAX_DIVERGED_TIME;
             }
-            catch (std::runtime_error&)
+            catch (std::runtime_error const&)
             {
                 return {};
             }
