@@ -128,6 +128,30 @@ jobs:
             ufw allow 2559/tcp comment 'Peer protocol'
             ufw --force enable
 
+            # Configure iptables rate limiting for DDoS protection on peer port (50 conn/IP, 100/sec global)
+            # Rule evaluation order matters: ESTABLISHED first so existing peers are never checked against
+            # rate limits, then connlimit caps per-IP connections, then rate limit caps new conn/sec globally,
+            # then DROP catches anything that didn't pass the earlier rules.
+            echo "Configuring iptables rate limiting on port 2559..."
+            # Remove existing rate limit rules if present
+            iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
+            # Add rate limiting rules (inserted in reverse order so they end up in correct order)
+            # Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
+            iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Make iptables rules persistent
+            if command -v netfilter-persistent &> /dev/null; then
+              netfilter-persistent save 2>/dev/null || true
+            elif ! command -v ufw &> /dev/null; then
+              apt-get install -y iptables-persistent 2>/dev/null || true
+              netfilter-persistent save 2>/dev/null || true
+            fi
+
             mkdir -p /opt/postfiatd/logs
             cd /opt/postfiatd
 
