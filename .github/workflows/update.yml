@@ -18,9 +18,28 @@ on:
           - validators
           - rpc
           - all
+      image_tag:
+        description: 'Docker image tag prefix (defaults to network name, use for feature branch deploys)'
+        required: false
+        type: string
+      version:
+        description: 'Image version to deploy (e.g., 1.0.0). Mutually exclusive with image_tag.'
+        required: false
+        type: string
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "::error::image_tag and version are mutually exclusive."
+            exit 1
+          fi
+
   prepare:
+    needs: validate
     runs-on: ubuntu-latest
     outputs:
       validator_hosts: ${{ steps.hosts.outputs.validator_hosts }}
@@ -49,7 +68,7 @@ jobs:
 
   update-validator:
     if: ${{ inputs.node_type == 'validators' || inputs.node_type == 'all' }}
-    needs: prepare
+    needs: [validate, prepare]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -59,55 +78,112 @@ jobs:
     steps:
       - name: Update validator ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 10
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          VERSION: ${{ inputs.version }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
+          command_timeout: 10m
+          envs: IMAGE_TAG,VERSION
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            docker compose pull
-            docker compose up -d
-
-            echo "Waiting for postfiatd to start..."
-            sleep 30
-
-            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
-              echo "postfiatd is healthy"
+            if [ -n "$VERSION" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$VERSION"'/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
+            elif [ -n "$IMAGE_TAG" ]; then
+              NETWORK="$IMAGE_TAG" docker compose pull
+              NETWORK="$IMAGE_TAG" docker compose up -d
             else
-              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1latest/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
             fi
 
+            echo "Waiting for validator to reach proposing state..."
+            TIMEOUT=480
+            ELAPSED=0
+            INTERVAL=10
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              STATE=$(docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg server_info 2>/dev/null \
+                | grep -o '"server_state"\s*:\s*"[^"]*"' \
+                | head -1 \
+                | sed 's/.*: *"//;s/"//')
+              echo "  ${ELAPSED}s — server_state: ${STATE:-starting}"
+              if [ "$STATE" = "proposing" ]; then
+                echo "Validator is proposing — healthy"
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "WARNING: Validator did not reach proposing within ${TIMEOUT}s (last state: ${STATE:-unknown})"
+            exit 1
+
   update-rpc:
-    if: ${{ inputs.node_type == 'rpc' || inputs.node_type == 'all' }}
-    needs: prepare
+    if: ${{ always() && !cancelled() && needs.validate.result == 'success' && (inputs.node_type == 'rpc' || inputs.node_type == 'all') }}
+    needs: [validate, prepare, update-validator]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         host: ${{ fromJson(needs.prepare.outputs.rpc_hosts) }}
     steps:
       - name: Update RPC ${{ matrix.host }}
         uses: appleboy/ssh-action@v1.2.0
+        timeout-minutes: 10
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          VERSION: ${{ inputs.version }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
+          command_timeout: 10m
+          envs: IMAGE_TAG,VERSION
           script: |
             set -e
 
             cd /opt/postfiatd
 
-            docker compose pull
-            docker compose up -d
-
-            echo "Waiting for postfiatd to start..."
-            sleep 30
-
-            if docker exec postfiatd postfiatd server_info 2>/dev/null | grep -q "server_state"; then
-              echo "postfiatd is healthy"
+            if [ -n "$VERSION" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$VERSION"'/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
+            elif [ -n "$IMAGE_TAG" ]; then
+              NETWORK="$IMAGE_TAG" docker compose pull
+              NETWORK="$IMAGE_TAG" docker compose up -d
             else
-              echo "Warning: postfiatd health check inconclusive, container may still be starting"
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1latest/' docker-compose.yml
+              docker compose pull
+              docker compose up -d
             fi
+
+            echo "Waiting for RPC to reach full state..."
+            TIMEOUT=480
+            ELAPSED=0
+            INTERVAL=10
+            while [ $ELAPSED -lt $TIMEOUT ]; do
+              STATE=$(docker exec postfiatd postfiatd --conf /etc/postfiatd/postfiatd.cfg server_info 2>/dev/null \
+                | grep -o '"server_state"\s*:\s*"[^"]*"' \
+                | head -1 \
+                | sed 's/.*: *"//;s/"//')
+              echo "  ${ELAPSED}s — server_state: ${STATE:-starting}"
+              if [ "$STATE" = "full" ] || [ "$STATE" = "proposing" ]; then
+                echo "RPC is $STATE — healthy"
+                exit 0
+              fi
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            done
+
+            echo "WARNING: RPC did not reach full state within ${TIMEOUT}s (last state: ${STATE:-unknown})"
+            exit 1

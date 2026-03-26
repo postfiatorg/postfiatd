@@ -24,6 +24,10 @@ on:
         required: false
         type: boolean
         default: true
+      version:
+        description: 'Image version to deploy (e.g., 1.0.0). Defaults to latest.'
+        required: false
+        type: string
 
 jobs:
   prepare:
@@ -106,11 +110,12 @@ jobs:
           AI_DEVNET_VALIDATOR_TOKEN_2: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_2 }}
           AI_DEVNET_VALIDATOR_TOKEN_3: ${{ secrets.AI_DEVNET_VALIDATOR_TOKEN_3 }}
           DEPLOY_HOST: ${{ matrix.host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,AI_DEVNET_VALIDATOR_TOKEN_1,AI_DEVNET_VALIDATOR_TOKEN_2,AI_DEVNET_VALIDATOR_TOKEN_3,DEPLOY_HOST
+          envs: NETWORK,LOKI_URL,IMAGE_SUFFIX,DEVNET_VALIDATOR_TOKEN_1,DEVNET_VALIDATOR_TOKEN_2,DEVNET_VALIDATOR_TOKEN_3,DEVNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_1,TESTNET_VALIDATOR_TOKEN_2,TESTNET_VALIDATOR_TOKEN_3,TESTNET_VALIDATOR_TOKEN_4,TESTNET_VALIDATOR_TOKEN_5,AI_DEVNET_VALIDATOR_TOKEN_1,AI_DEVNET_VALIDATOR_TOKEN_2,AI_DEVNET_VALIDATOR_TOKEN_3,DEPLOY_HOST
           script: |
             set -e
 
@@ -122,6 +127,30 @@ jobs:
             ufw allow 22/tcp comment 'SSH'
             ufw allow 2559/tcp comment 'Peer protocol'
             ufw --force enable
+
+            # Configure iptables rate limiting for DDoS protection on peer port (50 conn/IP, 100/sec global)
+            # Rule evaluation order matters: ESTABLISHED first so existing peers are never checked against
+            # rate limits, then connlimit caps per-IP connections, then rate limit caps new conn/sec globally,
+            # then DROP catches anything that didn't pass the earlier rules.
+            echo "Configuring iptables rate limiting on port 2559..."
+            # Remove existing rate limit rules if present
+            iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
+            iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
+            # Add rate limiting rules (inserted in reverse order so they end up in correct order)
+            # Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
+            iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
+            iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
+            # Make iptables rules persistent
+            if command -v netfilter-persistent &> /dev/null; then
+              netfilter-persistent save 2>/dev/null || true
+            elif ! command -v ufw &> /dev/null; then
+              apt-get install -y iptables-persistent 2>/dev/null || true
+              netfilter-persistent save 2>/dev/null || true
+            fi
 
             mkdir -p /opt/postfiatd/logs
             cd /opt/postfiatd
@@ -172,6 +201,10 @@ jobs:
               postfiatd-data:
               promtail-positions:
             COMPOSE_EOF
+
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
 
             cat > promtail-config.yml << PROMTAIL_EOF
             server:
@@ -283,11 +316,12 @@ jobs:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
           VHS_HOST: ${{ needs.prepare.outputs.vhs_host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,VHS_HOST
+          envs: NETWORK,LOKI_URL,VHS_HOST,IMAGE_SUFFIX
           script: |
             set -e
 
@@ -418,6 +452,10 @@ jobs:
               promtail-positions:
             COMPOSE_EOF
 
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
+
             cat > promtail-config.yml << PROMTAIL_EOF
             server:
               http_listen_port: 9080
@@ -538,11 +576,12 @@ jobs:
           NETWORK: ${{ inputs.network }}
           LOKI_URL: ${{ needs.prepare.outputs.loki_url }}
           VHS_HOST: ${{ needs.prepare.outputs.vhs_host }}
+          IMAGE_SUFFIX: ${{ inputs.version || 'latest' }}
         with:
           host: ${{ matrix.host }}
           username: root
           key: ${{ secrets.VULTR_SSH_KEY }}
-          envs: NETWORK,LOKI_URL,VHS_HOST
+          envs: NETWORK,LOKI_URL,VHS_HOST,IMAGE_SUFFIX
           script: |
             set -e
 
@@ -672,6 +711,10 @@ jobs:
               postfiatd-data:
               promtail-positions:
             COMPOSE_EOF
+
+            if [ "$IMAGE_SUFFIX" != "latest" ]; then
+              sed -i -E '/agtipft\/postfiatd/s/(-(light|medium|full)-)[^[:space:]"]*/\1'"$IMAGE_SUFFIX"'/' docker-compose.yml
+            fi
 
             cat > promtail-config.yml << PROMTAIL_EOF
             server:

@@ -771,6 +771,17 @@ OverlayImpl::getServerInfo()
     Json::Value server_info =
         app_.getOPs().getServerInfo(humanReadable, admin, counters);
 
+    // Expose pubkey_validator in crawl response regardless of admin flag.
+    // The admin gate in NetworkOPs::getServerInfo() skips this field for
+    // non-admin callers, but crawl consumers need it to map topology nodes
+    // to their validator identity.
+    if (auto const localPubKey = app_.validators().localPublicKey();
+        localPubKey && app_.getValidationPublicKey())
+    {
+        server_info[jss::pubkey_validator] =
+            toBase58(TokenType::NodePublic, localPubKey.value());
+    }
+
     // Filter out some information
     server_info.removeMember(jss::hostid);
     server_info.removeMember(jss::load_factor_fee_escalation);

@@ -266,7 +266,8 @@ OpenView::rawTxInsert(
         std::forward_as_tuple(key),
         std::forward_as_tuple(txn, metaData));
     if (!result.second)
-        LogicError("rawTxInsert: duplicate TX id: " + to_string(key));
+        Throw<std::logic_error>(
+            "rawTxInsert: duplicate TX id: " + to_string(key));
 }
 
 }  // namespace ripple
