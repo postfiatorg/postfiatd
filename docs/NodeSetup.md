@@ -38,32 +38,29 @@ sudo ufw --force enable
 
 This blocks all external access to admin ports (5005, 6006, 50051) while keeping peer-to-peer communication open. You can still reach admin ports from localhost (e.g., `curl http://localhost:5005/`).
 
-**Set up iptables rate limiting** to protect the peer port against connection floods. Even though UFW allows port 2559, these rules are evaluated first and cap how aggressively a single IP can connect:
+**Set up iptables rate limiting** to protect the peer port against connection floods. Because the validator runs in Docker, incoming traffic to published ports bypasses the normal INPUT chain and goes through Docker's FORWARD chain instead. The `DOCKER-USER` chain is where custom firewall rules must go for Docker-published ports:
 
 ```bash
-# Remove existing rules if present (safe to run on first setup)
-sudo iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-sudo iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
-sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
-sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
+# Clear DOCKER-USER and rebuild with rate limiting rules
+# DOCKER-USER must end with RETURN so non-2559 Docker traffic passes through normally
+sudo iptables -F DOCKER-USER 2>/dev/null || true
 
 # Add rate limiting rules (inserted in reverse order so they end up in correct order)
-# Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
-sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
-sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
-sudo iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
-
-# Save rules so they survive reboots
-if command -v netfilter-persistent &> /dev/null; then
-  sudo netfilter-persistent save 2>/dev/null || true
-elif ! command -v ufw &> /dev/null; then
-  sudo apt-get install -y iptables-persistent 2>/dev/null || true
-  sudo netfilter-persistent save 2>/dev/null || true
-fi
+# Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP, RETURN
+sudo iptables -I DOCKER-USER -j RETURN
+sudo iptables -I DOCKER-USER -p tcp --dport 2559 -m state --state NEW -j DROP
+sudo iptables -I DOCKER-USER -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
+sudo iptables -I DOCKER-USER -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
+sudo iptables -I DOCKER-USER -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
 ```
 
 This does two things: no single IP can hold more than 50 concurrent connections (normal peers use exactly 1), and no more than 100 new connections per second are accepted globally. Already-established peer connections are unaffected.
+
+You can verify the rules are working by checking that the ESTABLISHED/RELATED counter increases over time:
+
+```bash
+sudo iptables -L DOCKER-USER -n -v
+```
 
 ### 3. Set Up the Node Directory
 
