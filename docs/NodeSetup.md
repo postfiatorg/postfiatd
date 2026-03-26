@@ -28,38 +28,38 @@ Your validator exposes several ports, some of which are for local administration
 **Set up UFW** to deny all incoming traffic except SSH and the peer protocol port:
 
 ```bash
-ufw --force reset
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow 22/tcp comment 'SSH'
-ufw allow 2559/tcp comment 'Peer protocol'
-ufw --force enable
+sudo ufw --force reset
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp comment 'SSH'
+sudo ufw allow 2559/tcp comment 'Peer protocol'
+sudo ufw --force enable
 ```
 
-This blocks all external access to admin ports (5005, 6006, 50051) while keeping peer-to-peer communication open. You can still reach admin ports from localhost (e.g., `curl https://localhost:5005/`).
+This blocks all external access to admin ports (5005, 6006, 50051) while keeping peer-to-peer communication open. You can still reach admin ports from localhost (e.g., `curl http://localhost:5005/`).
 
 **Set up iptables rate limiting** to protect the peer port against connection floods. Even though UFW allows port 2559, these rules are evaluated first and cap how aggressively a single IP can connect:
 
 ```bash
 # Remove existing rules if present (safe to run on first setup)
-iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
-iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
-iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
 
 # Add rate limiting rules (inserted in reverse order so they end up in correct order)
 # Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
-iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
-iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
-iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
-iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # Save rules so they survive reboots
 if command -v netfilter-persistent &> /dev/null; then
-  netfilter-persistent save 2>/dev/null || true
+  sudo netfilter-persistent save 2>/dev/null || true
 elif ! command -v ufw &> /dev/null; then
-  apt-get install -y iptables-persistent 2>/dev/null || true
-  netfilter-persistent save 2>/dev/null || true
+  sudo apt-get install -y iptables-persistent 2>/dev/null || true
+  sudo netfilter-persistent save 2>/dev/null || true
 fi
 ```
 
@@ -126,19 +126,14 @@ docker compose logs
 
 To update the node configuration:
 
-1. **Stop the container**:
+1. **Edit the configuration file** inside the running container:
    ```bash
-   docker compose down
+   docker exec -it postfiatd nano /etc/postfiatd/postfiatd.cfg
    ```
 
-2. **Edit the configuration file**:
+2. **Restart the container** for changes to take effect:
    ```bash
-   nano /var/lib/docker/volumes/postfiatd_postfiatd-config/_data/postfiatd.cfg
-   ```
-
-3. **Restart the container**:
-   ```bash
-   docker compose up -d
+   docker compose restart
    ```
 
 ## Running as a Validator
@@ -329,7 +324,7 @@ Sample output:
    - Once a validator is running successfully it should appear in the validator list in the explorer: https://explorer.testnet.postfiat.org/network/validators
    - Server status of the node can be checked locally by running server_info rpc:
      ```
-     curl -k -X POST https://localhost:5005/ -H "Content-Type: application/json" -d '{"method": "server_info","params": [{}]}'
+     curl -s -X POST http://localhost:5005/ -H "Content-Type: application/json" -d '{"method": "server_info","params": [{}]}'
      ```
 
 ### Security Best Practices
