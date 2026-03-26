@@ -21,7 +21,51 @@ sudo apt update
 sudo apt install docker.io docker-compose-v2
 ```
 
-### 2. Set Up the Node Directory
+### 2. Configure Firewall
+
+Your validator exposes several ports, some of which are for local administration only. Without a firewall, admin ports (5005, 6006, 50051) are accessible from the public internet, allowing anyone to stop your node or alter its configuration.
+
+**Set up UFW** to deny all incoming traffic except SSH and the peer protocol port:
+
+```bash
+sudo ufw --force reset
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp comment 'SSH'
+sudo ufw allow 2559/tcp comment 'Peer protocol'
+sudo ufw --force enable
+```
+
+This blocks all external access to admin ports (5005, 6006, 50051) while keeping peer-to-peer communication open. You can still reach admin ports from localhost (e.g., `curl http://localhost:5005/`).
+
+**Set up iptables rate limiting** to protect the peer port against connection floods. Even though UFW allows port 2559, these rules are evaluated first and cap how aggressively a single IP can connect:
+
+```bash
+# Remove existing rules if present (safe to run on first setup)
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport 2559 -m state --state NEW -j DROP 2>/dev/null || true
+
+# Add rate limiting rules (inserted in reverse order so they end up in correct order)
+# Final order: ESTABLISHED->ACCEPT, connlimit->DROP, rate-limit->ACCEPT, NEW->DROP
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -j DROP
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state NEW -m limit --limit 100/second --limit-burst 50 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 2559 -m connlimit --connlimit-above 50 -j DROP
+sudo iptables -I INPUT -p tcp --dport 2559 -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Save rules so they survive reboots
+if command -v netfilter-persistent &> /dev/null; then
+  sudo netfilter-persistent save 2>/dev/null || true
+elif ! command -v ufw &> /dev/null; then
+  sudo apt-get install -y iptables-persistent 2>/dev/null || true
+  sudo netfilter-persistent save 2>/dev/null || true
+fi
+```
+
+This does two things: no single IP can hold more than 50 concurrent connections (normal peers use exactly 1), and no more than 100 new connections per second are accepted globally. Already-established peer connections are unaffected.
+
+### 3. Set Up the Node Directory
 
 Create the directory and download the appropriate Docker Compose file for your node role.
 
@@ -41,7 +85,7 @@ cd /opt/postfiatd
 wget https://raw.githubusercontent.com/postfiatorg/postfiatd/main/scripts/docker-compose-rpc.yml -O docker-compose.yml
 ```
 
-### 3. Configure the Network
+### 4. Configure the Network
 
 Create a `.env` file to select the target network (`devnet`, `testnet`, or `mainnet`):
 
@@ -50,7 +94,7 @@ echo "NETWORK=testnet" > .env
 echo "HOSTNAME=$(hostname)" >> .env
 ```
 
-### 4. Start the Node
+### 5. Start the Node
 
 Launch the Post Fiat node:
 
@@ -58,7 +102,7 @@ Launch the Post Fiat node:
 docker compose up -d
 ```
 
-### 5. Verify Installation
+### 6. Verify Installation
 
 Check that the Docker container is running properly:
 
@@ -82,19 +126,14 @@ docker compose logs
 
 To update the node configuration:
 
-1. **Stop the container**:
+1. **Edit the configuration file** inside the running container:
    ```bash
-   docker compose down
+   docker exec -it postfiatd nano /etc/postfiatd/postfiatd.cfg
    ```
 
-2. **Edit the configuration file**:
+2. **Restart the container** for changes to take effect:
    ```bash
-   nano /var/lib/docker/volumes/postfiatd_postfiatd-config/_data/postfiatd.cfg
-   ```
-
-3. **Restart the container**:
-   ```bash
-   docker compose up -d
+   docker compose restart
    ```
 
 ## Running as a Validator
@@ -285,7 +324,7 @@ Sample output:
    - Once a validator is running successfully it should appear in the validator list in the explorer: https://explorer.testnet.postfiat.org/network/validators
    - Server status of the node can be checked locally by running server_info rpc:
      ```
-     curl -k -X POST https://localhost:5005/ -H "Content-Type: application/json" -d '{"method": "server_info","params": [{}]}'
+     curl -s -X POST http://localhost:5005/ -H "Content-Type: application/json" -d '{"method": "server_info","params": [{}]}'
      ```
 
 ### Security Best Practices
