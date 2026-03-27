@@ -659,6 +659,7 @@ LedgerMaster::tryFill(std::shared_ptr<Ledger const> ledger)
     std::uint32_t maxHas = seq;
 
     NodeStore::Database& nodeStore{app_.getNodeStore()};
+    auto const earliestSeq = nodeStore.earliestLedgerSeq();
     while (!app_.getJobQueue().isStopping() && seq > 0)
     {
         {
@@ -669,6 +670,9 @@ LedgerMaster::tryFill(std::shared_ptr<Ledger const> ledger)
             if (haveLedger(seq))
                 break;
         }
+
+        if (seq < earliestSeq)
+            break;
 
         auto it(ledgerHashes.find(seq));
 
@@ -682,8 +686,11 @@ LedgerMaster::tryFill(std::shared_ptr<Ledger const> ledger)
                 mCompleteLedgers.insert(range(minHas, maxHas));
             }
             maxHas = minHas;
+            auto start = (seq < 500) ? 0 : (seq - 499);
+            if (start < earliestSeq)
+                start = earliestSeq;
             ledgerHashes = app_.getRelationalDatabase().getHashesByIndex(
-                (seq < 500) ? 0 : (seq - 499), seq);
+                start, seq);
             it = ledgerHashes.find(seq);
 
             if (it == ledgerHashes.end())
@@ -694,7 +701,8 @@ LedgerMaster::tryFill(std::shared_ptr<Ledger const> ledger)
                     ledgerHashes.begin()->first))
             {
                 // The ledger is not backed by the node store
-                JLOG(m_journal.warn()) << "SQL DB ledger sequence " << seq
+                JLOG(m_journal.warn()) << "SQL DB ledger sequence "
+                                       << ledgerHashes.begin()->first
                                        << " mismatches node store";
                 break;
             }
