@@ -1528,18 +1528,18 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     //
     for (auto cmd : config_->section(SECTION_RPC_STARTUP).lines())
     {
-        auto const trimmedCmd = boost::algorithm::trim_copy(cmd);
-        if (trimmedCmd.empty())
+        boost::algorithm::trim(cmd);
+        if (cmd.empty())
             continue;
 
         Json::Reader jrReader;
         Json::Value jvCommand;
 
-        if (!jrReader.parse(trimmedCmd, jvCommand))
+        if (!jrReader.parse(cmd, jvCommand))
         {
             JLOG(m_journal.error()) << "Couldn't parse entry in ["
                                     << SECTION_RPC_STARTUP << "]: '"
-                                    << trimmedCmd;
+                                    << cmd << "'";
             continue;
         }
 
