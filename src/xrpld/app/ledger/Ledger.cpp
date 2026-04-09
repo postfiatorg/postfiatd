@@ -181,10 +181,10 @@ Ledger::Ledger(
     info_.closeTimeResolution = ledgerGenesisTimeResolution;
 
     // Select genesis account based on network type:
-    // - PostFiat production networks (mainnet=2026, testnet=2025, devnet=2024)
-    //   use the PostFiat genesis account UNLESS running in standalone mode
-    // - Standalone mode and unit tests: derive from "masterpassphrase"
-    //   (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh)
+    // - PostFiat production networks (mainnet=2026, testnet=2025) use the
+    //   PostFiat genesis account UNLESS running in standalone mode
+    // - All other networks (devnet, ai-devnet, standalone, unit tests):
+    //   derive from "masterpassphrase" (rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh)
     AccountID id;
     if (config.standalone())
     {
@@ -192,9 +192,7 @@ Ledger::Ledger(
         auto const keypair = generateKeyPair(KeyType::secp256k1, seed);
         id = calcAccountID(keypair.first);
     }
-    else if (
-        config.NETWORK_ID == 2024 || config.NETWORK_ID == 2025 ||
-        config.NETWORK_ID == 2026)
+    else if (config.NETWORK_ID == 2025 || config.NETWORK_ID == 2026)
     {
         // PostFiat production networks
         id = *parseBase58<AccountID>("r4vhrMChCsaoFsBoCkRTRGUuc1njfr7bmA");
