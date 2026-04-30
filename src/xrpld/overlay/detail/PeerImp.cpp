@@ -380,9 +380,17 @@ PeerImp::cluster() const
 std::string
 PeerImp::getVersion() const
 {
+    std::string version;
     if (inbound_)
-        return headers_["User-Agent"];
-    return headers_["Server"];
+        version = headers_["User-Agent"];
+    else
+        version = headers_["Server"];
+
+    static const std::string prefix = "postfiatd-";
+    if (version.substr(0, prefix.size()) == prefix)
+        version = version.substr(prefix.size());
+
+    return version;
 }
 
 Json::Value

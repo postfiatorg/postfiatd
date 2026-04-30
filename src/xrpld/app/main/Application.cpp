@@ -74,6 +74,7 @@
 #include <xrpl/resource/Fees.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/system/error_code.hpp>
 
@@ -1527,18 +1528,24 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
     //
     for (auto cmd : config_->section(SECTION_RPC_STARTUP).lines())
     {
+        boost::algorithm::trim(cmd);
+        if (cmd.empty())
+            continue;
+
         Json::Reader jrReader;
         Json::Value jvCommand;
 
         if (!jrReader.parse(cmd, jvCommand))
         {
-            JLOG(m_journal.fatal()) << "Couldn't parse entry in ["
-                                    << SECTION_RPC_STARTUP << "]: '" << cmd;
+            JLOG(m_journal.error()) << "Couldn't parse entry in ["
+                                    << SECTION_RPC_STARTUP << "]: '"
+                                    << cmd << "'";
+            continue;
         }
 
         if (!config_->quiet())
         {
-            JLOG(m_journal.fatal())
+            JLOG(m_journal.info())
                 << "Startup RPC: " << jvCommand << std::endl;
         }
 
@@ -1562,7 +1569,7 @@ ApplicationImp::setup(boost::program_options::variables_map const& cmdline)
 
         if (!config_->quiet())
         {
-            JLOG(m_journal.fatal()) << "Result: " << jvResult << std::endl;
+            JLOG(m_journal.info()) << "Result: " << jvResult << std::endl;
         }
     }
 
