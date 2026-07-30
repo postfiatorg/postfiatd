@@ -62,6 +62,8 @@ You can verify the rules are working by checking that the ESTABLISHED/RELATED co
 sudo iptables -L DOCKER-USER -n -v
 ```
 
+For validators, public reachability of TCP 2559 has a second role beyond peering: it is what lets the Dynamic UNL scoring pipeline resolve your validator's endpoint for infrastructure-diversity scoring. See [Preparing for Dynamic UNL Scoring](#preparing-for-dynamic-unl-scoring) below.
+
 ### 3. Set Up the Node Directory
 
 Create the directory and download the appropriate Docker Compose file for your node role.
@@ -148,6 +150,18 @@ your validator in a way that improves the network:
 - Keep the peer port reachable while keeping admin ports private.
 - Use reliable infrastructure, and where practical choose a country, ASN, or
   provider that improves geographic or infrastructure diversity.
+
+The diversity signal comes from your validator's resolved public endpoint: the
+foundation's peer crawl maps your validator key to the address the network
+sees it at, and the scoring pipeline derives your provider and country from
+that address.
+If the endpoint cannot be resolved, the diversity sub-score is marked down as
+an unknown-concentration risk (other scoring dimensions are unaffected). To
+keep the peer port reachable without exposing your own address, front the
+validator with a sentry host — the full explanation, the sentry recipe
+(`[ips_fixed]` plus `[peer_private]`), and provider-selection guidance are in
+the published setup guide:
+https://postfiat.org/validator-setup/#endpoint-visibility-and-your-diversity-score
 
 After launch, use the Explorer validator page and UNL Scoring page to inspect
 your validator's status, score, and published reasoning:
