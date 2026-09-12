@@ -60,7 +60,8 @@ makeManifestMessages(
     // cache and call back into ValidatorList: that reverses the lock order.
     // Looking up listed keys also avoids scanning a legacy poisoned cache.
     validators.for_each_listed([&](PublicKey const& key, bool) {
-        auto const serialized = cache.getManifest(key);
+        // A newly connected peer must learn listed-key revocations too.
+        auto const serialized = cache.getManifestIncludingRevoked(key);
         if (!serialized || serialized->size() > maxManifestBytes)
             return;
         // Two nested length-delimited protobuf fields need at most 12 bytes

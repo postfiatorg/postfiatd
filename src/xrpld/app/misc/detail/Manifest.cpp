@@ -367,6 +367,16 @@ ManifestCache::getManifest(PublicKey const& pk) const
     return std::nullopt;
 }
 
+std::optional<std::string>
+ManifestCache::getManifestIncludingRevoked(PublicKey const& pk) const
+{
+    std::shared_lock lock{mutex_};
+    auto const iter = map_.find(pk);
+    if (iter != map_.end())
+        return iter->second.serialized;
+    return std::nullopt;
+}
+
 bool
 ManifestCache::revoked(PublicKey const& pk) const
 {

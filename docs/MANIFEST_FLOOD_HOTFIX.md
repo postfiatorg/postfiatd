@@ -18,8 +18,18 @@ connections, validators are current, and the affected fleet has been upgraded.
 - Initial sync looks up only currently listed keys and splits on both entry
   count and encoded byte size. It does not scan or serialize the full cache.
   Validator-list membership changes immediately affect subsequent syncs.
-- Outbound frames at or above 64 MiB throw before allocation or serialization.
+  Listed revocations are included so newly connecting peers retain signing-key
+  anti-rollback protection; ordinary manifest RPC lookup semantics are unchanged.
+- Generic object-by-hash queries are capped at 4,096 objects before lookup
+  or job scheduling; reduced-relay transaction queries preserve their existing
+  10,000-hash limit. Ordinary object replies are capped at 8 MiB of encoded payload,
+  accounting for data and peer-supplied metadata before copying either.
+- Outbound frames at or above 64 MiB are logged and safely dropped before
+  allocation or serialization, without introducing a size exception. Empty
+  messages cannot enter compression, traffic accounting, or the send queue.
   Incoming normal frames have the matching exclusive size limit.
+- Protocol deserialization is restricted to the declared frame length, so
+  coalesced subsequent frames remain intact, including after a legacy drain.
 - For recovery from poisoned older peers, a connection can discard ONE
   oversized manifest frame (uncompressed or LZ4 legacy framing), bounded to
   128 MiB of declared wire and uncompressed length and a 60-second drain
@@ -51,16 +61,20 @@ Build with tests enabled, then run:
 
 ```sh
 postfiatd --unittest=ripple.overlay.manifest_flood
+postfiatd --unittest=ripple.overlay.object_by_hash
 postfiatd --unittest=ripple.app.Manifest
 postfiatd --unittest=ripple.app.ValidatorList
 postfiatd --unittest=ripple.overlay.compression
+postfiatd --unittest=ripple.resource.ResourceManager
 ```
 
 The regression suite covers batch-count/byte limits, a 300,000-entry batch
 using a repeated valid revocation, filtering a legacy cache, chunked listed
 sync, key rotation/revocation preservation, a changed list with an unchanged
 cache, the 64 MiB framing boundary, fragmented headers, uncompressed/compressed
-legacy drains, a subsequent ping frame, repeated dumps, size limits and timeout.
+legacy drains, full parsing of two coalesced subsequent ping frames, repeated
+dumps, size limits and timeout. Object-query tests cover count rejection,
+repeated hashes, exact byte boundaries and metadata/varint overhead.
 The repeated-entry test is not a 300,000-distinct-key stress test.
 
 Before restarting any existing validator, run a fresh **non-validator**
@@ -71,7 +85,12 @@ stop after initial connection and that malformed-header disconnects do not
 continue. This mixed-version check is essential; two clean patched peers
 alone do not prove recovery from the incident.
 
-## Local verification (2026-09-12 UTC)
+## Historical candidate verification (2026-09-12 UTC)
+
+The results below cover the earlier candidate, before machine review found
+and corrected the revocation-sync omission and outbound size-exception risk.
+They are not current-head release approval. Re-run all six suites and the
+mixed-version canary for the revised candidate before fleet deployment.
 
 - Release build, assertions disabled: five focused suites, **22,102 checks,
   zero failures** (manifest flood 17,448; Manifest 309; ValidatorList 4,234;

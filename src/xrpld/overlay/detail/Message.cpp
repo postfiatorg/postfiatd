@@ -20,8 +20,9 @@
 #include <xrpld/overlay/Message.h>
 #include <xrpld/overlay/detail/TrafficCount.h>
 
+#include <xrpl/basics/Log.h>
+
 #include <cstdint>
-#include <stdexcept>
 
 namespace ripple {
 
@@ -42,7 +43,14 @@ Message::Message(
     // The wire format has only 26 payload-length bits. Check the size_t
     // before allocation or narrowing; assertions are disabled in releases.
     if (messageBytes >= maximiumMessageSize)
-        throw std::length_error("Overlay message exceeds 26-bit frame limit");
+    {
+        // A builder bug must lose a message, not terminate an I/O thread and
+        // the process. PeerImp::send refuses this empty representation.
+        JLOG(debugLog().fatal())
+            << "Dropping oversized outbound overlay message: type=" << type
+            << " bytes=" << messageBytes << " limit=" << maximiumMessageSize;
+        return;
+    }
 
     buffer_.resize(headerBytes + messageBytes);
 
@@ -215,7 +223,7 @@ Message::getBufferSize()
 std::vector<uint8_t> const&
 Message::getBuffer(Compressed tryCompressed)
 {
-    if (tryCompressed == Compressed::Off)
+    if (buffer_.empty() || tryCompressed == Compressed::Off)
         return buffer_;
 
     std::call_once(once_flag_, &Message::compress, this);

@@ -29,6 +29,7 @@
 
 #include <boost/asio/buffer.hpp>
 #include <boost/asio/buffers_iterator.hpp>
+#include <boost/beast/core/buffers_prefix.hpp>
 
 #include <cstdint>
 #include <optional>
@@ -267,7 +268,11 @@ parseMessageContent(MessageHeader const& header, Buffers const& buffers)
 {
     auto const m = std::make_shared<T>();
 
-    ZeroCopyInputStream<Buffers> stream(buffers);
+    // A read can coalesce several frames (including after a legacy drain).
+    // Protobuf must see only this frame, never consume a following header.
+    auto const frame =
+        boost::beast::buffers_prefix(header.total_wire_size, buffers);
+    ZeroCopyInputStream<decltype(frame)> stream(frame);
     stream.Skip(header.header_size);
 
     if (header.algorithm != compression::Algorithm::None)

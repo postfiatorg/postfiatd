@@ -12,7 +12,6 @@
 
 #include <array>
 #include <limits>
-#include <stdexcept>
 
 namespace ripple {
 namespace test {
@@ -148,6 +147,43 @@ class manifest_flood_test : public beast::unit_test::suite
             cache.applyManifest(std::move(*revoked)) ==
             ManifestDisposition::accepted);
         BEAST_EXPECT(cache.revoked(masterKey));
+        BEAST_EXPECT(!cache.getManifest(masterKey));
+        BEAST_EXPECT(cache.getManifestIncludingRevoked(masterKey));
+
+        // A fresh peer must receive a listed revocation, not just live keys.
+        // Otherwise it can accept an obsolete signing key after reconnecting.
+        ManifestCache fresh;
+        std::size_t revocationsSent = 0;
+        auto const afterRevocation = makeManifestMessages(cache, validators);
+        for (auto const& message : afterRevocation)
+        {
+            auto const& buffer =
+                message->getBuffer(compression::Compressed::Off);
+            protocol::TMManifests batch;
+            if (!BEAST_EXPECT(
+                    batch.ParseFromArray(buffer.data() + 6, buffer.size() - 6)))
+                return;
+            for (auto const& item : batch.list())
+            {
+                auto manifest =
+                    deserializeListedManifest(item.stobject(), validators);
+                if (!BEAST_EXPECT(manifest))
+                    return;
+                if (manifest->revoked())
+                {
+                    ++revocationsSent;
+                    BEAST_EXPECT(manifest->masterKey == masterKey);
+                }
+                BEAST_EXPECT(
+                    fresh.applyManifest(std::move(*manifest)) ==
+                    ManifestDisposition::accepted);
+            }
+        }
+        BEAST_EXPECT(revocationsSent == 1);
+        BEAST_EXPECT(fresh.revoked(masterKey));
+        BEAST_EXPECT(
+            fresh.applyManifest(*deserializeManifest(rotation.serialized)) ==
+            ManifestDisposition::stale);
         BEAST_EXPECT(
             cache.applyManifest(std::move(original)) ==
             ManifestDisposition::stale);
@@ -188,6 +224,13 @@ class manifest_flood_test : public beast::unit_test::suite
     struct Handler
     {
         bool called = false;
+        std::vector<std::uint32_t> pingSequences;
+        void
+        onMessage(std::shared_ptr<protocol::TMPing> const& ping)
+        {
+            called = true;
+            pingSequences.push_back(ping->seq());
+        }
         bool
         compressionEnabled() const
         {
@@ -234,15 +277,16 @@ class manifest_flood_test : public beast::unit_test::suite
         }
         batch.mutable_list(0)->mutable_stobject()->push_back('x');
         BEAST_EXPECT(Message::messageSize(batch) == maximiumMessageSize);
-        try
-        {
-            Message invalid(batch, protocol::mtMANIFESTS);
-            fail("64 MiB frame was accepted");
-        }
-        catch (std::length_error const&)
-        {
-            pass();
-        }
+        Message invalid(batch, protocol::mtMANIFESTS);
+        BEAST_EXPECT(invalid.empty());
+        BEAST_EXPECT(invalid.getBufferSize() == 0);
+        BEAST_EXPECT(invalid.getBuffer(compression::Compressed::Off).empty());
+        BEAST_EXPECT(invalid.getBuffer(compression::Compressed::On).empty());
+        BEAST_EXPECT(invalid.getBuffer(compression::Compressed::On).empty());
+        batch.mutable_list(0)->mutable_stobject()->push_back('x');
+        Message excessive(batch, protocol::mtMANIFESTS);
+        BEAST_EXPECT(excessive.empty());
+        BEAST_EXPECT(excessive.getBuffer(compression::Compressed::On).empty());
         // Compressed input can express a 64 MiB decompressed length. Reject
         // before allocation/parsing, so relaying cannot throw at the boundary.
         auto const h =
@@ -286,21 +330,35 @@ class manifest_flood_test : public beast::unit_test::suite
             }
             protocol::TMPing ping;
             ping.set_type(protocol::TMPing::ptPING);
+            ping.set_seq(17);
             Message message(ping, protocol::mtPING);
             auto const& pingBytes =
                 message.getBuffer(compression::Compressed::Off);
             std::vector<std::uint8_t> tail(remaining, 0);
             tail.insert(tail.end(), pingBytes.begin(), pingBytes.end());
+            ping.set_seq(18);
+            Message second(ping, protocol::mtPING);
+            auto const& secondBytes =
+                second.getBuffer(compression::Compressed::Off);
+            tail.insert(tail.end(), secondBytes.begin(), secondBytes.end());
             auto const last = drain.consume(boost::asio::buffer(tail));
             BEAST_EXPECT(last.consumed == remaining && !last.reject);
             auto const next = boost::asio::buffer(
                 tail.data() + remaining, tail.size() - remaining);
             BEAST_EXPECT(!drain.consume(next).consumed);
-            boost::system::error_code ec;
-            auto parsed =
-                detail::parseMessageHeader(ec, next, pingBytes.size());
+            // Exercise the real parser, not just the header: TCP may deliver
+            // the final dump bytes and multiple following frames together.
+            Handler handler;
+            std::size_t hint = 0;
+            auto const firstResult = invokeProtocolMessage(next, handler, hint);
+            BEAST_EXPECT(!firstResult.second);
+            BEAST_EXPECT(firstResult.first == pingBytes.size());
+            auto const secondResult =
+                invokeProtocolMessage(next + firstResult.first, handler, hint);
+            BEAST_EXPECT(!secondResult.second);
+            BEAST_EXPECT(secondResult.first == secondBytes.size());
             BEAST_EXPECT(
-                parsed && !ec && parsed->message_type == protocol::mtPING);
+                handler.pingSequences == std::vector<std::uint32_t>({17, 18}));
             BEAST_EXPECT(drain.consume(boost::asio::buffer(h)).reject);
         }
 

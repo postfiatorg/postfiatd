@@ -29,6 +29,7 @@
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/tx/apply.h>
 #include <xrpld/overlay/Cluster.h>
+#include <xrpld/overlay/detail/ObjectByHashLimits.h>
 #include <xrpld/overlay/detail/PeerImp.h>
 #include <xrpld/overlay/detail/Tuning.h>
 #include <xrpld/perflog/PerfLog.h>
@@ -239,6 +240,10 @@ PeerImp::stop()
 void
 PeerImp::send(std::shared_ptr<Message> const& m)
 {
+    // An oversized outbound builder produces an empty, unsendable message.
+    // Reject it before posting, compression, traffic accounting or queuing.
+    if (!m || m->empty())
+        return;
     if (!strand_.running_in_this_thread())
         return post(strand_, std::bind(&PeerImp::send, shared_from_this(), m));
     if (gracefulClose_)
@@ -2536,6 +2541,14 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
 
     if (packet.query())
     {
+        // Bound all query variants before database work or job scheduling.
+        if (!objectByHashRequestWithinLimits(packet))
+        {
+            JLOG(p_journal_.warn()) << "GetObject: excessive object count "
+                                    << packet.objects_size();
+            fee_.update(Resource::feeMalformedRequest, "object count");
+            return;
+        }
         // this is a query
         if (send_queue_.size() >= Tuning::dropSendQueue)
         {
@@ -2592,7 +2605,7 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
             Resource::feeModerateBurdenPeer,
             " received a get object by hash request");
 
-        // This is a very minimal implementation
+        ObjectByHashReplyBudget budget(reply);
         for (int i = 0; i < packet.objects_size(); ++i)
         {
             auto const& obj = packet.objects(i);
@@ -2605,18 +2618,13 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
                 auto nodeObject{app_.getNodeStore().fetchNodeObject(hash, seq)};
                 if (nodeObject)
                 {
-                    protocol::TMIndexedObject& newObj = *reply.add_objects();
-                    newObj.set_hash(hash.begin(), hash.size());
-                    newObj.set_data(
-                        &nodeObject->getData().front(),
-                        nodeObject->getData().size());
-
-                    if (obj.has_nodeid())
-                        newObj.set_index(obj.nodeid());
-                    if (obj.has_ledgerseq())
-                        newObj.set_ledgerseq(obj.ledgerseq());
-
-                    // VFALCO NOTE "seq" in the message is obsolete
+                    if (!budget.append(obj, makeSlice(nodeObject->getData())))
+                    {
+                        JLOG(p_journal_.debug())
+                            << "GetObject: bounded reply truncated at "
+                            << reply.objects_size() << " objects";
+                        break;
+                    }
                 }
             }
         }

@@ -63,6 +63,13 @@ public:
         protocol::MessageType type,
         std::optional<PublicKey> const& validator = {});
 
+    /** Oversized messages have no wire representation and must not be sent. */
+    bool
+    empty() const noexcept
+    {
+        return buffer_.empty();
+    }
+
     /** Retrieve the size of the packed but uncompressed message data. */
     std::size_t
     getBufferSize();
