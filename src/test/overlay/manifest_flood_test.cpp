@@ -350,11 +350,15 @@ class manifest_flood_test : public beast::unit_test::suite
             // the final dump bytes and multiple following frames together.
             Handler handler;
             std::size_t hint = 0;
-            auto const firstResult = invokeProtocolMessage(next, handler, hint);
+            auto const firstResult = invokeProtocolMessage(
+                std::array<boost::asio::const_buffer, 1>{next}, handler, hint);
             BEAST_EXPECT(!firstResult.second);
             BEAST_EXPECT(firstResult.first == pingBytes.size());
-            auto const secondResult =
-                invokeProtocolMessage(next + firstResult.first, handler, hint);
+            auto const secondResult = invokeProtocolMessage(
+                std::array<boost::asio::const_buffer, 1>{
+                    next + firstResult.first},
+                handler,
+                hint);
             BEAST_EXPECT(!secondResult.second);
             BEAST_EXPECT(secondResult.first == secondBytes.size());
             BEAST_EXPECT(
