@@ -41,6 +41,10 @@ namespace test {
 class ValidatorList_test : public beast::unit_test::suite
 {
 private:
+    // This release line already uses 67% in calculateQuorum (with the 60%
+    // absolute floor). The inherited upstream tests still assumed 80%.
+    static constexpr float quorumFraction = 0.67f;
+
     struct Validator
     {
         PublicKey masterPublic;
@@ -1192,7 +1196,8 @@ private:
             BEAST_EXPECT(changes.added == activeValidatorsOuter);
             BEAST_EXPECT(changes.removed.empty());
             BEAST_EXPECT(
-                trustedKeysOuter->quorum() == std::ceil(cfgKeys.size() * 0.8f));
+                trustedKeysOuter->quorum() ==
+                std::ceil(cfgKeys.size() * quorumFraction));
             for (auto const& val : cfgKeys)
             {
                 if (auto const valKey =
@@ -1214,7 +1219,8 @@ private:
             BEAST_EXPECT(changes.added.empty());
             BEAST_EXPECT(changes.removed.empty());
             BEAST_EXPECT(
-                trustedKeysOuter->quorum() == std::ceil(cfgKeys.size() * 0.8f));
+                trustedKeysOuter->quorum() ==
+                std::ceil(cfgKeys.size() * quorumFraction));
         }
         {
             // update with manifests
@@ -1242,7 +1248,8 @@ private:
             BEAST_EXPECT(changes.added == asNodeIDs({masterPublic}));
             BEAST_EXPECT(changes.removed.empty());
             BEAST_EXPECT(
-                trustedKeysOuter->quorum() == std::ceil((maxKeys + 1) * 0.8f));
+                trustedKeysOuter->quorum() ==
+                std::ceil((maxKeys + 1) * quorumFraction));
             BEAST_EXPECT(trustedKeysOuter->listed(masterPublic));
             BEAST_EXPECT(trustedKeysOuter->trusted(masterPublic));
             BEAST_EXPECT(!trustedKeysOuter->listed(signingPublic1));
@@ -1312,7 +1319,8 @@ private:
             BEAST_EXPECT(changes.removed == asNodeIDs({masterPublic}));
             BEAST_EXPECT(changes.added.empty());
             BEAST_EXPECT(
-                trustedKeysOuter->quorum() == std::ceil(maxKeys * 0.8f));
+                trustedKeysOuter->quorum() ==
+                std::ceil(maxKeys * quorumFraction));
             BEAST_EXPECT(trustedKeysOuter->listed(masterPublic));
             BEAST_EXPECT(!trustedKeysOuter->trusted(masterPublic));
             BEAST_EXPECT(!trustedKeysOuter->listed(signingPublicMax));
@@ -1414,9 +1422,9 @@ private:
                 auto const valKey = randomNode();
                 cfgKeys.push_back(toBase58(TokenType::NodePublic, valKey));
                 expectedTrusted.emplace(calcNodeID(valKey));
-                if (cfgKeys.size() < std::ceil(n * 0.8f))
+                if (cfgKeys.size() < std::ceil(n * quorumFraction))
                     activeValidators.emplace(calcNodeID(valKey));
-                else if (cfgKeys.size() < std::ceil(n * 0.8f))
+                else if (cfgKeys.size() < std::ceil(n * quorumFraction))
                     toBeSeen = calcNodeID(valKey);
             }
 
@@ -1585,7 +1593,8 @@ private:
                 BEAST_EXPECT(changes.removed.empty());
                 BEAST_EXPECT(changes.added == asNodeIDs({valKey}));
                 BEAST_EXPECT(
-                    trustedKeys->quorum() == std::ceil(cfgKeys.size() * 0.8f));
+                    trustedKeys->quorum() ==
+                    std::ceil(cfgKeys.size() * quorumFraction));
                 for (auto const& key : activeKeys)
                     BEAST_EXPECT(trustedKeys->trusted(key));
             }
@@ -1630,7 +1639,8 @@ private:
                         changes.added == asNodeIDs({localKey, valKey}));
 
                 BEAST_EXPECT(
-                    trustedKeys->quorum() == std::ceil(cfgKeys.size() * 0.8f));
+                    trustedKeys->quorum() ==
+                    std::ceil(cfgKeys.size() * quorumFraction));
 
                 for (auto const& key : activeKeys)
                     BEAST_EXPECT(trustedKeys->trusted(key));
@@ -1724,7 +1734,8 @@ private:
                 env.app().getHashRouter());
 
             BEAST_EXPECT(
-                trustedKeys->quorum() == std::ceil(valKeys.size() * 0.8f));
+                trustedKeys->quorum() ==
+                std::ceil(valKeys.size() * quorumFraction));
 
             hash_set<NodeID> added;
             for (auto const& val : valKeys)
@@ -1837,7 +1848,7 @@ private:
 
             BEAST_EXPECT(
                 trustedKeys->quorum() ==
-                std::ceil((valKeys.size() - 3) * 0.8f));
+                std::ceil((valKeys.size() - 3) * quorumFraction));
 
             for (auto const& val : valKeys)
                 BEAST_EXPECT(trustedKeys->listed(val.masterPublic));
@@ -1868,7 +1879,7 @@ private:
 
             BEAST_EXPECT(
                 trustedKeys->quorum() ==
-                std::ceil((valKeys.size() - 6) * 0.8f));
+                std::ceil((valKeys.size() - 6) * quorumFraction));
 
             for (auto const& val : valKeys)
                 BEAST_EXPECT(trustedKeys->listed(val.masterPublic));
@@ -2136,7 +2147,8 @@ private:
                     env.app().overlay(),
                     env.app().getHashRouter());
                 if (minimumQuorum == trustedKeys->quorum() ||
-                    trustedKeys->quorum() == std::ceil(cfgKeys.size() * 0.8f))
+                    trustedKeys->quorum() ==
+                        std::ceil(cfgKeys.size() * quorumFraction))
                     return trustedKeys;
             }
             return nullptr;
@@ -2187,8 +2199,8 @@ private:
                             env.app().getHashRouter());
                         BEAST_EXPECT(
                             validators->quorum() ==
-                            static_cast<std::size_t>(std::ceil(
-                                std::max((us - nUnlSize) * 0.8f, us * 0.6f))));
+                            static_cast<std::size_t>(std::ceil(std::max(
+                                (us - nUnlSize) * quorumFraction, us * 0.6f))));
                     }
                 }
             }
@@ -2234,10 +2246,10 @@ private:
                         }
                         return false;
                     };
-                    BEAST_EXPECT(nUnlChange(0, 48));
+                    BEAST_EXPECT(nUnlChange(0, 41));
                     BEAST_EXPECT(nUnlChange(30, 36));
                     BEAST_EXPECT(nUnlChange(18, 36));
-                    BEAST_EXPECT(nUnlChange(12, 39));
+                    BEAST_EXPECT(nUnlChange(12, 36));
                 }
 
                 {
@@ -2261,7 +2273,7 @@ private:
                         env.app().getOPs(),
                         env.app().overlay(),
                         env.app().getHashRouter());
-                    BEAST_EXPECT(validators->quorum() == 39);
+                    BEAST_EXPECT(validators->quorum() == 36);
                 }
             }
         }
@@ -2859,7 +2871,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -2919,7 +2932,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -2985,7 +2999,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3055,7 +3070,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3123,7 +3139,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3191,7 +3208,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3257,7 +3275,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3318,7 +3337,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3379,7 +3399,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3437,7 +3458,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3700,7 +3722,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3762,7 +3785,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3825,7 +3849,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3887,7 +3912,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3951,7 +3977,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -3990,7 +4017,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -4037,7 +4065,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
@@ -4107,7 +4136,8 @@ private:
                 env.app().getOPs(),
                 env.app().overlay(),
                 env.app().getHashRouter());
-            BEAST_EXPECT(trustedKeys->quorum() == std::ceil(keysTotal * 0.8f));
+            BEAST_EXPECT(
+                trustedKeys->quorum() == std::ceil(keysTotal * quorumFraction));
             BEAST_EXPECT(
                 trustedKeys->getTrustedMasterKeys().size() == keysTotal);
 
