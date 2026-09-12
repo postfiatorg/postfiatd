@@ -25,6 +25,7 @@
 #include <xrpld/app/rdb/Wallet.h>
 #include <xrpld/overlay/Cluster.h>
 #include <xrpld/overlay/detail/ConnectAttempt.h>
+#include <xrpld/overlay/detail/ManifestMessages.h>
 #include <xrpld/overlay/detail/PeerImp.h>
 #include <xrpld/overlay/detail/TrafficCount.h>
 #include <xrpld/overlay/detail/Tuning.h>
@@ -640,13 +641,21 @@ OverlayImpl::onManifests(
     auto const n = m->list_size();
     auto const& journal = from->pjournal();
 
+    // Defense in depth; PeerImp also checks before adding a job.
+    if (!manifestBatchWithinLimits(*m))
+    {
+        from->charge(Resource::feeInvalidData, "manifest batch limit");
+        return;
+    }
+
     protocol::TMManifests relay;
+    std::size_t rejected = 0;
 
     for (std::size_t i = 0; i < n; ++i)
     {
         auto& s = m->list().Get(i).stobject();
 
-        if (auto mo = deserializeManifest(s))
+        if (auto mo = deserializeListedManifest(s, app_.validators()))
         {
             auto const serialized = mo->serialized;
 
@@ -674,13 +683,27 @@ OverlayImpl::onManifests(
                     addValidatorManifest(*db, serialized);
                 }
             }
+            else if (result != ManifestDisposition::stale)
+                ++rejected;
         }
         else
         {
-            JLOG(journal.debug())
-                << "Malformed manifest #" << i + 1 << ": " << strHex(s);
+            ++rejected;
             continue;
         }
+    }
+
+    if (rejected)
+    {
+        // Legacy peers may have a few legitimate-but-unlisted identities in
+        // their cache. Charge per bounded batch, not enough to evict such a
+        // peer for one initial sync; repeated flooding still incurs penalties.
+        from->charge(Resource::feeInvalidData, "unlisted or invalid manifests");
+        JLOG(journal.warn())
+            << "Rejected " << rejected << "/" << n
+            << " unlisted or invalid manifests from "
+            << from->getRemoteAddress() << " "
+            << toBase58(TokenType::NodePublic, from->getNodePublic());
     }
 
     if (!relay.list().empty())
@@ -1195,34 +1218,12 @@ OverlayImpl::relay(
     return {};
 }
 
-std::shared_ptr<Message>
-OverlayImpl::getManifestsMessage()
+std::vector<std::shared_ptr<Message>>
+OverlayImpl::getManifestsMessages()
 {
-    std::lock_guard g(manifestLock_);
-
-    if (auto seq = app_.validatorManifests().sequence();
-        seq != manifestListSeq_)
-    {
-        protocol::TMManifests tm;
-
-        app_.validatorManifests().for_each_manifest(
-            [&tm](std::size_t s) { tm.mutable_list()->Reserve(s); },
-            [&tm, &hr = app_.getHashRouter()](Manifest const& manifest) {
-                tm.add_list()->set_stobject(
-                    manifest.serialized.data(), manifest.serialized.size());
-                hr.addSuppression(manifest.hash());
-            });
-
-        manifestMessage_.reset();
-
-        if (tm.list_size() != 0)
-            manifestMessage_ =
-                std::make_shared<Message>(tm, protocol::mtMANIFESTS);
-
-        manifestListSeq_ = seq;
-    }
-
-    return manifestMessage_;
+    // Rebuild from the current validator list, not just the cache sequence:
+    // list membership can change without a manifest changing.
+    return makeManifestMessages(app_.validatorManifests(), app_.validators());
 }
 
 void

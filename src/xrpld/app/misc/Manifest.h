@@ -330,6 +330,13 @@ public:
     std::optional<std::string>
     getManifest(PublicKey const& pk) const;
 
+    /** Return the stored manifest, including revocations, for peer sync.
+        The ordinary getManifest accessor continues to hide revoked entries.
+        This lookup does not enumerate the cache and is thread safe.
+    */
+    std::optional<std::string>
+    getManifestIncludingRevoked(PublicKey const& pk) const;
+
     /** Returns `true` if master key has been revoked in a manifest.
 
         @param pk Master public key

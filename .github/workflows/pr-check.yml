@@ -58,8 +58,17 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
           -DCMAKE_BUILD_TYPE=Release \
           -Dxrpld=ON \
-          -Dtests=OFF \
+          -Dtests=ON \
           ..
 
     - name: Build
       run: cmake --build .build -j $(nproc)
+
+    - name: Manifest flood regressions
+      run: |
+        .build/postfiatd --unittest=ripple.overlay.manifest_flood
+        .build/postfiatd --unittest=ripple.overlay.object_by_hash
+        .build/postfiatd --unittest=ripple.app.Manifest
+        .build/postfiatd --unittest=ripple.app.ValidatorList
+        .build/postfiatd --unittest=ripple.overlay.compression
+        .build/postfiatd --unittest=ripple.resource.ResourceManager

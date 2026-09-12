@@ -127,13 +127,6 @@ private:
     // Transaction reduce-relay metrics
     metrics::TxMetrics txMetrics_;
 
-    // A message with the list of manifests we send to peers
-    std::shared_ptr<Message> manifestMessage_;
-    // Used to track whether we need to update the cached list of manifests
-    std::optional<std::uint32_t> manifestListSeq_;
-    // Protects the message and the sequence list of manifests
-    std::mutex manifestLock_;
-
     //--------------------------------------------------------------------------
 
 public:
@@ -244,8 +237,8 @@ public:
         std::optional<std::reference_wrapper<protocol::TMTransaction>> m,
         std::set<Peer::id_t> const& skip) override;
 
-    std::shared_ptr<Message>
-    getManifestsMessage();
+    std::vector<std::shared_ptr<Message>>
+    getManifestsMessages();
 
     //--------------------------------------------------------------------------
     //
