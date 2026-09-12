@@ -21,6 +21,7 @@
 #include <xrpld/overlay/detail/TrafficCount.h>
 
 #include <cstdint>
+#include <stdexcept>
 
 namespace ripple {
 
@@ -37,6 +38,11 @@ Message::Message(
 
     XRPL_ASSERT(
         messageBytes, "ripple::Message::Message : non-empty message input");
+
+    // The wire format has only 26 payload-length bits. Check the size_t
+    // before allocation or narrowing; assertions are disabled in releases.
+    if (messageBytes >= maximiumMessageSize)
+        throw std::length_error("Overlay message exceeds 26-bit frame limit");
 
     buffer_.resize(headerBytes + messageBytes);
 

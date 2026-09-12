@@ -359,8 +359,8 @@ invokeProtocolMessage(
     // whose size exceeds this may result in the connection being dropped. A
     // larger message size may be supported in the future or negotiated as
     // part of a protocol upgrade.
-    if (header->payload_wire_size > maximiumMessageSize ||
-        header->uncompressed_size > maximiumMessageSize)
+    if (header->payload_wire_size >= maximiumMessageSize ||
+        header->uncompressed_size >= maximiumMessageSize)
     {
         result.second = make_error_code(boost::system::errc::message_size);
         return result;

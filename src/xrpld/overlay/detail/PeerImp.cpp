@@ -351,6 +351,13 @@ PeerImp::removeTxQueue(uint256 const& hash)
 void
 PeerImp::charge(Resource::Charge const& fee, std::string const& context)
 {
+    // Manifest jobs run off-strand. Charge and enforce disconnect together
+    // on the peer strand, rather than silently skipping the disconnect.
+    if (!strand_.running_in_this_thread())
+        return post(
+            strand_,
+            std::bind(&PeerImp::charge, shared_from_this(), fee, context));
+
     if ((usage_.charge(fee, context) == Resource::drop) &&
         usage_.disconnect(p_journal_) && strand_.running_in_this_thread())
     {
@@ -710,6 +717,9 @@ PeerImp::onTimer(error_code const& ec)
         return close();
     }
 
+    if (manifestDiscard_.expired())
+        return fail("Timed-out manifest dump");
+
     if (large_sendq_++ >= Tuning::sendqIntervals)
     {
         fail("Large send queue");
@@ -887,7 +897,7 @@ PeerImp::doProtocolStart()
             });
     }
 
-    if (auto m = overlay_.getManifestsMessage())
+    for (auto const& m : overlay_.getManifestsMessages())
         send(m);
 
     setTimer();
@@ -924,6 +934,31 @@ PeerImp::onReadMessage(error_code ec, std::size_t bytes_transferred)
 
     while (read_buffer_.size() > 0)
     {
+        auto const discard = manifestDiscard_.consume(read_buffer_.data());
+        if (discard.reject)
+            return fail("Repeated, excessive or timed-out manifest dump");
+        if (discard.needHeader)
+        {
+            hint = 10;
+            break;
+        }
+        if (discard.started)
+        {
+            // Enforce the drain deadline even if the sender stops writing.
+            setTimer();
+            JLOG(p_journal_.warn())
+                << "Discarding oversized legacy manifest dump: wire="
+                << discard.wireBytes << " plain=" << discard.plainBytes
+                << " from " << getRemoteAddress() << " "
+                << toBase58(TokenType::NodePublic, getNodePublic());
+        }
+        if (discard.consumed)
+        {
+            read_buffer_.consume(discard.consumed);
+            hint = Tuning::readBufferBytes;
+            continue;
+        }
+
         std::size_t bytes_consumed;
 
         using namespace std::chrono_literals;
@@ -936,7 +971,19 @@ PeerImp::onReadMessage(error_code ec, std::size_t bytes_transferred)
             journal_);
 
         if (ec)
+        {
+            if (ec == make_error_code(boost::system::errc::no_message))
+            {
+                std::array<std::uint8_t, 8> header{};
+                auto const n = boost::asio::buffer_copy(
+                    boost::asio::buffer(header), read_buffer_.data());
+                JLOG(p_journal_.warn())
+                    << "Invalid frame " << strHex(Slice(header.data(), n))
+                    << " from " << getRemoteAddress() << " "
+                    << toBase58(TokenType::NodePublic, getNodePublic());
+            }
             return fail("onReadMessage", ec);
+        }
         if (!socket_.is_open())
             return;
         if (gracefulClose_)
@@ -1083,6 +1130,17 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMManifests> const& m)
         return;
     }
 
+    if (s > 100)
+    {
+        JLOG(p_journal_.warn())
+            << "Large manifest batch: " << s << " from " << getRemoteAddress()
+            << " " << toBase58(TokenType::NodePublic, getNodePublic());
+    }
+    if (!manifestBatchWithinLimits(*m))
+    {
+        fee_.update(Resource::feeInvalidData, "manifest batch limit");
+        return;
+    }
     if (s > 100)
         fee_.update(Resource::feeModerateBurdenPeer, "oversize");
 

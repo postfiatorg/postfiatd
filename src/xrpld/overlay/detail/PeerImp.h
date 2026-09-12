@@ -24,6 +24,7 @@
 #include <xrpld/app/ledger/detail/LedgerReplayMsgHandler.h>
 #include <xrpld/app/misc/HashRouter.h>
 #include <xrpld/overlay/Squelch.h>
+#include <xrpld/overlay/detail/ManifestMessageDiscard.h>
 #include <xrpld/overlay/detail/OverlayImpl.h>
 #include <xrpld/overlay/detail/ProtocolVersion.h>
 #include <xrpld/peerfinder/PeerfinderManager.h>
@@ -171,6 +172,7 @@ private:
     ChargeWithContext fee_;
     std::shared_ptr<PeerFinder::Slot> const slot_;
     boost::beast::multi_buffer read_buffer_;
+    ManifestMessageDiscard manifestDiscard_;
     http_request_type request_;
     http_response_type response_;
     boost::beast::http::fields const& headers_;
