@@ -228,6 +228,7 @@ ValidatorList::load(
             keyListings_.insert({*localPubKey_, listThreshold_});
         if (inserted)
         {
+            validatorManifests_.promoteToTrusted(*localPubKey_);
             JLOG(j_.debug()) << "Added own master key "
                              << toBase58(TokenType::NodePublic, *localPubKey_);
         }
@@ -262,6 +263,8 @@ ValidatorList::load(
             continue;
 
         auto ret = keyListings_.insert({*id, listThreshold_});
+        if (ret.second)
+            validatorManifests_.promoteToTrusted(*id);
         if (!ret.second)
         {
             JLOG(j_.warn()) << "Duplicate node identity: " << match[1];
@@ -1089,6 +1092,8 @@ ValidatorList::updatePublisherList(
         {
             // Increment list count for added keys
             ++keyListings_[*iNew];
+            // Key is now listed: free its untrusted slot if it had one.
+            validatorManifests_.promoteToTrusted(*iNew);
             ++iNew;
         }
         else if (
@@ -1125,7 +1130,8 @@ ValidatorList::updatePublisherList(
             continue;
         }
 
-        if (auto const r = validatorManifests_.applyManifest(std::move(*m));
+        if (auto const r = validatorManifests_.applyManifest(
+                std::move(*m), ManifestRateLimitCapPolicy::uncapped);
             r == ManifestDisposition::invalid)
         {
             JLOG(j_.warn()) << "List for " << strHex(pubKey)
@@ -1380,7 +1386,8 @@ ValidatorList::verify(
     PublicKey masterPubKey = manifest.masterKey;
     auto const revoked = manifest.revoked();
 
-    auto const result = publisherManifests_.applyManifest(std::move(manifest));
+    auto const result = publisherManifests_.applyManifest(
+        std::move(manifest), ManifestRateLimitCapPolicy::uncapped);
 
     if (revoked && result == ManifestDisposition::accepted)
     {
@@ -1512,6 +1519,13 @@ ValidatorList::trustedPublisher(PublicKey const& identity) const
     std::shared_lock read_lock{mutex_};
     return identity.size() && publisherLists_.count(identity) &&
         publisherLists_.at(identity).status < PublisherStatus::revoked;
+}
+
+bool
+ValidatorList::publisherConfigured(PublicKey const& masterKey) const
+{
+    std::shared_lock read_lock{mutex_};
+    return masterKey.size() && publisherLists_.count(masterKey) != 0;
 }
 
 std::optional<PublicKey>

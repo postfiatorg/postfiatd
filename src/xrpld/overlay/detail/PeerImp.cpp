@@ -29,6 +29,7 @@
 #include <xrpld/app/misc/ValidatorList.h>
 #include <xrpld/app/tx/apply.h>
 #include <xrpld/overlay/Cluster.h>
+#include <xrpld/overlay/detail/ObjectByHashLimits.h>
 #include <xrpld/overlay/detail/PeerImp.h>
 #include <xrpld/overlay/detail/Tuning.h>
 #include <xrpld/perflog/PerfLog.h>
@@ -239,6 +240,10 @@ PeerImp::stop()
 void
 PeerImp::send(std::shared_ptr<Message> const& m)
 {
+    // An oversized outbound builder produces an empty, unsendable message.
+    // Reject it before posting, compression, traffic accounting or queuing.
+    if (!m || m->empty())
+        return;
     if (!strand_.running_in_this_thread())
         return post(strand_, std::bind(&PeerImp::send, shared_from_this(), m));
     if (gracefulClose_)
@@ -351,6 +356,13 @@ PeerImp::removeTxQueue(uint256 const& hash)
 void
 PeerImp::charge(Resource::Charge const& fee, std::string const& context)
 {
+    // Manifest jobs run off-strand. Charge and enforce disconnect together
+    // on the peer strand, rather than silently skipping the disconnect.
+    if (!strand_.running_in_this_thread())
+        return post(
+            strand_,
+            std::bind(&PeerImp::charge, shared_from_this(), fee, context));
+
     if ((usage_.charge(fee, context) == Resource::drop) &&
         usage_.disconnect(p_journal_) && strand_.running_in_this_thread())
     {
@@ -710,6 +722,9 @@ PeerImp::onTimer(error_code const& ec)
         return close();
     }
 
+    if (manifestDiscard_.expired())
+        return fail("Timed-out manifest dump");
+
     if (large_sendq_++ >= Tuning::sendqIntervals)
     {
         fail("Large send queue");
@@ -887,7 +902,7 @@ PeerImp::doProtocolStart()
             });
     }
 
-    if (auto m = overlay_.getManifestsMessage())
+    for (auto const& m : overlay_.getManifestsMessages())
         send(m);
 
     setTimer();
@@ -924,6 +939,31 @@ PeerImp::onReadMessage(error_code ec, std::size_t bytes_transferred)
 
     while (read_buffer_.size() > 0)
     {
+        auto const discard = manifestDiscard_.consume(read_buffer_.data());
+        if (discard.reject)
+            return fail("Repeated, excessive or timed-out manifest dump");
+        if (discard.needHeader)
+        {
+            hint = 10;
+            break;
+        }
+        if (discard.started)
+        {
+            // Enforce the drain deadline even if the sender stops writing.
+            setTimer();
+            JLOG(p_journal_.warn())
+                << "Discarding oversized legacy manifest dump: wire="
+                << discard.wireBytes << " plain=" << discard.plainBytes
+                << " from " << getRemoteAddress() << " "
+                << toBase58(TokenType::NodePublic, getNodePublic());
+        }
+        if (discard.consumed)
+        {
+            read_buffer_.consume(discard.consumed);
+            hint = Tuning::readBufferBytes;
+            continue;
+        }
+
         std::size_t bytes_consumed;
 
         using namespace std::chrono_literals;
@@ -936,7 +976,19 @@ PeerImp::onReadMessage(error_code ec, std::size_t bytes_transferred)
             journal_);
 
         if (ec)
+        {
+            if (ec == make_error_code(boost::system::errc::no_message))
+            {
+                std::array<std::uint8_t, 8> header{};
+                auto const n = boost::asio::buffer_copy(
+                    boost::asio::buffer(header), read_buffer_.data());
+                JLOG(p_journal_.warn())
+                    << "Invalid frame " << strHex(Slice(header.data(), n))
+                    << " from " << getRemoteAddress() << " "
+                    << toBase58(TokenType::NodePublic, getNodePublic());
+            }
             return fail("onReadMessage", ec);
+        }
         if (!socket_.is_open())
             return;
         if (gracefulClose_)
@@ -1083,6 +1135,17 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMManifests> const& m)
         return;
     }
 
+    if (s > 100)
+    {
+        JLOG(p_journal_.warn())
+            << "Large manifest batch: " << s << " from " << getRemoteAddress()
+            << " " << toBase58(TokenType::NodePublic, getNodePublic());
+    }
+    if (!manifestBatchWithinLimits(*m))
+    {
+        fee_.update(Resource::feeInvalidData, "manifest batch limit");
+        return;
+    }
     if (s > 100)
         fee_.update(Resource::feeModerateBurdenPeer, "oversize");
 
@@ -2478,6 +2541,14 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
 
     if (packet.query())
     {
+        // Bound all query variants before database work or job scheduling.
+        if (!objectByHashRequestWithinLimits(packet))
+        {
+            JLOG(p_journal_.warn()) << "GetObject: excessive object count "
+                                    << packet.objects_size();
+            fee_.update(Resource::feeMalformedRequest, "object count");
+            return;
+        }
         // this is a query
         if (send_queue_.size() >= Tuning::dropSendQueue)
         {
@@ -2534,7 +2605,7 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
             Resource::feeModerateBurdenPeer,
             " received a get object by hash request");
 
-        // This is a very minimal implementation
+        ObjectByHashReplyBudget budget(reply);
         for (int i = 0; i < packet.objects_size(); ++i)
         {
             auto const& obj = packet.objects(i);
@@ -2547,18 +2618,13 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetObjectByHash> const& m)
                 auto nodeObject{app_.getNodeStore().fetchNodeObject(hash, seq)};
                 if (nodeObject)
                 {
-                    protocol::TMIndexedObject& newObj = *reply.add_objects();
-                    newObj.set_hash(hash.begin(), hash.size());
-                    newObj.set_data(
-                        &nodeObject->getData().front(),
-                        nodeObject->getData().size());
-
-                    if (obj.has_nodeid())
-                        newObj.set_index(obj.nodeid());
-                    if (obj.has_ledgerseq())
-                        newObj.set_ledgerseq(obj.ledgerseq());
-
-                    // VFALCO NOTE "seq" in the message is obsolete
+                    if (!budget.append(obj, makeSlice(nodeObject->getData())))
+                    {
+                        JLOG(p_journal_.debug())
+                            << "GetObject: bounded reply truncated at "
+                            << reply.objects_size() << " objects";
+                        break;
+                    }
                 }
             }
         }
