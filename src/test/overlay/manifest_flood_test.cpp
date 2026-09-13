@@ -6,6 +6,7 @@
 #include <xrpld/overlay/detail/ManifestMessages.h>
 #include <xrpld/overlay/detail/ProtocolMessage.h>
 
+#include <xrpl/basics/strHex.h>
 #include <xrpl/protocol/HashPrefix.h>
 #include <xrpl/protocol/SecretKey.h>
 #include <xrpl/protocol/Sign.h>
