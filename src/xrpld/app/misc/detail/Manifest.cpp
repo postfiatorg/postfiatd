@@ -492,20 +492,29 @@ ManifestCache::applyManifest(
         return std::nullopt;
     };
 
+    // A stale uncapped sighting of a counted key must still reach the write
+    // lock to free the key's untrusted slot, so a key that became listed
+    // between a trust check and a capped insert is not left evictable.
+    bool promotesStale = false;
     {
         std::shared_lock sl{mutex_};
         if (auto d =
                 prewriteCheck(map_.find(m.masterKey), /*checkSig*/ true, sl))
-            return *d;
+        {
+            promotesStale = *d == ManifestDisposition::stale &&
+                policy == ManifestRateLimitCapPolicy::uncapped &&
+                untrustedKeys_.count(m.masterKey) != 0;
+            if (!promotesStale)
+                return *d;
+        }
     }
 
     std::unique_lock sl{mutex_};
     auto const iter = map_.find(m.masterKey);
 
     // A listed, configured, or database-loaded sighting frees the key's
-    // untrusted slot even when the manifest itself is stale, so a key that
-    // became listed between a trust check and a capped insert is not left
-    // evictable. Not reversed on de-listing.
+    // untrusted slot even when the manifest itself is stale. Not reversed on
+    // de-listing.
     if (policy == ManifestRateLimitCapPolicy::uncapped)
         untrustedKeys_.erase(m.masterKey);
 
@@ -518,7 +527,9 @@ ManifestCache::applyManifest(
     // doesn't need to happen again (signature checks are somewhat expensive).
     // Note: It's a mistake to use an upgradable lock. This is a recipe for
     // deadlock.
-    if (auto d = prewriteCheck(iter, /*checkSig*/ false, sl))
+    // A stale sighting skipped the signature check above; verify it here in
+    // case the cache changed in between and the manifest is no longer stale.
+    if (auto d = prewriteCheck(iter, /*checkSig*/ promotesStale, sl))
         return *d;
 
     bool const revoked = m.revoked();

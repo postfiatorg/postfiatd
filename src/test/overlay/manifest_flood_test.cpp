@@ -443,8 +443,8 @@ class manifest_flood_test : public beast::unit_test::suite
                 env.journal);
             auto const publisherKey = derivePublicKey(
                 KeyType::ed25519, randomSecretKey());
-            BEAST_EXPECT(validators.load(
-                {}, {}, {toBase58(TokenType::NodePublic, publisherKey)}));
+            // Publisher keys are configured in hex, unlike validator keys.
+            BEAST_EXPECT(validators.load({}, {}, {strHex(publisherKey)}));
             BEAST_EXPECT(validators.publisherConfigured(publisherKey));
             BEAST_EXPECT(!validators.publisherConfigured(trusted.masterKey));
         }
