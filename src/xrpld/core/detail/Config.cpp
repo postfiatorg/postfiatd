@@ -852,6 +852,20 @@ Config::loadFromString(std::string const& fileContents)
                 "Invalid value 'max_diverged_time' in " SECTION_OVERLAY
                 ": the time must be between 60 and 900 seconds, inclusive.");
         }
+
+        try
+        {
+            if (auto val = sec.get("max_untrusted_count"))
+                MAX_UNTRUSTED_MANIFESTS =
+                    beast::lexicalCastThrow<std::size_t>(*val);
+        }
+        catch (...)
+        {
+            Throw<std::runtime_error>(
+                "Invalid value 'max_untrusted_count' in " SECTION_OVERLAY
+                ": must be of the form '<number>' representing a count of "
+                "manifests.");
+        }
     }
 
     if (getSingleSection(

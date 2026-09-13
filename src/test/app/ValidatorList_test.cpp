@@ -291,7 +291,7 @@ private:
                 localSigningPublicOuter, emptyCfgKeys, emptyCfgPublishers));
             BEAST_EXPECT(trustedKeys->listed(localSigningPublicOuter));
 
-            manifests.applyManifest(*deserializeManifest(cfgManifest));
+            manifests.applyManifest(*deserializeManifest(cfgManifest), ManifestRateLimitCapPolicy::uncapped);
             BEAST_EXPECT(trustedKeys->load(
                 localSigningPublicOuter, emptyCfgKeys, emptyCfgPublishers));
 
@@ -388,7 +388,7 @@ private:
                 app.config().legacy("database_path"),
                 env.journal);
 
-            manifests.applyManifest(*deserializeManifest(cfgManifest));
+            manifests.applyManifest(*deserializeManifest(cfgManifest), ManifestRateLimitCapPolicy::uncapped);
 
             BEAST_EXPECT(trustedKeys->load(
                 localSigningPublicOuter, cfgKeys, emptyCfgPublishers));
@@ -483,7 +483,7 @@ private:
                 pubRevokedSecret,
                 pubRevokedSigning.first,
                 pubRevokedSigning.second,
-                std::numeric_limits<std::uint32_t>::max())));
+                std::numeric_limits<std::uint32_t>::max())), ManifestRateLimitCapPolicy::uncapped);
 
             // these two are not revoked (and not in the manifest cache at all.)
             auto legitKey1 = randomMasterKey();
@@ -522,7 +522,7 @@ private:
                 pubRevokedSecret,
                 pubRevokedSigning.first,
                 pubRevokedSigning.second,
-                std::numeric_limits<std::uint32_t>::max())));
+                std::numeric_limits<std::uint32_t>::max())), ManifestRateLimitCapPolicy::uncapped);
 
             // this one is not revoked (and not in the manifest cache at all.)
             auto legitKey = randomMasterKey();
@@ -1264,7 +1264,7 @@ private:
                 1));
 
             BEAST_EXPECT(
-                manifestsOuter.applyManifest(std::move(*m1)) ==
+                manifestsOuter.applyManifest(std::move(*m1), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(trustedKeysOuter->listed(masterPublic));
             BEAST_EXPECT(trustedKeysOuter->trusted(masterPublic));
@@ -1282,7 +1282,7 @@ private:
                 signingKeys2.second,
                 2));
             BEAST_EXPECT(
-                manifestsOuter.applyManifest(std::move(*m2)) ==
+                manifestsOuter.applyManifest(std::move(*m2), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(trustedKeysOuter->listed(masterPublic));
             BEAST_EXPECT(trustedKeysOuter->trusted(masterPublic));
@@ -1300,7 +1300,7 @@ private:
 
             BEAST_EXPECT(mMax->revoked());
             BEAST_EXPECT(
-                manifestsOuter.applyManifest(std::move(*mMax)) ==
+                manifestsOuter.applyManifest(std::move(*mMax), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(
                 manifestsOuter.getSigningKey(masterPublic) == masterPublic);
@@ -2804,7 +2804,7 @@ private:
             if (self)
             {
                 valManifests.applyManifest(
-                    *deserializeManifest(base64_decode(self->manifest)));
+                    *deserializeManifest(base64_decode(self->manifest)), ManifestRateLimitCapPolicy::uncapped);
                 BEAST_EXPECT(result->load(
                     self->signingPublic,
                     emptyCfgKeys,

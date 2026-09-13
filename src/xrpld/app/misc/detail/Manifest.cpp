@@ -390,7 +390,9 @@ ManifestCache::revoked(PublicKey const& pk) const
 }
 
 ManifestDisposition
-ManifestCache::applyManifest(Manifest m)
+ManifestCache::applyManifest(
+    Manifest m,
+    ManifestRateLimitCapPolicy const policy)
 {
     // Check the manifest against the conditions that do not require a
     // `unique_lock` (write lock) on the `mutex_`. Since the signature can be
@@ -490,15 +492,32 @@ ManifestCache::applyManifest(Manifest m)
         return std::nullopt;
     };
 
+    // A stale uncapped sighting of a counted key must still reach the write
+    // lock to free the key's untrusted slot, so a key that became listed
+    // between a trust check and a capped insert is not left evictable.
+    bool promotesStale = false;
     {
         std::shared_lock sl{mutex_};
         if (auto d =
                 prewriteCheck(map_.find(m.masterKey), /*checkSig*/ true, sl))
-            return *d;
+        {
+            promotesStale = *d == ManifestDisposition::stale &&
+                policy == ManifestRateLimitCapPolicy::uncapped &&
+                untrustedKeys_.count(m.masterKey) != 0;
+            if (!promotesStale)
+                return *d;
+        }
     }
 
     std::unique_lock sl{mutex_};
     auto const iter = map_.find(m.masterKey);
+
+    // A listed, configured, or database-loaded sighting frees the key's
+    // untrusted slot even when the manifest itself is stale. Not reversed on
+    // de-listing.
+    if (policy == ManifestRateLimitCapPolicy::uncapped)
+        untrustedKeys_.erase(m.masterKey);
+
     // Since we released the previously held read lock, it's possible that the
     // collections have been written to. This means we need to run
     // `prewriteCheck` again. This re-does work, but `prewriteCheck` is
@@ -508,14 +527,25 @@ ManifestCache::applyManifest(Manifest m)
     // doesn't need to happen again (signature checks are somewhat expensive).
     // Note: It's a mistake to use an upgradable lock. This is a recipe for
     // deadlock.
-    if (auto d = prewriteCheck(iter, /*checkSig*/ false, sl))
+    // A stale sighting skipped the signature check above; verify it here in
+    // case the cache changed in between and the manifest is no longer stale.
+    if (auto d = prewriteCheck(iter, /*checkSig*/ promotesStale, sl))
         return *d;
 
     bool const revoked = m.revoked();
+    bool const capped = policy == ManifestRateLimitCapPolicy::capped;
     // This is the first manifest we are seeing for a master key. This should
     // only ever happen once per validator run.
     if (iter == map_.end())
     {
+        if (capped && maxUntrusted_ == 0)
+        {
+            if (auto stream = j_.debug())
+                logMftAct(
+                    stream, "UntrustedCapacity", m.masterKey, m.sequence);
+            return ManifestDisposition::untrustedCapacity;
+        }
+
         if (auto stream = j_.info())
             logMftAct(stream, "AcceptedNew", m.masterKey, m.sequence);
 
@@ -523,7 +553,19 @@ ManifestCache::applyManifest(Manifest m)
             signingToMasterKeys_.emplace(*m.signingKey, m.masterKey);
 
         auto masterKey = m.masterKey;
+        if (capped)
+        {
+            untrustedKeys_.insert(masterKey);
+            untrustedOrder_.push_back(masterKey);
+        }
         map_.emplace(std::move(masterKey), std::move(m));
+
+        if (capped)
+            evictUntrustedOverflow();
+
+        // Something has changed. Keep track of it.
+        seq_++;
+
         return ManifestDisposition::accepted;
     }
 
@@ -548,6 +590,49 @@ ManifestCache::applyManifest(Manifest m)
     seq_++;
 
     return ManifestDisposition::accepted;
+}
+
+void
+ManifestCache::evictUntrustedOverflow()
+{
+    // Drop the oldest unlisted entries until the bound holds. Keys that were
+    // promoted or updated uncapped since admission have already left the set
+    // and are skipped when their order entry is reached.
+    while (untrustedKeys_.size() > maxUntrusted_ && !untrustedOrder_.empty())
+    {
+        auto const key = untrustedOrder_.front();
+        untrustedOrder_.pop_front();
+        if (!untrustedKeys_.erase(key))
+            continue;
+
+        auto const it = map_.find(key);
+        if (it == map_.end())
+            continue;
+
+        if (!it->second.revoked() && it->second.signingKey)
+            signingToMasterKeys_.erase(*it->second.signingKey);
+
+        if (auto stream = j_.debug())
+            logMftAct(stream, "EvictedUntrusted", key, it->second.sequence);
+
+        map_.erase(it);
+        seq_++;
+    }
+}
+
+void
+ManifestCache::promoteToTrusted(PublicKey const& pk)
+{
+    // Frees the key's untrusted slot; a no-op if the key was never counted.
+    std::unique_lock lock{mutex_};
+    untrustedKeys_.erase(pk);
+}
+
+std::size_t
+ManifestCache::untrustedCount() const
+{
+    std::shared_lock lock{mutex_};
+    return untrustedKeys_.size();
 }
 
 void
@@ -580,7 +665,9 @@ ManifestCache::load(
             JLOG(j_.warn()) << "Configured manifest revokes public key";
         }
 
-        if (applyManifest(std::move(*mo)) == ManifestDisposition::invalid)
+        if (applyManifest(
+                std::move(*mo), ManifestRateLimitCapPolicy::uncapped) ==
+            ManifestDisposition::invalid)
         {
             JLOG(j_.error()) << "Manifest in config was rejected";
             return false;
@@ -604,7 +691,9 @@ ManifestCache::load(
         auto mo = deserializeManifest(base64_decode(revocationStr));
 
         if (!mo || !mo->revoked() ||
-            applyManifest(std::move(*mo)) == ManifestDisposition::invalid)
+            applyManifest(
+                std::move(*mo), ManifestRateLimitCapPolicy::uncapped) ==
+                ManifestDisposition::invalid)
         {
             JLOG(j_.error()) << "Invalid validator key revocation in config";
             return false;

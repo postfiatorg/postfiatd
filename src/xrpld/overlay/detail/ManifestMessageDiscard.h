@@ -72,15 +72,18 @@ public:
         if (wire <= maxManifestBatchBytes && plain <= maxManifestBatchBytes)
             return {};
 
-        // One dump per connection, at most 128 MiB and 60 seconds. A repeated
-        // dump, impossible length, or timeout is a protocol failure.
-        constexpr std::size_t legacyLimit = 128 * 1024 * 1024;
+        // One dump per connection, at most the 28-bit legacy maximum
+        // (256 MiB - 1) and 300 seconds, so a poisoned 1.0.4 peer stays
+        // reachable until its cache outgrows what its own framing can carry.
+        // A repeated dump, impossible length, or timeout is a protocol
+        // failure.
+        constexpr std::size_t legacyLimit = (std::size_t(1) << 28) - 1;
         if (used_ || !wire || !plain || wire > legacyLimit ||
             plain > legacyLimit)
             return {0, false, false, true};
 
         used_ = true;
-        deadline_ = now + std::chrono::seconds(60);
+        deadline_ = now + std::chrono::seconds(300);
         remaining_ = headerSize + wire;
         auto const n = std::min(size, remaining_);
         remaining_ -= n;

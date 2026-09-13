@@ -289,8 +289,8 @@ public:
                 env.journal);
 
             {
-                // save should not store untrusted master keys to db
-                // except for revocations
+                // save should not store unlisted master keys to db,
+                // revocations included
                 m.save(
                     *dbCon,
                     "ValidatorManifests",
@@ -302,12 +302,9 @@ public:
 
                 loaded.load(*dbCon, "ValidatorManifests");
 
-                // check that all loaded manifests are revocations
-                std::vector<Manifest const*> const loadedManifests(
-                    sort(getPopulatedManifests(loaded)));
-
-                for (auto const& man : loadedManifests)
-                    BEAST_EXPECT(man->revoked());
+                // Unlisted keys are never persisted, so a flood of unlisted
+                // revocations cannot survive a restart on disk.
+                BEAST_EXPECT(getPopulatedManifests(loaded).empty());
             }
             {
                 // save should store all trusted master keys to db
@@ -467,7 +464,7 @@ public:
         BEAST_EXPECT(
             ManifestDisposition::accepted ==
             cache.applyManifest(makeManifest(
-                sk, KeyType::ed25519, kp0.second, KeyType::secp256k1, 0)));
+                sk, KeyType::ed25519, kp0.second, KeyType::secp256k1, 0), ManifestRateLimitCapPolicy::uncapped));
         BEAST_EXPECT(cache.getSigningKey(pk) == kp0.first);
         BEAST_EXPECT(cache.getMasterKey(kp0.first) == pk);
 
@@ -479,7 +476,7 @@ public:
         BEAST_EXPECT(
             ManifestDisposition::accepted ==
             cache.applyManifest(makeManifest(
-                sk, KeyType::ed25519, kp1.second, KeyType::secp256k1, 1)));
+                sk, KeyType::ed25519, kp1.second, KeyType::secp256k1, 1), ManifestRateLimitCapPolicy::uncapped));
         BEAST_EXPECT(cache.getSigningKey(pk) == kp1.first);
         BEAST_EXPECT(cache.getMasterKey(kp1.first) == pk);
         BEAST_EXPECT(cache.getMasterKey(kp0.first) == kp0.first);
@@ -489,7 +486,7 @@ public:
         BEAST_EXPECT(
             ManifestDisposition::badEphemeralKey ==
             cache.applyManifest(makeManifest(
-                sk, KeyType::ed25519, kp1.second, KeyType::secp256k1, 2)));
+                sk, KeyType::ed25519, kp1.second, KeyType::secp256k1, 2), ManifestRateLimitCapPolicy::uncapped));
         BEAST_EXPECT(cache.getSigningKey(pk) == kp1.first);
         BEAST_EXPECT(cache.getMasterKey(kp1.first) == pk);
         BEAST_EXPECT(cache.getMasterKey(kp0.first) == kp0.first);
@@ -499,7 +496,7 @@ public:
         // key from a revoked master public key
         BEAST_EXPECT(
             ManifestDisposition::accepted ==
-            cache.applyManifest(makeRevocation(sk, KeyType::ed25519)));
+            cache.applyManifest(makeRevocation(sk, KeyType::ed25519), ManifestRateLimitCapPolicy::uncapped));
         BEAST_EXPECT(cache.revoked(pk));
         BEAST_EXPECT(cache.getSigningKey(pk) == pk);
         BEAST_EXPECT(cache.getMasterKey(kp0.first) == kp0.first);
@@ -1017,21 +1014,21 @@ public:
             // applyManifest should accept new manifests with
             // higher sequence numbers
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a0)) ==
+                cache.applyManifest(clone(s_a0), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a0)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_a0), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
 
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a1)) ==
+                cache.applyManifest(clone(s_a1), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a1)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_a1), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a0)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_a0), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
 
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a2)) ==
+                cache.applyManifest(clone(s_a2), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::badEphemeralKey);
 
             // applyManifest should accept manifests with max sequence numbers
@@ -1039,29 +1036,29 @@ public:
             BEAST_EXPECT(!cache.revoked(pk_a));
             BEAST_EXPECT(s_aMax.revoked());
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_aMax)) ==
+                cache.applyManifest(clone(s_aMax), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_aMax)) ==
+                cache.applyManifest(clone(s_aMax), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::stale);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a1)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_a1), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_a0)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_a0), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
             BEAST_EXPECT(cache.revoked(pk_a));
 
             // applyManifest should reject manifests with invalid signatures
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_b0)) ==
+                cache.applyManifest(clone(s_b0), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_b0)) == ManifestDisposition::stale);
+                cache.applyManifest(clone(s_b0), ManifestRateLimitCapPolicy::uncapped) == ManifestDisposition::stale);
             BEAST_EXPECT(!deserializeManifest(fake));
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_b1)) ==
+                cache.applyManifest(clone(s_b1), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::invalid);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_b2)) ==
+                cache.applyManifest(clone(s_b2), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::accepted);
 
             auto const s_c0 = makeManifest(
@@ -1071,7 +1068,7 @@ public:
                 KeyType::ed25519,
                 47);
             BEAST_EXPECT(
-                cache.applyManifest(clone(s_c0)) ==
+                cache.applyManifest(clone(s_c0), ManifestRateLimitCapPolicy::uncapped) ==
                 ManifestDisposition::badMasterKey);
         }
 

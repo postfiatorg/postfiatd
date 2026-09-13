@@ -25,6 +25,8 @@
 #include <xrpl/protocol/PublicKey.h>
 #include <xrpl/protocol/SecretKey.h>
 
+#include <cstdint>
+#include <deque>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -226,7 +228,10 @@ enum class ManifestDisposition {
     badEphemeralKey,
 
     /// Timely, but invalid signature
-    invalid
+    invalid,
+
+    /// From a master key on no validator list, and this node keeps none
+    untrustedCapacity
 };
 
 inline std::string
@@ -244,9 +249,44 @@ to_string(ManifestDisposition m)
             return "badEphemeralKey";
         case ManifestDisposition::invalid:
             return "invalid";
+        case ManifestDisposition::untrustedCapacity:
+            return "untrustedCapacity";
         default:
             return "unknown";
     }
+}
+
+/** Whether a manifest counts against the cache's untrusted bound.
+
+    Passed to `ManifestCache::applyManifest` without a default, so every
+    caller must choose. `capped` is the flood-resistant value for peer gossip;
+    only listed, configured, or database-loaded manifests use `uncapped`.
+*/
+enum class ManifestRateLimitCapPolicy : std::uint8_t {
+    /// Subject to the untrusted bound (unlisted peer gossip)
+    capped,
+
+    /// Bypasses the bound (listed, configured, or database-loaded)
+    uncapped
+};
+
+/** Default number of manifests from unlisted master keys a cache keeps.
+
+    Peer gossip for master keys that appear on no validator list goes into a
+    bounded set: once it is full, the oldest unlisted entry is evicted for
+    each new one, so a flood churns the set but can never grow the cache.
+    Listed keys are never bounded or evicted. Operators override the size with
+    `[overlay] max_untrusted_count`; it must stay well above the number of
+    validators the network may be asked to score, so candidates outside the
+    UNL stay visible to nodes.
+*/
+constexpr std::size_t defaultMaxUntrustedManifests = 1000;
+
+/** The untrusted manifest bound to use, given the optional config override. */
+constexpr std::size_t
+untrustedManifestCount(std::optional<std::size_t> const& configured)
+{
+    return configured.value_or(defaultMaxUntrustedManifests);
 }
 
 class DatabaseCon;
@@ -266,10 +306,33 @@ private:
 
     std::atomic<std::uint32_t> seq_{0};
 
+    /** Master keys of manifests admitted under the `capped` policy.
+
+        Its size enforces `maxUntrusted_`. A key leaves the set when it is
+        evicted, becomes listed (`promoteToTrusted`), or arrives again under
+        `uncapped`; it is never re-added on de-listing. */
+    hash_set<PublicKey> untrustedKeys_;
+
+    /** Admission order of capped keys, oldest first, for eviction. Entries for
+        keys that already left `untrustedKeys_` are skipped when reached. */
+    std::deque<PublicKey> untrustedOrder_;
+
+    /** Maximum number of unlisted master keys kept in the cache. */
+    std::size_t const maxUntrusted_;
+
+    /** Evict the oldest capped entries until the bound holds. The caller
+        holds the write lock. */
+    void
+    evictUntrustedOverflow();
+
 public:
+    /** @param j Journal for logging.
+        @param maxUntrusted Unlisted master keys to keep; pass the configured
+            value via `untrustedManifestCount`. */
     explicit ManifestCache(
-        beast::Journal j = beast::Journal(beast::Journal::getNullSink()))
-        : j_(j)
+        beast::Journal j = beast::Journal(beast::Journal::getNullSink()),
+        std::size_t maxUntrusted = defaultMaxUntrustedManifests)
+        : j_(j), maxUntrusted_(maxUntrusted)
     {
     }
 
@@ -352,15 +415,39 @@ public:
 
         @param m Manifest to add
 
+        @param policy Whether the manifest counts against the untrusted
+            bound. Peer gossip for unlisted keys is `capped`; listed,
+            configured, and database-loaded manifests are `uncapped`.
+
         @return `ManifestDisposition::accepted` if successful, or
-                `stale` or `invalid` otherwise
+                `stale`, `invalid`, or `untrustedCapacity` otherwise
 
         @par Thread Safety
 
         May be called concurrently
     */
     ManifestDisposition
-    applyManifest(Manifest m);
+    applyManifest(Manifest m, ManifestRateLimitCapPolicy policy);
+
+    /** Free a key's untrusted slot because it is now on a validator list.
+
+        A no-op if the key was never counted. Not reversed on de-listing.
+
+        @par Thread Safety
+
+        May be called concurrently
+    */
+    void
+    promoteToTrusted(PublicKey const& pk);
+
+    /** Number of cached manifests currently counted as unlisted.
+
+        @par Thread Safety
+
+        May be called concurrently
+    */
+    std::size_t
+    untrustedCount() const;
 
     /** Populate manifest cache with manifests in database and config.
 
