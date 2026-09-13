@@ -181,6 +181,11 @@ public:
     std::size_t PEERS_OUT_MAX = 0;
     std::size_t PEERS_IN_MAX = 0;
 
+    // [overlay] max_untrusted_count: how many validator manifests from master
+    // keys on no validator list this node keeps and shares. Unset means the
+    // built-in default (defaultMaxUntrustedManifests in Manifest.h).
+    std::optional<std::size_t> MAX_UNTRUSTED_MANIFESTS;
+
     // Path searching: these were reasonable default values at some point but
     //                 further research is needed to decide if they still are
     //                 and whether all of them are needed.

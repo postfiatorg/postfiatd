@@ -648,62 +648,94 @@ OverlayImpl::onManifests(
         return;
     }
 
+    // Process every listed manifest, but only this many unlisted ones per
+    // message, so one batch cannot cost unbounded cache work.
+    auto const maxUntrusted =
+        untrustedManifestCount(app_.config().MAX_UNTRUSTED_MANIFESTS);
+
     protocol::TMManifests relay;
-    std::size_t rejected = 0;
+    std::size_t invalid = 0;
+    std::size_t untrusted = 0;
+    std::size_t skippedUntrusted = 0;
 
     for (std::size_t i = 0; i < n; ++i)
     {
         auto& s = m->list().Get(i).stobject();
 
-        if (auto mo = deserializeListedManifest(s, app_.validators()))
+        auto mo = deserializeBoundedManifest(s);
+        if (!mo)
         {
-            auto const serialized = mo->serialized;
-
-            auto const result =
-                app_.validatorManifests().applyManifest(std::move(*mo));
-
-            if (result == ManifestDisposition::accepted)
-            {
-                relay.add_list()->set_stobject(s);
-
-                // N.B.: this is important; the applyManifest call above moves
-                //       the loaded Manifest out of the optional so we need to
-                //       reload it here.
-                mo = deserializeManifest(serialized);
-                XRPL_ASSERT(
-                    mo,
-                    "ripple::OverlayImpl::onManifests : manifest "
-                    "deserialization succeeded");
-
-                app_.getOPs().pubManifest(*mo);
-
-                if (app_.validators().listed(mo->masterKey))
-                {
-                    auto db = app_.getWalletDB().checkoutDb();
-                    addValidatorManifest(*db, serialized);
-                }
-            }
-            else if (result != ManifestDisposition::stale)
-                ++rejected;
-        }
-        else
-        {
-            ++rejected;
+            ++invalid;
             continue;
+        }
+
+        // Resolve trust before applyManifest takes the cache lock: listed()
+        // takes the validator-list lock, and that order is used elsewhere.
+        bool const isTrusted = app_.validators().listed(mo->masterKey);
+        if (!isTrusted)
+        {
+            if (untrusted >= maxUntrusted)
+            {
+                ++skippedUntrusted;
+                continue;
+            }
+            ++untrusted;
+        }
+
+        auto const serialized = mo->serialized;
+
+        auto const result = app_.validatorManifests().applyManifest(
+            std::move(*mo),
+            isTrusted ? ManifestRateLimitCapPolicy::uncapped
+                      : ManifestRateLimitCapPolicy::capped);
+
+        if (result == ManifestDisposition::accepted)
+        {
+            relay.add_list()->set_stobject(s);
+
+            // N.B.: this is important; the applyManifest call above moves
+            //       the loaded Manifest out of the optional so we need to
+            //       reload it here.
+            mo = deserializeManifest(serialized);
+            XRPL_ASSERT(
+                mo,
+                "ripple::OverlayImpl::onManifests : manifest "
+                "deserialization succeeded");
+
+            app_.getOPs().pubManifest(*mo);
+
+            // Persist only listed keys, so unlisted gossip never survives a
+            // restart on disk.
+            if (isTrusted)
+            {
+                auto db = app_.getWalletDB().checkoutDb();
+                addValidatorManifest(*db, serialized);
+            }
+        }
+        else if (
+            result != ManifestDisposition::stale &&
+            result != ManifestDisposition::untrustedCapacity)
+        {
+            ++invalid;
         }
     }
 
-    if (rejected)
+    // Unlisted manifests cost two signature checks, a cache mutation, and a
+    // relay each; make a sustained stream of them add up for the sender.
+    if (untrusted)
+        from->charge(Resource::feeModerateBurdenPeer, "unlisted manifests");
+
+    if (invalid || skippedUntrusted)
     {
-        // Legacy peers may have a few legitimate-but-unlisted identities in
-        // their cache. Charge per bounded batch, not enough to evict such a
-        // peer for one initial sync; repeated flooding still incurs penalties.
-        from->charge(Resource::feeInvalidData, "unlisted or invalid manifests");
+        // Charge per bounded batch, not enough to evict a legacy peer for one
+        // initial sync; repeated flooding still accumulates penalties.
+        from->charge(Resource::feeInvalidData, "invalid or excess manifests");
         JLOG(journal.warn())
-            << "Rejected " << rejected << "/" << n
-            << " unlisted or invalid manifests from "
-            << from->getRemoteAddress() << " "
-            << toBase58(TokenType::NodePublic, from->getNodePublic());
+            << "Manifests from " << from->getRemoteAddress() << " "
+            << toBase58(TokenType::NodePublic, from->getNodePublic()) << ": "
+            << invalid << " invalid, " << skippedUntrusted
+            << " unlisted beyond the per-message bound of " << maxUntrusted
+            << " (" << n << " received)";
     }
 
     if (!relay.list().empty())
@@ -1223,7 +1255,10 @@ OverlayImpl::getManifestsMessages()
 {
     // Rebuild from the current validator list, not just the cache sequence:
     // list membership can change without a manifest changing.
-    return makeManifestMessages(app_.validatorManifests(), app_.validators());
+    return makeManifestMessages(
+        app_.validatorManifests(),
+        app_.validators(),
+        untrustedManifestCount(app_.config().MAX_UNTRUSTED_MANIFESTS));
 }
 
 void
