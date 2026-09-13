@@ -567,6 +567,19 @@ public:
     bool
     trustedPublisher(PublicKey const& identity) const;
 
+    /** Returns `true` if the master key is a configured list publisher,
+        whatever its current status. Used to persist publisher manifests:
+        a revoked publisher's revocation must survive a restart.
+
+        @param masterKey Publisher master public key
+
+        @par Thread Safety
+
+        May be called concurrently
+    */
+    bool
+    publisherConfigured(PublicKey const& masterKey) const;
+
     /** This function returns the local validator public key
      * or a std::nullopt
 

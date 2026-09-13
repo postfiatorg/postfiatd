@@ -62,6 +62,8 @@ You can verify the rules are working by checking that the ESTABLISHED/RELATED co
 sudo iptables -L DOCKER-USER -n -v
 ```
 
+For validators, public reachability of TCP 2559 has a second role beyond peering: it is what lets the Dynamic UNL scoring pipeline resolve your validator's endpoint for infrastructure-diversity scoring. See [Preparing for Dynamic UNL Scoring](#preparing-for-dynamic-unl-scoring) below.
+
 ### 3. Set Up the Node Directory
 
 Create the directory and download the appropriate Docker Compose file for your node role.
@@ -91,6 +93,82 @@ echo "NETWORK=testnet" > .env
 echo "HOSTNAME=$(hostname)" >> .env
 ```
 
+### Dynamic UNL and Validator List Configuration
+
+Post Fiat testnet uses Dynamic UNL as its validator-selection process. The UNL
+(Unique Node List) is the set of validators a node trusts for consensus. Dynamic
+UNL evaluates active validators from public operational evidence, publishes the
+scoring rationale and audit artifacts, and signs the recommended validator set
+for nodes to consume through the standard validator-list mechanism.
+
+This means validator operators should not manually maintain a static
+`[validators]` list for normal testnet operation. A Post Fiat node should fetch
+the official signed validator list and verify that it was published by a trusted
+Post Fiat validator-list publisher key.
+
+The official Docker image already includes the correct validator-list
+configuration for the selected network. For testnet, the bundled
+`validators.txt` references the canonical signed validator list:
+
+```ini
+[validator_list_sites]
+https://postfiat.org/testnet_vl.json
+
+[validator_list_keys]
+ED3F1E0DA736FCF99BE2880A60DBD470715C0E04DD793FB862236B070571FC09E2
+
+[validator_list_threshold]
+0
+```
+
+Do not replace this with a manual `[validators]` block unless the Post Fiat
+Foundation explicitly instructs you to do so. Validator nodes should reference
+`https://postfiat.org/testnet_vl.json` for testnet. The Dynamic UNL scoring
+service updates the signed list behind that canonical URL on a periodic basis.
+Any separate scoring-service URLs are for tooling, debugging, and audit access;
+they are not the validator-list URLs that validator nodes should configure.
+
+#### Preparing for Dynamic UNL Scoring
+
+Dynamic UNL does not guarantee inclusion for any validator, and there is no
+manual application that forces inclusion. Once a validator is active and visible
+to the network's monitoring services, it can be evaluated from observed public
+data. The main scoring signals are consensus performance, operational
+reliability, software diligence, geographic and infrastructure diversity, and
+public accountability.
+
+The final UNL also depends on network-wide diversity and churn controls that
+avoid unnecessary validator-list movement. To be a strong candidate, operate
+your validator in a way that improves the network:
+
+- Maintain consistently high consensus agreement across recent and long-term
+  windows.
+- Keep the validator online and monitor it after launch.
+- Run the current stable `postfiatd` release and upgrade in a timely manner.
+- Complete domain verification so your validator has a public accountability
+  signal.
+- Keep the peer port reachable while keeping admin ports private.
+- Use reliable infrastructure, and where practical choose a country, ASN, or
+  provider that improves geographic or infrastructure diversity.
+
+The diversity signal comes from your validator's resolved public endpoint: the
+foundation's peer crawl maps your validator key to the address the network
+sees it at, and the scoring pipeline derives your provider and country from
+that address.
+If the endpoint cannot be resolved, the diversity sub-score is marked down as
+an unknown-concentration risk (other scoring dimensions are unaffected). To
+keep the peer port reachable without exposing your own address, front the
+validator with a sentry host — the full explanation, the sentry recipe
+(`[ips_fixed]` plus `[peer_private]`), and provider-selection guidance are in
+the published setup guide:
+https://postfiat.org/validator-setup/#endpoint-visibility-and-your-diversity-score
+
+After launch, use the Explorer validator page and UNL Scoring page to inspect
+your validator's status, score, and published reasoning:
+
+- https://explorer.testnet.postfiat.org/network/validators
+- https://explorer.testnet.postfiat.org/unl-scoring
+
 ### 5. Start the Node
 
 Launch the Post Fiat node:
@@ -105,6 +183,13 @@ Check that the Docker container is running properly:
 
 ```bash
 docker compose ps
+```
+
+You can also confirm the running container has the expected testnet validator
+list configuration:
+
+```bash
+docker exec postfiatd grep -A8 '\[validator_list_sites\]' /etc/postfiatd/validators.txt
 ```
 
 ## Node Management

@@ -421,11 +421,13 @@ public:
         , peerReservations_(std::make_unique<PeerReservationTable>(
               logs_->journal("PeerReservationTable")))
 
-        , validatorManifests_(
-              std::make_unique<ManifestCache>(logs_->journal("ManifestCache")))
+        , validatorManifests_(std::make_unique<ManifestCache>(
+              logs_->journal("ManifestCache"),
+              untrustedManifestCount(config_->MAX_UNTRUSTED_MANIFESTS)))
 
-        , publisherManifests_(
-              std::make_unique<ManifestCache>(logs_->journal("ManifestCache")))
+        , publisherManifests_(std::make_unique<ManifestCache>(
+              logs_->journal("ManifestCache"),
+              untrustedManifestCount(config_->MAX_UNTRUSTED_MANIFESTS)))
 
         , validators_(std::make_unique<ValidatorList>(
               *validatorManifests_,
@@ -1675,9 +1677,12 @@ ApplicationImp::run()
             return validators().listed(pubKey);
         });
 
+    // Persist every configured publisher, revoked ones included: only unlisted
+    // keys are dropped from the wallet, and a publisher revocation is exactly
+    // what must not be forgotten across a restart.
     publisherManifests_->save(
         getWalletDB(), "PublisherManifests", [this](PublicKey const& pubKey) {
-            return validators().trustedPublisher(pubKey);
+            return validators().publisherConfigured(pubKey);
         });
 
     // The order of these stop calls is delicate.

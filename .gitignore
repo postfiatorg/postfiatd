@@ -1,5 +1,8 @@
 # .gitignore
 
+# Private operator incident reports and attribution evidence.
+/docs/incidents/
+
 bin/boostbook_catalog.xml
 bin/config.log
 bin/project-cache.jam

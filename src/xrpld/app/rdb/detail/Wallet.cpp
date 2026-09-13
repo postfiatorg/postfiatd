@@ -66,7 +66,8 @@ getManifests(
                 continue;
             }
 
-            mCache.applyManifest(std::move(*mo));
+            mCache.applyManifest(
+                std::move(*mo), ManifestRateLimitCapPolicy::uncapped);
         }
         else
         {
@@ -100,19 +101,27 @@ saveManifests(
 {
     soci::transaction tr(session);
     session << "DELETE FROM " << dbTable;
+    // Persist only trusted keys, revocations included. Unlisted gossip is
+    // left out so a flood cannot survive a restart on disk. Count what is
+    // skipped and log once; the cache can hold many unlisted entries.
+    std::size_t skipped = 0;
     for (auto const& v : map)
     {
-        // Save all revocation manifests,
-        // but only save trusted non-revocation manifests.
-        if (!v.second.revoked() && !isTrusted(v.second.masterKey))
+        if (!isTrusted(v.second.masterKey))
         {
-            JLOG(j.info()) << "Untrusted manifest in cache not saved to db";
+            ++skipped;
             continue;
         }
 
         saveManifest(session, dbTable, v.second.serialized);
     }
     tr.commit();
+
+    if (skipped != 0)
+    {
+        JLOG(j.info()) << skipped
+                       << " untrusted manifest(s) in cache not saved to db";
+    }
 }
 
 void
