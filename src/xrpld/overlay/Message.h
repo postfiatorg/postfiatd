@@ -32,6 +32,9 @@
 namespace ripple {
 
 constexpr std::size_t maximiumMessageSize = megabytes(64);
+// Ping messages should be much smaller than the maximum message size,
+// so we define a separate limit for them.
+constexpr std::size_t maximumPingMessageSize = kilobytes(1);
 
 // VFALCO NOTE If we forward declare Message and write out shared_ptr
 //             instead of using the in-class type alias, we can remove the

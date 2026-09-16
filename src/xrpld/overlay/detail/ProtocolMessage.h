@@ -379,6 +379,14 @@ invokeProtocolMessage(
         return result;
     }
 
+    if (header->message_type == protocol::mtPING &&
+        header->uncompressed_size + header->header_size >
+            maximumPingMessageSize)
+    {
+        result.second = make_error_code(boost::system::errc::message_size);
+        return result;
+    }
+
     // We don't have the whole message yet. This isn't an error but we have
     // nothing to do.
     if (header->total_wire_size > size)

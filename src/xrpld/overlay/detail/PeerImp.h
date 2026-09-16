@@ -399,9 +399,10 @@ public:
     // Ledger
     //
 
-    uint256 const&
+    uint256
     getClosedLedgerHash() const override
     {
+        std::scoped_lock const sl{recentLock_};
         return closedLedgerHash_;
     }
 

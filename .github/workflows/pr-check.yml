@@ -72,3 +72,15 @@ jobs:
         .build/postfiatd --unittest=ripple.app.ValidatorList
         .build/postfiatd --unittest=ripple.overlay.compression
         .build/postfiatd --unittest=ripple.resource.ResourceManager
+
+    - name: Upstream hardening regressions (1.0.7)
+      run: |
+        .build/postfiatd --unittest=ripple.protocol.STValidation
+        .build/postfiatd --unittest=ripple.protocol.STObject
+        .build/postfiatd --unittest=ripple.protocol.STParsedJSON
+        .build/postfiatd --unittest=ripple.consensus.Consensus
+        .build/postfiatd --unittest=ripple.app.LedgerReplay
+        .build/postfiatd --unittest=ripple.app.SHAMapStore
+        .build/postfiatd --unittest=ripple.overlay.reduce_relay
+        .build/postfiatd --unittest=ripple.peerfinder.PeerFinder
+        .build/postfiatd --unittest=beast.beast.IPEndpoint

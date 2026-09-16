@@ -79,6 +79,10 @@ struct Config
     /** Limit how many incoming connections we allow per IP */
     int ipLimit;
 
+    /** `true` if we want to verify endpoints in TMEndpoints messages.
+        Defaults to `true` so a Config built without makeConfig fails closed. */
+    bool verifyEndpoints = true;
+
     //--------------------------------------------------------------------------
 
     /** Create a configuration with default values. */
@@ -101,6 +105,8 @@ struct Config
      * @param port server's listening port
      * @param validationPublicKey true if validation public key is not empty
      * @param ipLimit limit of incoming connections per IP
+     * @param verifyEndpoints `true` if we want to verify endpoints in
+     * TMEndpoints messages
      * @return PeerFinder::Config
      */
     static Config
@@ -108,10 +114,11 @@ struct Config
         ripple::Config const& config,
         std::uint16_t port,
         bool validationPublicKey,
-        int ipLimit);
+        int ipLimit,
+        bool verifyEndpoints);
 
     friend bool
-    operator==(Config const& lhs, Config const& rhs);
+    operator==(Config const& lhs, Config const& rhs) = default;
 };
 
 //------------------------------------------------------------------------------

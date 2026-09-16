@@ -116,7 +116,7 @@ public:
     // Ledger
     //
 
-    virtual uint256 const&
+    virtual uint256
     getClosedLedgerHash() const = 0;
     virtual bool
     hasLedger(uint256 const& hash, std::uint32_t seq) const = 0;
