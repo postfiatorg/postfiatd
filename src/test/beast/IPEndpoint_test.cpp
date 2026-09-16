@@ -30,6 +30,10 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/predef.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <initializer_list>
+
 namespace beast {
 namespace IP {
 
@@ -468,8 +472,46 @@ public:
     }
 
     void
+    testReservedRanges()
+    {
+        testcase("Reserved ranges are not public");
+        auto const v4 =
+            [](std::uint8_t a, std::uint8_t b, std::uint8_t c, std::uint8_t d) {
+                return Endpoint(AddressV4{AddressV4::bytes_type{{a, b, c, d}}});
+            };
+        // CGNAT, link-local, documentation, benchmarking, reserved, "this
+        // network": none of these can be a reachable peer.
+        BEAST_EXPECT(!is_public(v4(100, 64, 0, 1)));
+        BEAST_EXPECT(!is_public(v4(169, 254, 1, 1)));
+        BEAST_EXPECT(!is_public(v4(192, 0, 2, 1)));
+        BEAST_EXPECT(!is_public(v4(198, 18, 0, 1)));
+        BEAST_EXPECT(!is_public(v4(198, 51, 100, 1)));
+        BEAST_EXPECT(!is_public(v4(203, 0, 113, 1)));
+        BEAST_EXPECT(!is_public(v4(240, 0, 0, 1)));
+        BEAST_EXPECT(!is_public(v4(0, 1, 2, 3)));
+        BEAST_EXPECT(is_public(v4(8, 8, 8, 8)));
+        BEAST_EXPECT(is_public(v4(100, 128, 0, 1)));
+
+        auto const v6 = [](std::initializer_list<std::uint8_t> prefix) {
+            AddressV6::bytes_type b{};
+            std::copy(prefix.begin(), prefix.end(), b.begin());
+            b[15] = 1;
+            return Endpoint(AddressV6{b});
+        };
+        BEAST_EXPECT(!is_public(v6({})));                        // ::1
+        BEAST_EXPECT(!is_public(v6({0xfe, 0x80})));              // link-local
+        BEAST_EXPECT(!is_public(v6({0xfc})));                    // ULA
+        BEAST_EXPECT(!is_public(v6({0x20, 0x01, 0x0d, 0xb8})));  // docs
+        BEAST_EXPECT(!is_public(v6({0x20, 0x02})));              // 6to4
+        BEAST_EXPECT(!is_public(v6({0x01, 0x00})));              // discard
+        BEAST_EXPECT(is_public(v6({0x26, 0x06, 0x47, 0x00})));
+        BEAST_EXPECT(is_public(v6({0x20, 0x01, 0x48, 0x60})));
+    }
+
+    void
     run() override
     {
+        testReservedRanges();
         testAddressV4();
         testAddressV4Proxy();
         testAddress();

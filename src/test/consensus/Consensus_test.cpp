@@ -25,6 +25,9 @@
 #include <xrpl/beast/unit_test.h>
 #include <xrpl/json/to_string.h>
 
+#include <initializer_list>
+#include <utility>
+
 namespace ripple {
 namespace test {
 
@@ -1518,8 +1521,41 @@ public:
     }
 
     void
+    testMedianCloseOffset()
+    {
+        testcase("median close offset");
+        auto const tp = [](int s) {
+            return NetClock::time_point{NetClock::duration{s}};
+        };
+        auto const offset =
+            [&](int self, std::initializer_list<std::pair<int, int>> peers) {
+                ConsensusCloseTimes times;
+                times.self = tp(self);
+                for (auto const& [t, w] : peers)
+                    times.peers[tp(t)] += w;
+                return medianCloseOffset(times).count();
+            };
+
+        // No peers: our own close time is the median.
+        BEAST_EXPECT(offset(100, {}) == 0);
+        // One far-off peer cannot drag us: the lower median is our own time.
+        // (A mean would have moved us by 450 seconds.)
+        BEAST_EXPECT(offset(100, {{1000, 1}}) == 0);
+        // Peers agreeing on a later time win by weight.
+        BEAST_EXPECT(offset(100, {{102, 3}}) == 2);
+        // Earlier peers pull the median down.
+        BEAST_EXPECT(offset(100, {{90, 2}, {110, 1}}) == -10);
+        // A heavy outlier bin below half the total weight is ignored.
+        BEAST_EXPECT(offset(100, {{100, 5}, {100000, 4}}) == 0);
+        // Even total whose halfway point sits between bins: earlier bin wins.
+        BEAST_EXPECT(offset(100, {{200, 1}}) == 0);
+        BEAST_EXPECT(offset(100, {{50, 1}, {200, 2}}) == 0);
+    }
+
+    void
     run() override
     {
+        testMedianCloseOffset();
         testShouldCloseLedger();
         testCheckConsensus();
 
