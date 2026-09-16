@@ -1602,9 +1602,17 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMProofPathResponse> const& m)
         return;
     }
 
-    if (!ledgerReplayMsgHandler_.processProofPathResponse(m))
+    switch (ledgerReplayMsgHandler_.processProofPathResponse(m))
     {
-        fee_.update(Resource::feeInvalidData, "proof_path_response");
+        case ReplayMsgStatus::Ok:
+            break;
+        case ReplayMsgStatus::BadData:
+            fee_.update(Resource::feeInvalidData, "proof_path_response");
+            break;
+        case ReplayMsgStatus::Malformed:
+            fee_.update(
+                Resource::feeMalformedData, "proof_path_response malformed");
+            break;
     }
 }
 
@@ -1657,9 +1665,17 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMReplayDeltaResponse> const& m)
         return;
     }
 
-    if (!ledgerReplayMsgHandler_.processReplayDeltaResponse(m))
+    switch (ledgerReplayMsgHandler_.processReplayDeltaResponse(m))
     {
-        fee_.update(Resource::feeInvalidData, "replay_delta_response");
+        case ReplayMsgStatus::Ok:
+            break;
+        case ReplayMsgStatus::BadData:
+            fee_.update(Resource::feeInvalidData, "replay_delta_response");
+            break;
+        case ReplayMsgStatus::Malformed:
+            fee_.update(
+                Resource::feeMalformedData, "replay_delta_response malformed");
+            break;
     }
 }
 
@@ -2423,13 +2439,28 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMValidation> const& m)
         std::shared_ptr<STValidation> val;
         {
             SerialIter sit(makeSlice(m->validation()));
-            val = std::make_shared<STValidation>(
-                std::ref(sit),
-                [this](PublicKey const& pk) {
-                    return calcNodeID(
-                        app_.validatorManifests().getMasterKey(pk));
-                },
-                false);
+            // Require canonical field order: the relay suppression key is
+            // the hash of these bytes, so a re-encoded copy of a validation
+            // must not pass as a new message.
+            try
+            {
+                val = std::make_shared<STValidation>(
+                    std::ref(sit),
+                    [this](PublicKey const& pk) {
+                        return calcNodeID(
+                            app_.validatorManifests().getMasterKey(pk));
+                    },
+                    STValidation::DeserializeOptions{
+                        .checkSignature = false,
+                        .requireCanonicalOrder = true});
+            }
+            catch (std::exception const& e)
+            {
+                JLOG(p_journal_.warn())
+                    << "Validation: Exception, " << e.what();
+                fee_.update(Resource::feeInvalidData, e.what());
+                return;
+            }
             val->setSeen(closeTime);
         }
 

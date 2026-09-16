@@ -27,6 +27,16 @@ namespace ripple {
 class Application;
 class LedgerReplayer;
 
+/** Outcome of processing an incoming ledger-replay response. */
+enum class ReplayMsgStatus {
+    /// Accepted.
+    Ok,
+    /// Peer reported has_error(): a legitimate "cannot fulfill" signal.
+    BadData,
+    /// Protocol-level violation; no honest peer would produce this.
+    Malformed,
+};
+
 class LedgerReplayMsgHandler final
 {
 public:
@@ -36,6 +46,8 @@ public:
     /**
      * Process TMProofPathRequest and return TMProofPathResponse
      * @note check has_error() and error() of the response for error
+     * @return TMProofPathResponse with the proof path, or with error() set if
+     *         the request cannot be fulfilled
      */
     protocol::TMProofPathResponse
     processProofPathRequest(
@@ -43,16 +55,16 @@ public:
 
     /**
      * Process TMProofPathResponse
-     * @return false if the response message has bad format or bad data;
-     *         true otherwise
      */
-    bool
+    ReplayMsgStatus
     processProofPathResponse(
         std::shared_ptr<protocol::TMProofPathResponse> const& msg);
 
     /**
      * Process TMReplayDeltaRequest and return TMReplayDeltaResponse
      * @note check has_error() and error() of the response for error
+     * @return TMReplayDeltaResponse with the ledger delta, or with error() set
+     *         if the request cannot be fulfilled
      */
     protocol::TMReplayDeltaResponse
     processReplayDeltaRequest(
@@ -60,10 +72,8 @@ public:
 
     /**
      * Process TMReplayDeltaResponse
-     * @return false if the response message has bad format or bad data;
-     *         true otherwise
      */
-    bool
+    ReplayMsgStatus
     processReplayDeltaResponse(
         std::shared_ptr<protocol::TMReplayDeltaResponse> const& msg);
 

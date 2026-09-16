@@ -59,6 +59,19 @@ class STValidation final : public STObject, public CountedObject<STValidation>
     NetClock::time_point seenTime_ = {};
 
 public:
+    /** Options controlling deserialization of a STValidation.
+
+        checkSignature: whether to verify the data was signed properly.
+        requireCanonicalOrder: whether to require the fields to be in
+        canonical order. Peer input must require it, so that a re-encoded
+        copy of a validation cannot bypass the relay suppression key.
+    */
+    struct DeserializeOptions
+    {
+        bool checkSignature;
+        bool requireCanonicalOrder;
+    };
+
     /** Construct a STValidation from a peer from serialized data.
 
         @param sit Iterator over serialized data
@@ -68,7 +81,7 @@ public:
                             that signed the validation. For manifest based
                             validators, this should be the NodeID of the master
                             public key.
-        @param checkSignature Whether to verify the data was signed properly
+        @param options Options controlling deserialization
 
         @note Throws if the object is not valid
     */
@@ -76,7 +89,7 @@ public:
     STValidation(
         SerialIter& sit,
         LookupNodeID&& lookupNodeID,
-        bool checkSignature);
+        DeserializeOptions options);
 
     /** Construct, sign and trust a new STValidation issued by this node.
 
@@ -173,8 +186,12 @@ template <class LookupNodeID>
 STValidation::STValidation(
     SerialIter& sit,
     LookupNodeID&& lookupNodeID,
-    bool checkSignature)
-    : STObject(validationFormat(), sit, sfValidation)
+    DeserializeOptions options)
+    : STObject(
+          validationFormat(),
+          sit,
+          sfValidation,
+          options.requireCanonicalOrder)
     , signingPubKey_([this]() {
         auto const spk = getFieldVL(sfSigningPubKey);
 
@@ -185,7 +202,7 @@ STValidation::STValidation(
     }())
     , nodeID_(lookupNodeID(signingPubKey_))
 {
-    if (checkSignature && !isValid())
+    if (options.checkSignature && !isValid())
     {
         JLOG(debugLog().error()) << "Invalid signature in validation: "
                                  << getJson(JsonOptions::none);

@@ -656,6 +656,45 @@ class manifest_flood_test : public beast::unit_test::suite
                 .reject);
     }
 
+    void
+    testPingLimit()
+    {
+        testcase("Oversized ping rejected at the frame header");
+        // A ping frame exactly at the limit passes the header check: with
+        // only the header present the parser asks for more bytes and reports
+        // no error. One byte over is a protocol error before any allocation.
+        Handler handler;
+        std::size_t hint = 0;
+        auto const within =
+            header(maximumPingMessageSize - 6, 0, protocol::mtPING);
+        auto const r1 =
+            invokeProtocolMessage(boost::asio::buffer(within), handler, hint);
+        BEAST_EXPECT(!r1.second && r1.first == 0 && !handler.called);
+
+        auto const over =
+            header(maximumPingMessageSize - 6 + 1, 0, protocol::mtPING);
+        auto const r2 =
+            invokeProtocolMessage(boost::asio::buffer(over), handler, hint);
+        BEAST_EXPECT(
+            r2.second == make_error_code(boost::system::errc::message_size));
+        BEAST_EXPECT(r2.first == 0 && !handler.called);
+
+        // The limit applies to the decompressed size of a compressed ping.
+        auto const compressed =
+            header(64, maximumPingMessageSize, protocol::mtPING);
+        auto const r3 = invokeProtocolMessage(
+            boost::asio::buffer(compressed), handler, hint);
+        BEAST_EXPECT(
+            r3.second == make_error_code(boost::system::errc::message_size));
+
+        // Other message types keep the general frame limit.
+        auto const other =
+            header(maximumPingMessageSize + 1, 0, protocol::mtTRANSACTION);
+        auto const r4 =
+            invokeProtocolMessage(boost::asio::buffer(other), handler, hint);
+        BEAST_EXPECT(!r4.second && r4.first == 0 && !handler.called);
+    }
+
 public:
     void
     run() override
@@ -666,6 +705,7 @@ public:
         testBatchLimits();
         testFrameLimit();
         testLegacyDrain();
+        testPingLimit();
     }
 };
 

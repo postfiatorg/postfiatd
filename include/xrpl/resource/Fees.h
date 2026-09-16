@@ -36,6 +36,7 @@ extern Charge const feeInvalidSignature;  // An object whose signature we had
 extern Charge const feeUselessData;      // Data we have no use for
 extern Charge const feeInvalidData;           // Data we have to verify before
                                           //   rejecting
+extern Charge const feeMalformedData;     // Data that no honest peer would send
 
 // RPC loads
 extern Charge const feeMalformedRPC;        // An RPC request that we can
