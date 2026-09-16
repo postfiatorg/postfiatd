@@ -64,7 +64,8 @@ git-subtree. See those directories' README files for more details.
 ## Additional Documentation
 
 - [XRP Ledger Dev Portal](https://xrpl.org/)
-- [Setup and Installation](https://xrpl.org/install-rippled.html)
+- [Node Setup Guide](docs/NodeSetup.md)
+- [Validator Setup Guide on postfiat.org](https://postfiat.org/validator-setup/)
 - [Source Documentation (Doxygen)](https://xrplf.github.io/rippled/)
 
 ## See Also
