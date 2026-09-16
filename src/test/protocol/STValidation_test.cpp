@@ -22,10 +22,16 @@
 #include <xrpl/basics/random.h>
 #include <xrpl/beast/unit_test.h>
 #include <xrpl/beast/xor_shift_engine.h>
+#include <xrpl/protocol/SecretKey.h>
+#include <xrpl/protocol/Serializer.h>
+#include <xrpl/protocol/digest.h>
 #include <xrpl/protocol/st.h>
 
+#include <algorithm>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 namespace ripple {
 
@@ -177,6 +183,85 @@ class STValidation_test : public beast::unit_test::suite
 
 public:
     void
+    testCanonicalOrder()
+    {
+        testcase("Canonical field order");
+        // The relay suppression key is the hash of the received bytes. A
+        // validation re-encoded with its fields out of canonical order hashes
+        // differently and would be relayed again as a new message, so peer
+        // input must be rejected unless it is canonical.
+        auto const keys = randomKeyPair(KeyType::secp256k1);
+        Serializer const canonical =
+            STValidation(
+                NetClock::time_point{},
+                keys.first,
+                keys.second,
+                calcNodeID(keys.first),
+                [](STValidation& v) {
+                    v.setFieldU32(sfLedgerSequence, 123456);
+                })
+                .getSerializer();
+
+        Serializer reordered;
+        {
+            SerialIter sit(canonical.slice());
+            STObject const fields(sit, sfGeneric);
+            std::vector<STBase const*> order;
+            for (auto const& field : fields)
+                order.push_back(&field);
+            BEAST_EXPECT(order.size() > 1);
+            std::reverse(order.begin(), order.end());
+            for (auto const* field : order)
+            {
+                reordered.addFieldID(
+                    field->getFName().fieldType, field->getFName().fieldValue);
+                field->add(reordered);
+            }
+        }
+        BEAST_EXPECT(reordered.size() == canonical.size());
+        BEAST_EXPECT(
+            sha512Half(reordered.slice()) != sha512Half(canonical.slice()));
+
+        auto const lookup = [](PublicKey const& pk) { return calcNodeID(pk); };
+        {
+            SerialIter sit(canonical.slice());
+            STValidation const val(
+                sit,
+                lookup,
+                STValidation::DeserializeOptions{
+                    .checkSignature = true, .requireCanonicalOrder = true});
+            BEAST_EXPECT(val.getFieldU32(sfLedgerSequence) == 123456);
+        }
+        {
+            SerialIter sit(reordered.slice());
+            try
+            {
+                STValidation const val(
+                    sit,
+                    lookup,
+                    STValidation::DeserializeOptions{
+                        .checkSignature = false,
+                        .requireCanonicalOrder = true});
+                fail("Non-canonical validation was accepted");
+            }
+            catch (std::runtime_error const&)
+            {
+                pass();
+            }
+        }
+        {
+            // Without the requirement the same bytes still parse.
+            SerialIter sit(reordered.slice());
+            STValidation const val(
+                sit,
+                lookup,
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
+            BEAST_EXPECT(val.getFieldU32(sfLedgerSequence) == 123456);
+        }
+    }
+
+    void
     testDeserialization()
     {
         testcase("Deserialization");
@@ -186,7 +271,10 @@ public:
             SerialIter sit{payload8};
 
             auto val = std::make_shared<STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, true);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = true, .requireCanonicalOrder = false});
 
             BEAST_EXPECT(val);
             BEAST_EXPECT(val->isFieldPresent(sfLedgerSequence));
@@ -207,7 +295,10 @@ public:
         {
             SerialIter sit{payload1};
             auto val = std::make_shared<ripple::STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("An exception should have been thrown");
         }
         catch (std::exception const& ex)
@@ -222,7 +313,10 @@ public:
         {
             SerialIter sit{payload2};
             auto val = std::make_shared<ripple::STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("An exception should have been thrown");
         }
         catch (std::exception const& ex)
@@ -235,7 +329,10 @@ public:
         {
             SerialIter sit{payload3};
             auto val = std::make_shared<ripple::STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("An exception should have been thrown");
         }
         catch (std::exception const& ex)
@@ -248,7 +345,10 @@ public:
         {
             SerialIter sit{payload4};
             auto val = std::make_shared<ripple::STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("An exception should have been thrown");
         }
         catch (std::exception const& ex)
@@ -263,7 +363,10 @@ public:
         {
             SerialIter sit{payload5};
             auto val = std::make_shared<STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("Expected exception not thrown from validation");
         }
         catch (std::exception const& ex)
@@ -278,7 +381,10 @@ public:
         {
             SerialIter sit{payload6};
             auto val = std::make_shared<STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
             fail("Expected exception not thrown from validation");
         }
         catch (std::exception const& ex)
@@ -294,7 +400,10 @@ public:
             SerialIter sit{payload7};
 
             auto val = std::make_shared<STValidation>(
-                sit, [](PublicKey const& pk) { return calcNodeID(pk); }, false);
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = false});
 
             fail("Expected exception not thrown from validation");
         }
@@ -329,7 +438,9 @@ public:
                 auto val = std::make_shared<STValidation>(
                     sit,
                     [](PublicKey const& pk) { return calcNodeID(pk); },
-                    true);
+                    STValidation::DeserializeOptions{
+                        .checkSignature = true,
+                        .requireCanonicalOrder = false});
 
                 fail(
                     "Mutated validation signature checked out: offset=" +
@@ -345,6 +456,7 @@ public:
     void
     run() override
     {
+        testCanonicalOrder();
         testDeserialization();
     }
 };

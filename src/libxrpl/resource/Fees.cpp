@@ -28,6 +28,7 @@ Charge const feeRequestNoReply(10, "unsatisfiable request");
 Charge const feeInvalidSignature(2000, "invalid signature");
 Charge const feeUselessData(150, "useless data");
 Charge const feeInvalidData(400, "invalid data");
+Charge const feeMalformedData(2000, "malformed data");
 
 Charge const feeMalformedRPC(100, "malformed RPC");
 Charge const feeReferenceRPC(20, "reference RPC");

@@ -24,7 +24,11 @@
 #include <xrpl/protocol/STNumber.h>
 #include <xrpl/protocol/STParsedJSON.h>
 #include <xrpl/protocol/STXChainBridge.h>
+#include <xrpl/protocol/jss.h>
 #include <xrpl/protocol/st.h>
+
+#include <cstddef>
+#include <string>
 
 namespace ripple {
 
@@ -35,6 +39,64 @@ class STParsedJSON_test : public beast::unit_test::suite
     {
         Json::Reader reader;
         return reader.parse(json, to) && to.isObject();
+    }
+
+    void
+    testArraySizeLimit()
+    {
+        testcase("Array size limit");
+        // Oversized arrays in a request are refused before any field is
+        // parsed, so a single RPC call cannot make the server build an
+        // arbitrarily large object.
+        auto const hash = to_string(uint256{1});
+        auto const indexes = [&](std::size_t n) {
+            Json::Value arr(Json::arrayValue);
+            for (std::size_t i = 0; i < n; ++i)
+                arr.append(hash);
+            Json::Value j;
+            j[sfIndexes] = arr;
+            return j;
+        };
+        {
+            STParsedJSONObject obj("Test", indexes(maxSTParsedJSONArraySize));
+            BEAST_EXPECT(obj.object.has_value());
+            BEAST_EXPECT(
+                obj.object &&
+                obj.object->getFieldV256(sfIndexes).size() ==
+                    maxSTParsedJSONArraySize);
+        }
+        {
+            STParsedJSONObject obj(
+                "Test", indexes(maxSTParsedJSONArraySize + 1));
+            BEAST_EXPECT(!obj.object.has_value());
+            BEAST_EXPECT(obj.error[jss::error] == "invalidParams");
+        }
+
+        auto const memos = [](std::size_t n) {
+            Json::Value arr(Json::arrayValue);
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                Json::Value memo;
+                memo[sfMemo][sfMemoData] = "00";
+                arr.append(memo);
+            }
+            Json::Value j;
+            j[sfMemos] = arr;
+            return j;
+        };
+        {
+            STParsedJSONObject obj("Test", memos(maxSTParsedJSONArraySize));
+            BEAST_EXPECT(obj.object.has_value());
+            BEAST_EXPECT(
+                obj.object &&
+                obj.object->getFieldArray(sfMemos).size() ==
+                    maxSTParsedJSONArraySize);
+        }
+        {
+            STParsedJSONObject obj("Test", memos(maxSTParsedJSONArraySize + 1));
+            BEAST_EXPECT(!obj.object.has_value());
+            BEAST_EXPECT(obj.error[jss::error] == "invalidParams");
+        }
     }
 
     void
@@ -2325,6 +2387,7 @@ class STParsedJSON_test : public beast::unit_test::suite
     void
     run() override
     {
+        testArraySizeLimit();
         // Instantiate a jtx::Env so debugLog writes are exercised.
         test::jtx::Env env(*this);
         testUInt8();

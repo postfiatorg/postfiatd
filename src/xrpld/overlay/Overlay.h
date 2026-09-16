@@ -71,6 +71,9 @@ public:
         std::uint32_t crawlOptions = 0;
         std::optional<std::uint32_t> networkID;
         bool vlEnabled = true;
+        // Fail closed: setup_Overlay reads [overlay] verify_endpoints, but a
+        // Setup built elsewhere must still verify peer endpoints.
+        bool verifyEndpoints = true;
     };
 
     using PeerSequence = std::vector<std::shared_ptr<Peer>>;
