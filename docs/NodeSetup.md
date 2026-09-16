@@ -218,6 +218,40 @@ To update the node configuration:
    docker compose restart
    ```
 
+### Upgrading
+
+Upgrades are announced in the validator Discord channel. The compose file uses
+the rolling `-light-latest` tag, so an upgrade is a pull and a restart. Run the
+commands from the directory that holds `docker-compose.yml`; anywhere else,
+Docker Compose fails with `no configuration file provided: not found`.
+
+```bash
+cd /opt/postfiatd
+grep 'image:' docker-compose.yml
+docker compose pull
+docker compose up -d
+```
+
+The `image:` line must end in `-light-latest`. A node pinned to a version number
+such as `testnet-light-1.0.4` is skipped by `docker compose pull` and stays on
+the old release without any error; change the line back to
+`agtipft/postfiatd:${NETWORK:-devnet}-light-latest` first.
+
+Confirm the new version after a minute. The foundation RPC node at
+`https://rpc.testnet.postfiat.org` always runs the current release, so your
+`build_version` should match its `server_info` output:
+
+```bash
+docker exec postfiatd curl -s http://localhost:5005/ -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"method": "server_info", "params": [{}]}' \
+  | python3 -m json.tool | grep -E '"server_state"|"build_version"'
+```
+
+Some releases need one extra step, such as a second restart. The announcement
+says so, and the details live in that release's document under `docs/` (for
+example `MANIFEST_FLOOD_HOTFIX.md` for 1.0.6).
+
 ## Running as a Validator
 
 The container will run a postfiatd node that connects to the Post Fiat testnet by default. To operate as a validator, you'll need to create a validator token using the validator keys tool.
