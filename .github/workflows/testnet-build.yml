@@ -22,5 +22,5 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       network: testnet
-      source_ref: testnet
+      source_ref: ${{ github.sha }}
     secrets: inherit
