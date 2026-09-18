@@ -84,3 +84,8 @@ jobs:
         .build/postfiatd --unittest=ripple.overlay.reduce_relay
         .build/postfiatd --unittest=ripple.peerfinder.PeerFinder
         .build/postfiatd --unittest=beast.beast.IPEndpoint
+
+    - name: Upstream hardening regressions (1.0.8)
+      run: |
+        .build/postfiatd --unittest=ripple.protocol.Serializer
+        .build/postfiatd --unittest=ripple.shamap.SHAMapNodeID

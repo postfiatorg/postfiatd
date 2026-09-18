@@ -293,6 +293,11 @@ parseMessageContent(MessageHeader const& header, Buffers const& buffers)
     else if (!m->ParseFromZeroCopyStream(&stream))
         return {};
 
+    // Protobuf keeps fields it does not know and writes them back when the
+    // message is re-serialized, so padding a peer sent would be relayed on
+    // to every other peer at no cost to the sender.
+    m->DiscardUnknownFields();
+
     return m;
 }
 
