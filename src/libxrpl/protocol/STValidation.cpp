@@ -18,6 +18,7 @@
 //==============================================================================
 
 #include <xrpl/basics/Blob.h>
+#include <xrpl/basics/Log.h>
 #include <xrpl/basics/Slice.h>
 #include <xrpl/basics/base_uint.h>
 #include <xrpl/basics/chrono.h>
@@ -33,6 +34,7 @@
 #include <xrpl/protocol/Serializer.h>
 
 #include <cstddef>
+#include <exception>
 #include <utility>
 
 namespace ripple {
@@ -126,11 +128,37 @@ STValidation::isValid() const noexcept
             publicKeyType(getSignerPublic()) == KeyType::secp256k1,
             "ripple::STValidation::isValid : valid key type");
 
-        valid_ = verifyDigest(
-            getSignerPublic(),
-            getSigningHash(),
-            makeSlice(getFieldVL(sfSignature)),
-            getFlags() & vfFullyCanonicalSig);
+        // Computing the signing hash re-serializes the fields, which can
+        // throw. This function is noexcept, so a throw would end the process:
+        // report the validation as invalid instead and leave valid_ unset.
+        try
+        {
+            valid_ = verifyDigest(
+                getSignerPublic(),
+                getSigningHash(),
+                makeSlice(getFieldVL(sfSignature)),
+                getFlags() & vfFullyCanonicalSig);
+        }
+        catch (std::exception const& e)
+        {
+            // The log line itself allocates and formats, so it is guarded
+            // too: nothing may escape a noexcept function.
+            try
+            {
+                JLOG(debugLog().error())
+                    << "Cannot check the signature of the validation for "
+                       "ledger "
+                    << getLedgerHash() << ": " << e.what();
+            }
+            catch (...)
+            {
+            }
+            return false;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
 
     return valid_.value();

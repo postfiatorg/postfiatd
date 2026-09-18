@@ -127,6 +127,12 @@ public:
     NodeID const&
     getNodeID() const noexcept;
 
+    /** Whether this validation carries a good signature.
+
+        Reports false when the signature cannot be checked at all, for
+        example because the fields cannot be re-serialized, and logs why.
+        Only a computed answer is remembered, so a later call checks again.
+    */
     bool
     isValid() const noexcept;
 

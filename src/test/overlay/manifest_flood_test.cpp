@@ -16,6 +16,7 @@
 
 #include <array>
 #include <limits>
+#include <string>
 
 namespace ripple {
 namespace test {
@@ -482,11 +483,15 @@ class manifest_flood_test : public beast::unit_test::suite
     {
         bool called = false;
         std::vector<std::uint32_t> pingSequences;
+        std::size_t pingUnknownFields = 0;
+        std::size_t pingByteSize = 0;
         void
         onMessage(std::shared_ptr<protocol::TMPing> const& ping)
         {
             called = true;
             pingSequences.push_back(ping->seq());
+            pingUnknownFields = ping->unknown_fields().field_count();
+            pingByteSize = ping->ByteSizeLong();
         }
         bool
         compressionEnabled() const
@@ -695,6 +700,34 @@ class manifest_flood_test : public beast::unit_test::suite
         BEAST_EXPECT(!r4.second && r4.first == 0 && !handler.called);
     }
 
+    void
+    testUnknownFieldsDiscarded()
+    {
+        testcase("Unknown protobuf fields are dropped after parsing");
+        // Protobuf keeps unknown fields and writes them back on
+        // re-serialization, so padding a peer adds to a message would be
+        // relayed to every other peer. The parsed message must not carry it.
+        protocol::TMPing ping;
+        ping.set_type(protocol::TMPing::ptPING);
+        ping.set_seq(19);
+        constexpr int unknownFieldNumber = 999;
+        std::string const padding(200, 'x');
+        ping.mutable_unknown_fields()->AddLengthDelimited(
+            unknownFieldNumber, padding);
+        BEAST_EXPECT(ping.ByteSizeLong() > padding.size());
+
+        Message message(ping, protocol::mtPING);
+        auto const& bytes = message.getBuffer(compression::Compressed::Off);
+        Handler handler;
+        std::size_t hint = 0;
+        auto const result =
+            invokeProtocolMessage(boost::asio::buffer(bytes), handler, hint);
+        BEAST_EXPECT(!result.second && result.first == bytes.size());
+        BEAST_EXPECT(handler.pingSequences == std::vector<std::uint32_t>({19}));
+        BEAST_EXPECT(handler.pingUnknownFields == 0);
+        BEAST_EXPECT(handler.pingByteSize < padding.size());
+    }
+
 public:
     void
     run() override
@@ -706,6 +739,7 @@ public:
         testFrameLimit();
         testLegacyDrain();
         testPingLimit();
+        testUnknownFieldsDiscarded();
     }
 };
 
