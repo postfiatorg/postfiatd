@@ -454,10 +454,73 @@ public:
     }
 
     void
+    testOversizedField()
+    {
+        testcase("Oversized field is rejected, not fatal");
+        // A signature field one byte longer than the encoder can write
+        // carries a three-byte length header the decoder used to accept.
+        // Checking the signature re-serializes the validation inside a
+        // noexcept function, so before the length bound one such message
+        // from a peer ended the process. It must fail to parse instead.
+        auto const keys = randomKeyPair(KeyType::secp256k1);
+        Serializer const canonical =
+            STValidation(
+                NetClock::time_point{},
+                keys.first,
+                keys.second,
+                calcNodeID(keys.first),
+                [](STValidation& v) {
+                    v.setFieldU32(sfLedgerSequence, 123456);
+                })
+                .getSerializer();
+
+        constexpr int oversized = Serializer::maxVLLength + 1;
+        Serializer crafted;
+        {
+            SerialIter sit(canonical.slice());
+            STObject const fields(sit, sfGeneric);
+            for (auto const& field : fields)
+            {
+                crafted.addFieldID(
+                    field.getFName().fieldType, field.getFName().fieldValue);
+                if (field.getFName() != sfSignature)
+                {
+                    field.add(crafted);
+                    continue;
+                }
+                // Hand-written header: addVL would refuse this length.
+                int const offset = oversized - 12481;
+                crafted.add8(static_cast<unsigned char>(241 + (offset >> 16)));
+                crafted.add8(static_cast<unsigned char>((offset >> 8) & 0xff));
+                crafted.add8(static_cast<unsigned char>(offset & 0xff));
+                std::vector<std::uint8_t> const junk(oversized, 0);
+                crafted.addRaw(junk.data(), junk.size());
+            }
+        }
+        BEAST_EXPECT(crafted.size() > oversized);
+
+        SerialIter sit(crafted.slice());
+        try
+        {
+            STValidation const val(
+                sit,
+                [](PublicKey const& pk) { return calcNodeID(pk); },
+                STValidation::DeserializeOptions{
+                    .checkSignature = false, .requireCanonicalOrder = true});
+            fail("Validation with an oversized field was accepted");
+        }
+        catch (std::overflow_error const&)
+        {
+            pass();
+        }
+    }
+
+    void
     run() override
     {
         testCanonicalOrder();
         testDeserialization();
+        testOversizedField();
     }
 };
 

@@ -27,6 +27,8 @@
 #include <xrpl/beast/unit_test.h>
 #include <xrpl/beast/utility/Journal.h>
 
+#include <stdexcept>
+
 namespace ripple {
 namespace tests {
 
@@ -402,7 +404,73 @@ class SHAMapPathProof_test : public beast::unit_test::suite
     }
 };
 
+class SHAMapNodeID_test : public beast::unit_test::suite
+{
+    // An arbitrary well-formed key; the tests below only need its nibbles.
+    static constexpr uint256 key{
+        "b92891fe4ef6cee585fdc6fda1e09eb4d386363158ec3321b8123e5a772c6ca8"};
+
+    void
+    run() override
+    {
+        testcase("Node ID depth stays inside the tree");
+
+        // Walking the branches spelled by the key's own nibbles reaches the
+        // leaf depth, and an ID at the leaf depth has no children.
+        SHAMapNodeID id;
+        for (unsigned int depth = 0; depth < SHAMap::leafDepth; ++depth)
+        {
+            id = id.getChildNodeID(selectBranch(id, key));
+            BEAST_EXPECT(id.getDepth() == depth + 1);
+        }
+        BEAST_EXPECT(id == SHAMapNodeID::createID(SHAMap::leafDepth, key));
+        try
+        {
+            (void)id.getChildNodeID(0);
+            fail("Child of a leaf-depth node ID was created");
+        }
+        catch (std::logic_error const&)
+        {
+            pass();
+        }
+
+        // The wire form carries the depth in one byte; a depth past the leaf
+        // depth is refused there.
+        auto raw = id.getRawString();
+        raw.back() = static_cast<char>(SHAMap::leafDepth + 1);
+        BEAST_EXPECT(!deserializeSHAMapNodeID(raw));
+
+#ifdef NDEBUG
+        // The clamps below are asserts first, so only a build without
+        // assertions reaches them. A depth of 256 would otherwise be narrowed
+        // to 0 and name the root; 320 would become 64.
+        for (int const depth : {65, 100, 255, 256, 320})
+        {
+            auto const clamped = SHAMapNodeID::createID(depth, key);
+            BEAST_EXPECT(clamped.getDepth() == SHAMap::leafDepth);
+            BEAST_EXPECT(clamped == id);
+            auto const roundTripped =
+                deserializeSHAMapNodeID(clamped.getRawString());
+            BEAST_EXPECT(
+                roundTripped && roundTripped->getDepth() == SHAMap::leafDepth);
+        }
+        SHAMapNodeID const direct{SHAMap::leafDepth + 1, key};
+        BEAST_EXPECT(direct.getDepth() == SHAMap::leafDepth);
+        BEAST_EXPECT(direct == id);
+
+        // selectBranch reads the key byte at depth / 2; at the leaf depth
+        // that is one past the end of the key, so the read is clamped to the
+        // last nibble instead.
+        BEAST_EXPECT(
+            selectBranch(id, key) ==
+            selectBranch(
+                SHAMapNodeID::createID(SHAMap::leafDepth - 1, key), key));
+#endif
+    }
+};
+
 BEAST_DEFINE_TESTSUITE(SHAMap, shamap, ripple);
 BEAST_DEFINE_TESTSUITE(SHAMapPathProof, shamap, ripple);
+BEAST_DEFINE_TESTSUITE(SHAMapNodeID, shamap, ripple);
 }  // namespace tests
 }  // namespace ripple

@@ -1458,6 +1458,10 @@ PeerImp::handleTransaction(
     }
     catch (std::exception const& ex)
     {
+        // Deserializing junk costs work; make the sender pay for it. Only
+        // raise the fee, another handler may already have charged more.
+        if (fee_.fee < Resource::feeInvalidData)
+            fee_.update(Resource::feeInvalidData, "tx invalid");
         JLOG(p_journal_.warn())
             << "Transaction invalid: " << strHex(m->rawtransaction())
             << ". Exception: " << ex.what();
@@ -1523,6 +1527,13 @@ PeerImp::onMessage(std::shared_ptr<protocol::TMGetLedger> const& m)
     {
         if (m->nodeids_size() <= 0)
             return badData("Invalid ledger node IDs");
+
+        // The reply loop stops only once the reply is full, so a request
+        // for nodes this server does not have costs one store lookup per ID
+        // however many IDs it carries. No honest request needs more IDs
+        // than fit in one reply.
+        if (m->nodeids_size() > Tuning::hardMaxReplyNodes)
+            return badData("Too many ledger node IDs");
 
         for (auto const& nodeId : m->nodeids())
         {

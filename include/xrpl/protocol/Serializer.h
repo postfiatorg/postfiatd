@@ -305,6 +305,16 @@ public:
         return v.mData != mData;
     }
 
+    /** The largest field length the variable-length header encoder writes.
+
+        A three-byte header can state lengths up to 929,984, but the encoder
+        stops here, so the decoder refuses anything above it as well. A
+        field that decodes but cannot be written back would otherwise turn
+        every re-serialization of the object, such as computing a signing
+        hash, into an exception.
+    */
+    static constexpr int maxVLLength = 918744;
+
     static int
     decodeLengthLength(int b1);
     static int
