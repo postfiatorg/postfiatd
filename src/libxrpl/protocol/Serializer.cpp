@@ -230,6 +230,11 @@ Serializer::addEncoded(int length)
     std::array<std::uint8_t, 4> bytes;
     int numBytes = 0;
 
+    // A negative length would otherwise be cast into a one-byte header no
+    // decoder accepts. Sizes above INT_MAX arrive here negative as well.
+    if (length < 0)
+        Throw<std::overflow_error>("len<0");
+
     if (length <= 192)
     {
         bytes[0] = static_cast<unsigned char>(length);
@@ -242,7 +247,7 @@ Serializer::addEncoded(int length)
         bytes[1] = static_cast<unsigned char>(length & 0xff);
         numBytes = 2;
     }
-    else if (length <= 918744)
+    else if (length <= maxVLLength)
     {
         length -= 12481;
         bytes[0] = 241 + static_cast<unsigned char>(length >> 16);
@@ -268,7 +273,7 @@ Serializer::encodeLengthLength(int length)
     if (length <= 12480)
         return 2;
 
-    if (length <= 918744)
+    if (length <= maxVLLength)
         return 3;
 
     Throw<std::overflow_error>("len>918744");
@@ -327,7 +332,13 @@ Serializer::decodeVLLength(int b1, int b2, int b3)
     if (b1 > 254)
         Throw<std::overflow_error>("b1>254");
 
-    return 12481 + (b1 - 241) * 65536 + b2 * 256 + b3;
+    int const length = 12481 + (b1 - 241) * 65536 + b2 * 256 + b3;
+
+    // Accept only lengths the encoder can write back; see maxVLLength.
+    if (length > maxVLLength)
+        Throw<std::overflow_error>("len>918744");
+
+    return length;
 }
 
 //------------------------------------------------------------------------------

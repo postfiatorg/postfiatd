@@ -24,6 +24,8 @@
 #include <xrpl/beast/utility/instrumentation.h>
 #include <xrpl/protocol/Serializer.h>
 
+#include <algorithm>
+
 namespace ripple {
 
 static uint256 const&
@@ -57,11 +59,19 @@ depthMask(unsigned int depth)
 SHAMapNodeID::SHAMapNodeID(unsigned int depth, uint256 const& hash)
     : id_(hash), depth_(depth)
 {
+    // Every node ID's depth is stored here, so this is the one place that
+    // can stop an out-of-range one: a depth past leafDepth would index
+    // depthMask past its last entry and getRawString would narrow it to a
+    // byte, silently renaming the node. Clamp rather than throw, since node
+    // IDs are built from peer-supplied depths on the ledger data path.
+    if (depth_ > SHAMap::leafDepth)
+    {
+        UNREACHABLE("ripple::SHAMapNodeID::SHAMapNodeID : depth within tree");
+        depth_ = SHAMap::leafDepth;
+        id_ = id_ & depthMask(depth_);
+    }
     XRPL_ASSERT(
-        depth <= SHAMap::leafDepth,
-        "ripple::SHAMapNodeID::SHAMapNodeID : maximum depth input");
-    XRPL_ASSERT(
-        id_ == (id_ & depthMask(depth)),
+        id_ == (id_ & depthMask(depth_)),
         "ripple::SHAMapNodeID::SHAMapNodeID : hash and depth inputs do match");
 }
 
@@ -128,7 +138,14 @@ deserializeSHAMapNodeID(void const* data, std::size_t size)
 [[nodiscard]] unsigned int
 selectBranch(SHAMapNodeID const& id, uint256 const& hash)
 {
-    auto const depth = id.getDepth();
+    XRPL_ASSERT(
+        id.getDepth() < SHAMap::leafDepth,
+        "ripple::selectBranch : depth below leaf depth");
+
+    // A depth-64 ID has no nibble left to select: depth / 2 would read one
+    // byte past the end of the 32-byte key. Callers must not ask, but clamp
+    // anyway so a wrong branch is the worst outcome.
+    auto const depth = std::min(id.getDepth(), SHAMap::leafDepth - 1u);
     auto branch = static_cast<unsigned int>(*(hash.begin() + (depth / 2)));
 
     if (depth & 1)
@@ -144,9 +161,14 @@ selectBranch(SHAMapNodeID const& id, uint256 const& hash)
 SHAMapNodeID
 SHAMapNodeID::createID(int depth, uint256 const& key)
 {
-    XRPL_ASSERT(
-        (depth >= 0) && (depth < 65),
-        "ripple::SHAMapNodeID::createID : valid branch input");
+    // The mask is chosen before the constructor runs, so its clamp cannot
+    // cover this call: an out-of-range depth would index depthMask's table
+    // while evaluating the argument.
+    if (depth < 0 || depth > static_cast<int>(SHAMap::leafDepth))
+    {
+        UNREACHABLE("ripple::SHAMapNodeID::createID : depth within tree");
+        depth = SHAMap::leafDepth;
+    }
     return SHAMapNodeID(depth, key & depthMask(depth));
 }
 
