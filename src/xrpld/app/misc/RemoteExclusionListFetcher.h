@@ -20,6 +20,9 @@
 namespace ripple {
 
 class Application;
+namespace test {
+class RemoteExclusionListFetcher_test;
+}
 
 class RemoteExclusionListFetcher
 {
@@ -96,6 +99,7 @@ public:
     getLastUpdateTime() const;
 
 private:
+    friend class test::RemoteExclusionListFetcher_test;
     using clock_type = std::chrono::system_clock;
     using error_code = boost::system::error_code;
 
@@ -197,4 +201,4 @@ private:
 
 } // namespace ripple
 
-#endif // RIPPLE_APP_MISC_REMOTEEXCLUSIONLISTFETCHER_H_INCLUDED
+#endif  // RIPPLE_APP_MISC_REMOTEEXCLUSIONLISTFETCHER_H_INCLUDED
