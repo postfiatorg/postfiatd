@@ -24,3 +24,48 @@ jobs:
       network: testnet
       source_ref: ${{ github.sha }}
     secrets: inherit
+  release:
+    needs: build-testnet
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+    - name: Extract version from source
+      id: version
+      run: |
+        VERSION=$(grep -oP 'versionString\s*=\s*"\K[^"]+' src/libxrpl/protocol/BuildInfo.cpp)
+        if [ -z "$VERSION" ]; then
+          echo "::error::Could not extract version from BuildInfo.cpp"
+          exit 1
+        fi
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+    - name: Publish GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        TAG="v$VERSION"
+        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          echo "Release $TAG already exists. Nothing to do."
+          exit 0
+        fi
+        gh api --method POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+          -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" --jq .body > notes.md
+        cat >> notes.md <<NOTES
+
+        ## Upgrade
+
+        Community validators run the rolling \`-light-latest\` tag, so an upgrade is a pull and a restart from the node directory:
+
+        \`\`\`bash
+        cd /opt/postfiatd
+        docker compose pull
+        docker compose up -d
+        \`\`\`
+
+        Confirm with \`server_info\` that \`build_version\` reads \`$VERSION\`. Images: \`agtipft/postfiatd:testnet-{light,medium,full}-$VERSION\`. Releases that need an extra step say so in the release's document under \`docs/\`.
+        NOTES
+        gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+          --title "$TAG" --notes-file notes.md
