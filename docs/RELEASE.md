@@ -19,6 +19,15 @@ This is the single source of truth. CMake extracts it at build time. The CI/CD p
    - Extracts the version from `BuildInfo.cpp`
    - Checks Docker Hub for existing versioned tags — **fails if the version already exists**
    - Builds and pushes images with both rolling and versioned tags
+5. The testnet build then publishes the GitHub Release (see below)
+
+## GitHub Releases
+
+The testnet build workflow creates the GitHub Release `v{version}` at the built commit once the images are pushed. The release notes are generated from the pull requests merged since the previous release, followed by the operator upgrade instructions. The release is the public announcement feed: operators subscribe on GitHub with Watch, Custom, Releases, and tooling can poll `https://github.com/postfiatorg/postfiatd/releases.atom`.
+
+- Do not create the `v{version}` tag or the release by hand. The workflow creates the tag with the release, and a release that already exists is left untouched.
+- When the generated notes need a hand-written summary, edit the release on GitHub after it is published and link the release's document under `docs/`.
+- Releases are tied to the testnet build because community validators run testnet. When mainnet launches, move the `release` job to `mainnet-build.yml`.
 
 ## Image Tags
 
