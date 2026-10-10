@@ -23,7 +23,10 @@
 #include <xrpld/app/paths/detail/AmountSpec.h>
 
 #include <xrpl/basics/Log.h>
+#include <xrpl/basics/MathUtilities.h>
 #include <xrpl/basics/base_uint.h>
+#include <xrpl/basics/contract.h>
+#include <xrpl/protocol/MPTAmount.h>
 #include <xrpl/protocol/Quality.h>
 #include <xrpl/protocol/QualityFunction.h>
 #include <xrpl/protocol/STLedgerEntry.h>
@@ -32,6 +35,7 @@
 #include <boost/container/flat_set.hpp>
 
 #include <optional>
+#include <type_traits>
 
 namespace ripple {
 class PaymentSandbox;
@@ -516,6 +520,52 @@ public:
     {
     }
 };
+/// @endcond
+
+/// @cond INTERNAL
+/** Add two amounts of a strand, or std::nullopt when the exact sum does not
+    fit the amount type. */
+template <class T>
+[[nodiscard]] std::optional<T>
+checkedStepAddOpt(T const& lhs, T const& rhs)
+{
+    if constexpr (std::is_same_v<T, XRPAmount>)
+    {
+        if (auto const r = checkedAdd(lhs.drops(), rhs.drops()))
+            return XRPAmount{*r};
+        return std::nullopt;
+    }
+    else if constexpr (std::is_same_v<T, MPTAmount>)
+    {
+        if (auto const r = checkedAdd(lhs.value(), rhs.value()))
+            return MPTAmount{*r};
+        return std::nullopt;
+    }
+    else if constexpr (std::is_same_v<T, IOUAmount>)
+    {
+        // IOUAmount is Number-backed and throws on overflow.
+        IOUAmount sum{lhs};
+        sum += rhs;
+        return sum;
+    }
+    else
+    {
+        // A new amount type must decide explicitly how to add; do not fall back
+        // to an unchecked add.
+        static_assert(
+            sizeof(T) == 0, "checkedStepAddOpt: unsupported amount type");
+    }
+}
+
+/** Add two amounts of a strand; an overflow ends the strand as a dry path. */
+template <class T>
+[[nodiscard]] T
+checkedStepAdd(T const& lhs, T const& rhs)
+{
+    if (auto const r = checkedStepAddOpt(lhs, rhs))
+        return *r;
+    Throw<FlowException>(tecPATH_DRY);
+}
 /// @endcond
 
 /// @cond INTERNAL
