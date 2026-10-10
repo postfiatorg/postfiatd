@@ -29,6 +29,7 @@
 #include <xrpl/protocol/Feature.h>
 #include <xrpl/protocol/jss.h>
 
+#include <limits>
 #include <optional>
 
 namespace ripple {
@@ -1264,6 +1265,47 @@ struct PayStrand_test : public beast::unit_test::suite
     }
 
     void
+    testCheckedStepAdd()
+    {
+        testcase("checked step add");
+
+        using Limits = std::numeric_limits<std::int64_t>;
+
+        // In range, the checked add is a plain add.
+        IOUAmount const one{1, 0};
+        IOUAmount const two{2, 0};
+        IOUAmount const three{3, 0};
+        BEAST_EXPECT(
+            checkedStepAddOpt(XRPAmount{1}, XRPAmount{2}) == XRPAmount{3});
+        BEAST_EXPECT(
+            checkedStepAddOpt(MPTAmount{-5}, MPTAmount{2}) == MPTAmount{-3});
+        BEAST_EXPECT(checkedStepAddOpt(one, two) == three);
+        BEAST_EXPECT(
+            checkedStepAdd(XRPAmount{Limits::max() - 1}, XRPAmount{1}) ==
+            XRPAmount{Limits::max()});
+
+        // One unit past the 64-bit range is reported, not wrapped.
+        BEAST_EXPECT(
+            !checkedStepAddOpt(XRPAmount{Limits::max()}, XRPAmount{1}));
+        BEAST_EXPECT(
+            !checkedStepAddOpt(XRPAmount{Limits::min()}, XRPAmount{-1}));
+        BEAST_EXPECT(
+            !checkedStepAddOpt(MPTAmount{Limits::max()}, MPTAmount{1}));
+
+        // The throwing form ends the strand as a dry path.
+        try
+        {
+            [[maybe_unused]] auto const wrapped =
+                checkedStepAdd(XRPAmount{Limits::max()}, XRPAmount{1});
+            fail("overflow did not throw");
+        }
+        catch (FlowException const& e)
+        {
+            BEAST_EXPECT(e.ter == tecPATH_DRY);
+        }
+    }
+
+    void
     run() override
     {
         using namespace jtx;
@@ -1278,6 +1320,8 @@ struct PayStrand_test : public beast::unit_test::suite
         testLoop(sa);
 
         testNoAccount(sa);
+
+        testCheckedStepAdd();
     }
 };
 

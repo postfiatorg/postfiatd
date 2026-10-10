@@ -28,6 +28,8 @@
 #include <xrpl/protocol/STTx.h>
 #include <xrpl/protocol/TER.h>
 
+#include <boost/multiprecision/cpp_int.hpp>
+
 #include <cstdint>
 #include <tuple>
 #include <unordered_set>
@@ -119,7 +121,9 @@ public:
  */
 class XRPNotCreated
 {
-    std::int64_t drops_ = 0;
+    // Wide enough that a total which would wrap a 64-bit accumulator is still
+    // seen as positive in finalize.
+    boost::multiprecision::int128_t drops_ = 0;
 
 public:
     void
