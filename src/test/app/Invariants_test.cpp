@@ -161,6 +161,38 @@ class Invariants_test : public beast::unit_test::suite
                 ac.view().update(sle);
                 return true;
             });
+
+        // Credits that sum to exactly 2^64 drops wrapped a 64-bit accumulator
+        // to zero, so a transaction minting that much XRP looked fee-neutral.
+        // 184 balances at the largest value an STAmount holds plus one
+        // remainder add up to 2^64.
+        doInvariantCheck(
+            {{"XRP net change was positive: 18446744073709551616"}},
+            [](Account const&, Account const&, ApplyContext& ac) {
+                auto const credit = [&ac](
+                                        std::string const& name,
+                                        std::int64_t drops) {
+                    Account const acct{name};
+                    auto const sle =
+                        std::make_shared<SLE>(keylet::account(acct));
+                    sle->setFieldAmount(sfBalance, STAmount{XRPAmount{drops}});
+                    ac.view().insert(sle);
+                };
+                constexpr std::int64_t maxDrops = STAmount::cMaxNativeN;
+                constexpr std::uint64_t fullAccounts = 184;
+                constexpr std::int64_t remainder = 46'744'073'709'551'616;
+                // Unsigned arithmetic wraps, so a zero here proves the credits
+                // sum to exactly 2^64.
+                static_assert(
+                    fullAccounts * std::uint64_t{maxDrops} +
+                            std::uint64_t{remainder} ==
+                        0,
+                    "the credits must sum to exactly 2^64 drops");
+                for (std::uint64_t i = 0; i < fullAccounts; ++i)
+                    credit("minted" + std::to_string(i), maxDrops);
+                credit("minted-remainder", remainder);
+                return true;
+            });
     }
 
     void
