@@ -89,3 +89,16 @@ jobs:
       run: |
         .build/postfiatd --unittest=ripple.protocol.Serializer
         .build/postfiatd --unittest=ripple.shamap.SHAMapNodeID
+
+    - name: Upstream hardening regressions (1.0.9)
+      run: |
+        .build/postfiatd --unittest=ripple.app.Invariants
+        .build/postfiatd --unittest=ripple.app.PayStrand
+        .build/postfiatd --unittest=ripple.app.Flow
+        .build/postfiatd --unittest=ripple.app.ReducedOffer
+        .build/postfiatd --unittest=ripple.app.OfferBaseUtil
+        .build/postfiatd --unittest=ripple.app.OfferWTakerDryOffer
+        .build/postfiatd --unittest=ripple.app.OfferWOSmallQOffers
+        .build/postfiatd --unittest=ripple.app.OfferWOFillOrKill
+        .build/postfiatd --unittest=ripple.app.OfferWOPermDEX
+        .build/postfiatd --unittest=ripple.app.OfferAllFeatures
