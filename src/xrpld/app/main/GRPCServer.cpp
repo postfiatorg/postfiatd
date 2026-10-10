@@ -21,6 +21,7 @@
 #include <xrpld/core/ConfigSections.h>
 
 #include <xrpl/beast/core/CurrentThreadName.h>
+#include <xrpl/beast/core/LexicalCast.h>
 #include <xrpl/beast/net/IPAddressConversion.h>
 #include <xrpl/resource/Fees.h>
 
@@ -334,7 +335,8 @@ GRPCServerImpl::GRPCServerImpl(Application& app)
         try
         {
             boost::asio::ip::tcp::endpoint endpoint(
-                boost::asio::ip::make_address(*optIp), std::stoi(*optPort));
+                boost::asio::ip::make_address(*optIp),
+                beast::lexicalCastThrow<std::uint16_t>(*optPort));
 
             std::stringstream ss;
             ss << endpoint;
