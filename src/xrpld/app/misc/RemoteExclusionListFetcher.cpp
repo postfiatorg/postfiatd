@@ -387,10 +387,10 @@ RemoteExclusionListFetcher::onAllFetchesComplete()
             
             JLOG(j_.info()) << "RemoteExclusionListFetcher: All sources accessible, updating exclusions";
         }
-        else if (initialFetchComplete_ && successCount > 0)
+        else if (initialFetchComplete_)
         {
-            // After initial fetch, we can continue with partial updates
-            // but we mark that not all sources are accessible
+            // After initial fetch, retain cached exclusions during any outage
+            // and mark that not all sources are accessible.
             JLOG(j_.warn()) << "RemoteExclusionListFetcher: Only " << successCount << "/"
                            << config_.VALIDATOR_EXCLUSIONS_SOURCES.size()
                            << " sources accessible, keeping existing exclusions";
@@ -742,4 +742,4 @@ RemoteExclusionListFetcher::getLastUpdateTime() const
     return lastUpdateTime_;
 }
 
-} // namespace ripple
+}  // namespace ripple
