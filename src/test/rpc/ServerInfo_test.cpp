@@ -50,7 +50,7 @@ class ServerInfo_test : public beast::unit_test::suite
 {
 public:
     static std::unique_ptr<Config>
-    makeValidatorConfig()
+    makeValidatorConfig(std::string const& grpcPort = "50051")
     {
         auto p = std::make_unique<Config>();
         boost::format toLoad(R"rippleConfig(
@@ -62,7 +62,7 @@ public:
 
 [port_grpc]
 ip = 0.0.0.0
-port = 50051
+port = %3%
 
 [port_admin]
 ip = 0.0.0.0
@@ -72,7 +72,8 @@ admin = 127.0.0.1
 )rippleConfig");
 
         p->loadFromString(boost::str(
-            toLoad % validator_data::token % validator_data::public_key));
+            toLoad % validator_data::token % validator_data::public_key %
+            grpcPort));
 
         setupConfigForUnitTests(*p);
 
@@ -171,6 +172,26 @@ admin = 127.0.0.1
                     BEAST_EXPECT(proto[0u].asString() == "ws");
                 }
             }
+        }
+    }
+
+    void
+    testGrpcPortValidation()
+    {
+        testcase("gRPC port validation");
+
+        for (auto const* port : {"50051junk", "-1", "65536"})
+        {
+            bool threw = false;
+            try
+            {
+                jtx::Env env(*this, makeValidatorConfig(port));
+            }
+            catch (std::runtime_error const&)
+            {
+                threw = true;
+            }
+            BEAST_EXPECT(threw);
         }
     }
 
@@ -304,6 +325,7 @@ admin = 127.0.0.1
     run() override
     {
         testServerInfo();
+        testGrpcPortValidation();
         testServerDefinitions();
     }
 };
