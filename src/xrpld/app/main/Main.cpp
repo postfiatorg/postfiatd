@@ -38,9 +38,12 @@
 
 #include <google/protobuf/stubs/common.h>
 
+#include <charconv>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 #if BOOST_OS_WINDOWS
@@ -622,8 +625,14 @@ run(int argc, char** argv)
                 for (auto& s : strVec)
                 {
                     boost::trim(s);
-                    if (!s.empty())
-                        result.push_back(std::stoi(s));
+                    std::uint32_t ledgerSeq = 0;
+                    auto const* const end = s.data() + s.size();
+                    auto const [parsed, error] =
+                        std::from_chars(s.data(), end, ledgerSeq);
+                    if (error != std::errc{} || parsed != end)
+                        throw std::runtime_error(
+                            "Invalid force_ledger_present_range parameter");
+                    result.push_back(ledgerSeq);
                 }
                 return result;
             }();
