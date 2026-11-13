@@ -531,8 +531,6 @@ public:
         // enabled:    In/out enabled amendments
         // majority:   In/our majority amendments (and when they got a majority)
 
-        auto const roundTime = hourTime(hour);
-
         // Build validations
         std::vector<std::shared_ptr<STValidation>> validations;
         validations.reserve(validators.size());
@@ -567,6 +565,66 @@ public:
 
             validations.emplace_back(v);
         }
+
+        applyRound(
+            rules, table, hour, validations, ourVotes, enabled, majority);
+    }
+
+    // Build one validation per trusted validator for an explicit
+    // yes-voter set: validator i votes yes on an amendment iff its index
+    // is in yesVoters[hash]. Unlike doRound, the yes-voter set is fixed
+    // by validator index, so the same votes can be replayed with the
+    // validations in a different order.
+    std::vector<std::shared_ptr<STValidation>>
+    makeValidations(
+        std::vector<std::pair<PublicKey, SecretKey>> const& validators,
+        std::map<uint256, std::set<std::size_t>> const& yesVoters)
+    {
+        std::vector<std::shared_ptr<STValidation>> validations;
+        validations.reserve(validators.size());
+
+        std::size_t i = 0;
+        for (auto const& [pub, sec] : validators)
+        {
+            std::vector<uint256> field;
+            for (auto const& [hash, voters] : yesVoters)
+            {
+                if (voters.count(i) != 0)
+                    field.push_back(hash);
+            }
+
+            auto v = std::make_shared<STValidation>(
+                ripple::NetClock::time_point{},
+                pub,
+                sec,
+                calcNodeID(pub),
+                [&field](STValidation& v) {
+                    if (!field.empty())
+                        v.setFieldV256(
+                            sfAmendments, STVector256(sfAmendments, field));
+                    v.setFieldU32(sfLedgerSequence, 6180339);
+                });
+
+            validations.emplace_back(v);
+            ++i;
+        }
+        return validations;
+    }
+
+    // Apply one round from pre-built validations: collect our votes, run
+    // the vote, and apply each action to enabled/majority exactly as
+    // doRound does. Returns the actions map.
+    std::map<uint256, std::uint32_t>
+    applyRound(
+        Rules const& rules,
+        AmendmentTable& table,
+        std::chrono::hours hour,
+        std::vector<std::shared_ptr<STValidation>> const& validations,
+        std::vector<uint256>& ourVotes,
+        std::set<uint256>& enabled,
+        majorityAmendments_t& majority)
+    {
+        auto const roundTime = hourTime(hour);
 
         ourVotes = table.doValidation(enabled);
 
@@ -606,6 +664,97 @@ public:
                     Throw<std::runtime_error>("unknown action");
             }
         }
+        return actions;
+    }
+
+    // Canonical one-line serialization of the observable state after a
+    // round. Hex IDs are sorted and timestamps are seconds since the
+    // epoch, so the trace is deterministic. Validator keys and validation
+    // binaries are deliberately NOT included: makeValidators uses
+    // randomKeyPair, so keys differ on every run.
+    static std::string
+    stateTrace(
+        int round,
+        std::chrono::hours hour,
+        std::vector<uint256> const& ourVotes,
+        std::set<uint256> const& enabled,
+        majorityAmendments_t const& majority,
+        std::map<uint256, std::uint32_t> const& actions)
+    {
+        auto const secs = [](NetClock::time_point tp) {
+            return std::chrono::duration_cast<std::chrono::seconds>(
+                tp.time_since_epoch())
+                .count();
+        };
+
+        std::vector<uint256> sortedVotes = ourVotes;
+        std::sort(sortedVotes.begin(), sortedVotes.end());
+
+        std::string trace = "round=" + std::to_string(round) +
+            "|time=" + std::to_string(secs(hourTime(hour))) + "|ourVotes=[";
+        bool first = true;
+        for (auto const& id : sortedVotes)
+        {
+            if (!first)
+                trace += ",";
+            first = false;
+            trace += to_string(id);
+        }
+        trace += "]|enabled=[";
+        first = true;
+        for (auto const& id : enabled)
+        {
+            if (!first)
+                trace += ",";
+            first = false;
+            trace += to_string(id);
+        }
+        trace += "]|majority=[";
+        first = true;
+        for (auto const& [id, tp] : majority)
+        {
+            if (!first)
+                trace += ",";
+            first = false;
+            trace += to_string(id) + "@" + std::to_string(secs(tp));
+        }
+        trace += "]|actions=[";
+        first = true;
+        for (auto const& [id, flag] : actions)
+        {
+            if (!first)
+                trace += ",";
+            first = false;
+            trace += to_string(id) + ":" + std::to_string(flag);
+        }
+        trace += "]";
+        return trace;
+    }
+
+    // SHA-256 of a state trace, using the same helper as amendmentId.
+    static uint256
+    traceHash(std::string const& trace)
+    {
+        sha256_hasher h;
+        using beast::hash_append;
+        hash_append(h, trace);
+        auto const d = static_cast<sha256_hasher::result_type>(h);
+        uint256 result;
+        std::memcpy(result.data(), d.data(), d.size());
+        return result;
+    }
+
+    // Generate trusted validator key pairs without registering them.
+    // (makeValidators generates and registers in one step; replay runs
+    // need the same keys registered on a fresh table per run.)
+    static std::vector<std::pair<PublicKey, SecretKey>>
+    makeValidatorKeys(int num)
+    {
+        std::vector<std::pair<PublicKey, SecretKey>> ret;
+        ret.reserve(num);
+        for (int i = 0; i < num; ++i)
+            ret.emplace_back(randomKeyPair(KeyType::secp256k1));
+        return ret;
     }
 
     // No vote on unknown amendment
@@ -832,7 +981,7 @@ public:
             BEAST_EXPECT(majority.find(amendmentId(i)) == majority.end());
     }
 
-    // Detect majority at 80%, enable later
+    // Detect majority, enable later
     void
     testDetectMajority(FeatureBitset const& feat)
     {
@@ -852,6 +1001,18 @@ public:
         std::set<uint256> enabled;
         majorityAmendments_t majority;
 
+        // Majority threshold: under the pre-fix 204/256 rule the fix-OFF
+        // predicate counts i-1 yes-voters, so a majority is first
+        // reached at i=13 (12 votes) and enables at i=15. Under
+        // postfiatd's post-fix 67/100 rule the fix-ON predicate counts
+        // i yes-voters, so a majority is first reached at i=11
+        // (11 votes) and enables at i=13. (Upstream rippled uses
+        // 80/100, i.e. 13 votes, in both cases.)
+        bool const fixOn =
+            env.current()->rules().enabled(fixAmendmentMajorityCalc);
+        int const majorityWeek = fixOn ? 11 : 13;
+        int const enableWeek = majorityWeek + 2;
+
         for (int i = 0; i <= 17; ++i)
         {
             std::vector<std::pair<uint256, int>> votes;
@@ -870,21 +1031,21 @@ public:
                 enabled,
                 majority);
 
-            if (i < 13)  // 13 => 13/16 = 0.8125 => > 80%
+            if (i < majorityWeek)
             {
                 // We are voting yes, not enabled, no majority
                 BEAST_EXPECT(!ourVotes.empty());
                 BEAST_EXPECT(enabled.empty());
                 BEAST_EXPECT(majority.empty());
             }
-            else if (i < 15)
+            else if (i < enableWeek)
             {
                 // We have a majority, not enabled, keep voting
                 BEAST_EXPECT(!ourVotes.empty());
                 BEAST_EXPECT(!majority.empty());
                 BEAST_EXPECT(enabled.empty());
             }
-            else if (i == 15)
+            else if (i == enableWeek)
             {
                 // enable, keep voting, remove from majority
                 BEAST_EXPECT(!ourVotes.empty());
@@ -943,6 +1104,15 @@ public:
             BEAST_EXPECT(!majority.empty());
         }
 
+        // Majority is lost when yes-votes drop to 12 under the pre-fix
+        // rule (i=4: 15-4=11 yes-voters) and to 10 under postfiatd's
+        // post-fix 67/100 rule (i=6: 16-6=10 yes-voters). (Upstream
+        // rippled uses 80/100, i.e. 13 yes-votes, so it is lost at i=4
+        // in both cases.)
+        bool const fixOn =
+            env.current()->rules().enabled(fixAmendmentMajorityCalc);
+        int const lostWeek = fixOn ? 6 : 4;
+
         for (int i = 1; i < 8; ++i)
         {
             std::vector<std::pair<uint256, int>> votes;
@@ -961,8 +1131,8 @@ public:
                 enabled,
                 majority);
 
-            if (i < 4)  // 16 - 3 = 13 => 13/16 = 0.8125 => > 80%
-            {           // 16 - 4 = 12 => 12/16 = 0.75 => < 80%
+            if (i < lostWeek)
+            {  // Majority still held
                 // We are voting yes, not enabled, majority
                 BEAST_EXPECT(!ourVotes.empty());
                 BEAST_EXPECT(enabled.empty());
@@ -1004,11 +1174,15 @@ public:
         majorityAmendments_t majority;
 
         {
-            // 10 validators with 2 voting against won't get majority.
+            // 10 validators with 4 voting against won't get majority.
+            // Under postfiatd's 67/100 rule 6 yes-votes do not exceed
+            // the threshold of 6; under upstream's 80/100 rule 8
+            // yes-votes would already be a majority, so this block
+            // needs 4 dissenters, not 2.
             std::vector<std::pair<uint256, int>> votes;
             std::vector<uint256> ourVotes;
 
-            votes.emplace_back(testAmendment, validators.size() - 2);
+            votes.emplace_back(testAmendment, validators.size() - 4);
 
             doRound(
                 env.current()->rules(),
@@ -1072,6 +1246,9 @@ public:
         {
             // One of the validators goes flaky and doesn't send validations
             // (without the UNL changing) so the amendment loses majority.
+            // The flaky validator's vote record has expired, leaving 10
+            // available validators; 6 yes-votes do not exceed the 67%
+            // threshold of 6, so there is no majority.
             std::pair<PublicKey, SecretKey> const savedValidator =
                 validators.front();
             validators.erase(validators.begin());
@@ -1079,7 +1256,7 @@ public:
             std::vector<std::pair<uint256, int>> votes;
             std::vector<uint256> ourVotes;
 
-            votes.emplace_back(testAmendment, validators.size() - 2);
+            votes.emplace_back(testAmendment, validators.size() - 4);
 
             doRound(
                 env.current()->rules(),
@@ -1114,13 +1291,14 @@ public:
             BEAST_EXPECT(!majority.empty());
 
             // Finally, remove one validator from the UNL and see that majority
-            // is lost.
+            // is lost. With 10 trusted validators, 6 yes-votes do not
+            // exceed the 67% threshold of 6.
             validators.erase(validators.begin());
 
             // Tell the table that there's been a change in trusted validators.
             callTrustChanged(validators, table);
 
-            votes.front().second = validators.size() - 2;
+            votes.front().second = validators.size() - 4;
 
             doRound(
                 env.current()->rules(),
@@ -1273,6 +1451,249 @@ public:
         BEAST_EXPECT(table->needValidatedLedger(257));
     }
 
+    // Replaying the same fixed validator votes in a different validation
+    // order must not change the outcome. The same validations are fed to
+    // doVoting in several orders, twice per order, on a fresh table each
+    // time, and the vote actions and majority/enabled states are asserted
+    // identical at the threshold and after the majority hold time.
+    //
+    // Two amendments are under test. The main amendment has 13/16
+    // yes-votes, a majority under both the postfiatd 67% rule and the
+    // upstream 80% rule, so its assertions are threshold-agnostic. The
+    // boundary amendment has 11/16 yes-votes, a majority only under
+    // postfiatd's 67% rule (postFixAmendmentMajorityCalcThreshold = 67/100,
+    // SystemParameters.h) — it pins that divergence deliberately. Under
+    // the pre-fix 204/256 rule the boundary amendment never reaches a
+    // majority, so its expectations branch on the feature flag.
+    void
+    testVoteReplayOrderIndependent(FeatureBitset const& feat)
+    {
+        testcase("voteReplayOrderIndependent");
+
+        uint256 const mainAmendment = amendmentId("replayOrderAmendment");
+        uint256 const boundaryAmendment =
+            amendmentId("replayOrderBoundary");
+
+        std::vector<uint256> bothAmendments{mainAmendment,
+                                            boundaryAmendment};
+        std::sort(bothAmendments.begin(), bothAmendments.end());
+
+        // Fixed yes-voter sets, by validator index in creation order.
+        std::map<uint256, std::set<std::size_t>> yesVoters;
+        for (std::size_t i = 0; i < 13; ++i)
+            yesVoters[mainAmendment].insert(i);
+        for (std::size_t i = 0; i < 11; ++i)
+            yesVoters[boundaryAmendment].insert(i);
+
+        // Fixed validator keys for every run. Keys are random per test
+        // invocation, so traces never include them.
+        std::vector<std::pair<PublicKey, SecretKey>> const validators =
+            makeValidatorKeys(16);
+
+        // Validations are built once for the fixed votes and reused
+        // across runs; only their order changes.
+        std::vector<std::shared_ptr<STValidation>> const validations =
+            makeValidations(validators, yesVoters);
+        std::vector<std::shared_ptr<STValidation>> const emptyValidations =
+            makeValidations(validators, {});
+
+        // Validation orders: creation order, reversed, and a
+        // left-rotation by 5. Each order is run twice.
+        std::vector<std::vector<std::size_t>> const orders = {
+            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+            {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0},
+            {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 0, 1, 2, 3, 4}};
+
+        std::vector<std::vector<std::string>> allTraces;
+        std::vector<std::vector<uint256>> allHashes;
+
+        for (auto const& order : orders)
+        {
+            for (int rep = 0; rep < 2; ++rep)
+            {
+                // Fresh table per run: AmendmentTable holds TrustedVotes
+                // state with 24 h timeouts, so runs must not share one.
+                test::jtx::Env env{*this, feat};
+                auto const supported = combine(
+                    makeDefaultYes(mainAmendment),
+                    makeDefaultYes(boundaryAmendment));
+                auto table = makeTable(
+                    env, weeks(2), supported, emptySection_, emptySection_);
+
+                hash_set<PublicKey> trusted;
+                for (auto const& [pub, sec] : validators)
+                    trusted.insert(pub);
+                table->trustChanged(trusted);
+
+                Rules const& rules = env.current()->rules();
+                bool const fixOn =
+                    rules.enabled(fixAmendmentMajorityCalc);
+
+                // Reorder the fixed validations for this run.
+                std::vector<std::shared_ptr<STValidation>> ordered;
+                ordered.reserve(validations.size());
+                for (auto const idx : order)
+                    ordered.push_back(validations[idx]);
+
+                std::vector<uint256> ourVotes;
+                std::set<uint256> enabled;
+                majorityAmendments_t majority;
+                std::vector<std::string> traces;
+                std::vector<uint256> hashes;
+
+                // Round sequence: week 1 no votes; weeks 2-5 fixed
+                // votes. Week 2 reaches the majority threshold, week 3
+                // holds, week 4 is the exact hold boundary
+                // (majorityTime + 2 weeks == closeTime) and enables,
+                // week 5 is stable after enabling.
+                for (int round = 1; round <= 5; ++round)
+                {
+                    std::vector<std::shared_ptr<STValidation>> const&
+                        roundValidations =
+                            (round == 1) ? emptyValidations : ordered;
+
+                    auto const actions = applyRound(
+                        rules,
+                        *table,
+                        weeks{round},
+                        roundValidations,
+                        ourVotes,
+                        enabled,
+                        majority);
+
+                    traces.push_back(stateTrace(
+                        round,
+                        weeks{round},
+                        ourVotes,
+                        enabled,
+                        majority,
+                        actions));
+                    hashes.push_back(traceHash(traces.back()));
+
+                    if (round == 1)
+                    {
+                        // No votes yet: we vote for both, nothing else.
+                        BEAST_EXPECT(ourVotes == bothAmendments);
+                        BEAST_EXPECT(enabled.empty());
+                        BEAST_EXPECT(majority.empty());
+                        BEAST_EXPECT(actions.empty());
+                    }
+                    else if (round == 2)
+                    {
+                        // Threshold: both amendments gain a majority
+                        // under the post-fix rule; only the main one
+                        // under the pre-fix rule.
+                        BEAST_EXPECT(ourVotes == bothAmendments);
+                        BEAST_EXPECT(enabled.empty());
+                        if (fixOn)
+                        {
+                            BEAST_EXPECT(
+                                actions.size() == 2 &&
+                                actions.at(mainAmendment) ==
+                                    tfGotMajority &&
+                                actions.at(boundaryAmendment) ==
+                                    tfGotMajority);
+                            BEAST_EXPECT(
+                                majority.size() == 2 &&
+                                majority.at(mainAmendment) ==
+                                    hourTime(weeks{2}) &&
+                                majority.at(boundaryAmendment) ==
+                                    hourTime(weeks{2}));
+                        }
+                        else
+                        {
+                            BEAST_EXPECT(
+                                actions.size() == 1 &&
+                                actions.at(mainAmendment) ==
+                                    tfGotMajority);
+                            BEAST_EXPECT(
+                                majority.size() == 1 &&
+                                majority.at(mainAmendment) ==
+                                    hourTime(weeks{2}));
+                        }
+                    }
+                    else if (round == 3)
+                    {
+                        // Holding: no actions, majority timestamps
+                        // unchanged.
+                        BEAST_EXPECT(ourVotes == bothAmendments);
+                        BEAST_EXPECT(enabled.empty());
+                        BEAST_EXPECT(actions.empty());
+                        if (fixOn)
+                            BEAST_EXPECT(
+                                majority.size() == 2 &&
+                                majority.at(mainAmendment) ==
+                                    hourTime(weeks{2}) &&
+                                majority.at(boundaryAmendment) ==
+                                    hourTime(weeks{2}));
+                        else
+                            BEAST_EXPECT(
+                                majority.size() == 1 &&
+                                majority.at(mainAmendment) ==
+                                    hourTime(weeks{2}));
+                    }
+                    else if (round == 4)
+                    {
+                        // Exact hold boundary: the held majority enables.
+                        BEAST_EXPECT(ourVotes == bothAmendments);
+                        BEAST_EXPECT(majority.empty());
+                        if (fixOn)
+                        {
+                            BEAST_EXPECT(
+                                actions.size() == 2 &&
+                                actions.at(mainAmendment) == 0 &&
+                                actions.at(boundaryAmendment) == 0);
+                            BEAST_EXPECT(
+                                enabled.size() == 2 &&
+                                enabled.count(mainAmendment) == 1 &&
+                                enabled.count(boundaryAmendment) == 1);
+                        }
+                        else
+                        {
+                            BEAST_EXPECT(
+                                actions.size() == 1 &&
+                                actions.at(mainAmendment) == 0);
+                            BEAST_EXPECT(
+                                enabled.size() == 1 &&
+                                enabled.count(mainAmendment) == 1);
+                        }
+                    }
+                    else
+                    {
+                        // Stable after enabling: enabled amendments are
+                        // skipped by doVoting and leave our votes.
+                        BEAST_EXPECT(actions.empty());
+                        BEAST_EXPECT(majority.empty());
+                        if (fixOn)
+                        {
+                            BEAST_EXPECT(ourVotes.empty());
+                            BEAST_EXPECT(enabled.size() == 2);
+                        }
+                        else
+                        {
+                            BEAST_EXPECT(ourVotes.size() == 1);
+                            BEAST_EXPECT(
+                                ourVotes[0] == boundaryAmendment);
+                            BEAST_EXPECT(enabled.size() == 1);
+                        }
+                    }
+                }
+
+                allTraces.push_back(traces);
+                allHashes.push_back(hashes);
+            }
+        }
+
+        // Every order and repetition must produce the identical state
+        // trace and hash in every round: determinism within an order and
+        // order-independence across orders.
+        for (std::size_t i = 1; i < allTraces.size(); ++i)
+        {
+            BEAST_EXPECT(allTraces[i] == allTraces[0]);
+            BEAST_EXPECT(allHashes[i] == allHashes[0]);
+        }
+    }
+
     void
     testFeature(FeatureBitset const& feat)
     {
@@ -1283,6 +1704,7 @@ public:
         testLostMajority(feat);
         testChangedUNL(feat);
         testValidatorFlapping(feat);
+        testVoteReplayOrderIndependent(feat);
     }
 
     void
