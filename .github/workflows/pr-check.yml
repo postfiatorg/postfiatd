@@ -102,3 +102,7 @@ jobs:
         .build/postfiatd --unittest=ripple.app.OfferWOFillOrKill
         .build/postfiatd --unittest=ripple.app.OfferWOPermDEX
         .build/postfiatd --unittest=ripple.app.OfferAllFeatures
+
+    - name: Amendment vote replay regressions
+      run: |
+        .build/postfiatd --unittest=ripple.app.AmendmentTable
